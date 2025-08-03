@@ -18,7 +18,10 @@
       "soccer"
     ],
     "privacy": "public",
-    "platforms": ["ios", "android"],
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "githubUrl": "https://github.com/yourusername/FairDealPro",
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -32,7 +35,8 @@
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses camera to take photos for player profiles",
         "NSPhotoLibraryUsageDescription": "This app accesses photo library to select photos for player profiles",
-        "NSFaceIDUsageDescription": "Use Face ID for quick and secure authentication"
+        "NSFaceIDUsageDescription": "Use Face ID for quick and secure authentication",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -57,7 +61,9 @@
     "updates": {
       "fallbackToCacheTimeout": 0
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "extra": {
       "eas": {
         "projectId": "a6757272-927e-48b5-aca1-bba25a20e5b4"

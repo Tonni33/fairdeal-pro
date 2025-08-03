@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 10.0.0"
+    "version": ">= 10.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
@@ -25,9 +26,9 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "tonni.linden@sinebrychoff.fi",
-        "ascAppId": "TBD",
-        "appleTeamId": "TBD"
+        "appleId": "tomi.enkkila@finnair.com",
+        "ascAppId": "6749513627",
+        "appleTeamId": "54J22LAJ5D"
       },
       "android": {
         "serviceAccountKeyPath": "path/to/api-key.json",
