@@ -54,14 +54,15 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "extra": {
-      "eas": {
-        "projectId": "your-project-id-here"
-      }
-    },
     "updates": {
       "fallbackToCacheTimeout": 0
     },
-    "assetBundlePatterns": ["**/*"]
+    "assetBundlePatterns": ["**/*"],
+    "extra": {
+      "eas": {
+        "projectId": "a6757272-927e-48b5-aca1-bba25a20e5b4"
+      }
+    },
+    "owner": "tonni33"
   }
 }

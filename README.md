@@ -1,15 +1,23 @@
-# FairDealPro - Mobile Team Management App
+# FairDealPro - Professional Sports Team Management
 
-A React Native mobile application built with Expo for managing sports teams and creating balanced team compositions based on player skill levels.
+A comprehensive React Native mobile application built with Expo for managing sports teams, creating balanced team compositions, and organizing events with a sophisticated licensing system.
 
-## 🏆 Features
+## 🏆 Key Features
 
-- **Player Management**: Add, edit, and manage player profiles with skill ratings
-- **Event Creation**: Create and manage game events with date, time, and location
-- **Team Balancing**: Advanced algorithm to create balanced teams based on player skills
-- **Real-time Updates**: Live synchronization across devices using Firebase
-- **Offline Support**: Basic offline functionality for core features
-- **User Authentication**: Secure login and user management
+### Core Functionality
+
+- **Smart Team Balancing**: Advanced algorithms create balanced teams based on player skills, positions, and preferences
+- **Player Management**: Comprehensive player profiles with skill ratings, availability tracking, and photo support
+- **Event Organization**: Create and manage sports events with real-time attendance tracking
+- **License Management**: Professional licensing system with MasterAdmin and team admin roles
+
+### Advanced Features
+
+- **Biometric Authentication**: Face ID/Touch ID support for secure access
+- **Real-time Synchronization**: Live updates across all devices using Firebase
+- **Offline Support**: Core functionality works without internet connection
+- **Role-based Access**: Different permission levels for admins and team members
+- **Team Join Codes**: Easy team registration system
 
 ## 🚀 Technology Stack
 
