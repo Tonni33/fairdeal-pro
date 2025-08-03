@@ -1,29 +1,67 @@
 {
   "expo": {
     "name": "FairDealPro",
-    "slug": "FairDealPro",
+    "slug": "fairdeal-pro",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "description": "Team management and balancing app for sports events. Create balanced teams, manage players, and organize sports events with ease.",
+    "keywords": [
+      "sports",
+      "team",
+      "management",
+      "balance",
+      "events",
+      "football",
+      "soccer"
+    ],
+    "privacy": "public",
+    "platforms": ["ios", "android"],
+    "githubUrl": "https://github.com/yourusername/FairDealPro",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#1976d2"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.fairdeal.pro",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses camera to take photos for player profiles",
+        "NSPhotoLibraryUsageDescription": "This app accesses photo library to select photos for player profiles",
+        "NSFaceIDUsageDescription": "Use Face ID for quick and secure authentication"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#1976d2"
       },
-      "edgeToEdgeEnabled": true
+      "package": "com.fairdeal.pro",
+      "versionCode": 1,
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "USE_FINGERPRINT",
+        "USE_BIOMETRIC"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "your-project-id-here"
+      }
+    },
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
+    "assetBundlePatterns": ["**/*"]
   }
 }

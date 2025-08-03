@@ -32,6 +32,35 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
 
 # typescript
 *.tsbuildinfo
+
+# IDE files
+.vscode/
+.idea/
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+
+# EAS
+.eas/
+
+# Build directories
+build/
+
+# Logs
+logs
+*.log
+
+# Temporary folders
+tmp/
+temp/
+
+# Secret keys and sensitive files
+service-account-key.json
+google-services.json
+GoogleService-Info.plist
