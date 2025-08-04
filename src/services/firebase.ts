@@ -1,7 +1,6 @@
 import { initializeApp, getApps } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
-import { initializeAuth, getReactNativePersistence } from "firebase/auth";
-import ReactNativeAsyncStorage from "@react-native-async-storage/async-storage";
+import { getAuth } from "firebase/auth";
 
 // Firebase configuration
 const firebaseConfig = {
@@ -20,10 +19,8 @@ const app =
 // Initialize Firebase services
 export const db = getFirestore(app);
 
-// Initialize Auth with AsyncStorage persistence for React Native
-export const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(ReactNativeAsyncStorage),
-});
+// Initialize Auth - Firebase v12 handles persistence automatically in React Native
+export const auth = getAuth(app);
 console.log("Firebase Auth initialized");
 
 export default app;
