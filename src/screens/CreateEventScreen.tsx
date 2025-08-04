@@ -12,7 +12,7 @@ import {
   FlatList,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import DateTimePicker from "@react-native-community/datetimepicker";
+
 import { Calendar } from "react-native-calendars";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
@@ -48,26 +48,35 @@ const CreateEventScreen: React.FC = () => {
   // UI state
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [customTime, setCustomTime] = useState("");
+  const [showCustomTimeModal, setShowCustomTimeModal] = useState(false);
   const [showTimePickerModal, setShowTimePickerModal] = useState(false);
   const [isTeamModalVisible, setIsTeamModalVisible] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Get user teams
-  const userTeams = getUserTeams(user, teams);
+  // Get user teams (memoized to avoid repeated logs)
+  const userTeams = React.useMemo(
+    () => getUserTeams(user, teams),
+    [user, teams]
+  );
 
   // Common time presets
   const timePresets = [
+    { label: "10:00", value: "10:00" },
+    { label: "10:30", value: "10:30" },
+    { label: "11:00", value: "11:00" },
+    { label: "11:30", value: "11:30" },
+    { label: "12:00", value: "12:00" },
+    { label: "12:30", value: "12:30" },
+    { label: "13:00", value: "13:00" },
+    { label: "13:30", value: "13:30" },
+    { label: "14:00", value: "14:00" },
+    { label: "14:30", value: "14:30" },
+    { label: "15:00", value: "15:00" },
+    { label: "15:30", value: "15:30" },
     { label: "16:00", value: "16:00" },
     { label: "16:30", value: "16:30" },
     { label: "17:00", value: "17:00" },
-    { label: "17:30", value: "17:30" },
-    { label: "18:00", value: "18:00" },
-    { label: "18:30", value: "18:30" },
-    { label: "19:00", value: "19:00" },
-    { label: "19:30", value: "19:30" },
-    { label: "20:00", value: "20:00" },
-    { label: "20:30", value: "20:30" },
-    { label: "21:00", value: "21:00" },
     { label: "Muu aika...", value: "custom" },
   ];
 
@@ -153,7 +162,8 @@ const CreateEventScreen: React.FC = () => {
   const handleTimePresetSelect = (timeValue: string) => {
     if (timeValue === "custom") {
       setShowTimePickerModal(false);
-      setShowTimePicker(true);
+      setCustomTime("");
+      setShowCustomTimeModal(true);
     } else {
       const [hours, minutes] = timeValue.split(":").map(Number);
       const newTime = new Date();
@@ -503,52 +513,71 @@ const CreateEventScreen: React.FC = () => {
         </View>
       </Modal>
 
-      {/* Time Picker Modal - iOS only */}
-      {Platform.OS === "ios" && (
-        <Modal
-          visible={showTimePicker}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowTimePicker(false)}
-        >
-          <View style={styles.datePickerModalOverlay}>
-            <View style={styles.datePickerModalContent}>
-              <View style={styles.datePickerHeader}>
-                <Text style={styles.datePickerTitle}>Valitse aika</Text>
-                <TouchableOpacity
-                  style={styles.datePickerCloseButton}
-                  onPress={() => setShowTimePicker(false)}
-                >
-                  <Ionicons name="close" size={24} color="#666" />
-                </TouchableOpacity>
-              </View>
-              <DateTimePicker
-                value={selectedTime}
-                mode="time"
-                display={Platform.OS === "ios" ? "spinner" : "default"}
-                onChange={handleTimeChange}
-                style={styles.dateTimePicker}
-              />
+      {/* Custom time input modal */}
+      <Modal
+        visible={showCustomTimeModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowCustomTimeModal(false)}
+      >
+        <View style={styles.datePickerModalOverlay}>
+          <View style={styles.datePickerModalContent}>
+            <View style={styles.datePickerHeader}>
+              <Text style={styles.datePickerTitle}>
+                Syötä kellonaika (HH:MM)
+              </Text>
               <TouchableOpacity
-                style={styles.datePickerConfirmButton}
-                onPress={() => setShowTimePicker(false)}
+                style={styles.datePickerCloseButton}
+                onPress={() => setShowCustomTimeModal(false)}
               >
-                <Text style={styles.datePickerConfirmText}>Valmis</Text>
+                <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
             </View>
+            <TextInput
+              style={styles.input}
+              value={customTime}
+              onChangeText={(text) => {
+                // Poistetaan kaikki paitsi numerot
+                let cleaned = text.replace(/[^0-9]/g, "");
+                if (cleaned.length > 4) cleaned = cleaned.slice(0, 4);
+                let formatted = cleaned;
+                if (cleaned.length > 2) {
+                  formatted = cleaned.slice(0, 2) + ":" + cleaned.slice(2);
+                }
+                setCustomTime(formatted);
+              }}
+              placeholder="Esim. 1845 -> 18:45"
+              keyboardType="numeric"
+              maxLength={5}
+              autoFocus
+            />
+            <TouchableOpacity
+              style={styles.datePickerConfirmButton}
+              onPress={() => {
+                // Validate input (HH:MM)
+                const match = customTime.match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+                if (match) {
+                  const [hours, minutes] = customTime.split(":").map(Number);
+                  const newTime = new Date();
+                  newTime.setHours(hours, minutes, 0, 0);
+                  setSelectedTime(newTime);
+                  setShowCustomTimeModal(false);
+                } else {
+                  Alert.alert(
+                    "Virhe",
+                    "Syötä aika muodossa HH:MM (esim. 18:45)"
+                  );
+                }
+              }}
+            >
+              <Text style={styles.datePickerConfirmText}>Aseta aika</Text>
+            </TouchableOpacity>
           </View>
-        </Modal>
-      )}
+        </View>
+      </Modal>
 
       {/* Android Time Picker */}
-      {Platform.OS === "android" && showTimePicker && (
-        <DateTimePicker
-          value={selectedTime}
-          mode="time"
-          display="default"
-          onChange={handleTimeChange}
-        />
-      )}
+      {/* Android DateTimePicker poistettu, käytä custom preset tai TextInput */}
 
       {/* Team Selection Modal */}
       <Modal

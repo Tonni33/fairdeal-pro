@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # FairDealPro - Professional Sports Team Management
 
 A comprehensive React Native mobile application built with Expo for managing sports teams, creating balanced team compositions, and organizing events with a sophisticated licensing system.
@@ -179,3 +180,7 @@ This mobile app is a complete rewrite of the original React web application, opt
 - App store distribution
 
 For the web version, please see the `fairdeal-web` branch.
+=======
+# fairdeal-pro
+Repository for fairdealpro app
+>>>>>>> 8741ad736f22105065c02f44b16a11084b8cfa6a

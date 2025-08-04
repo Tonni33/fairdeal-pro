@@ -22,7 +22,7 @@ import {
   getDoc,
   deleteDoc,
 } from "firebase/firestore";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import { Button, Dialog, Portal } from "react-native-paper";
 import { db } from "../services/firebase";
 import { useApp } from "../contexts/AppContext";
 
@@ -77,8 +77,8 @@ const EventManagementScreen: React.FC = () => {
   // Date/time pickers for edit modal
   const [editDate, setEditDate] = useState<Date | null>(null);
   const [editTime, setEditTime] = useState<Date | null>(null);
-  const [showEditDatePicker, setShowEditDatePicker] = useState(false);
-  const [showEditTimePicker, setShowEditTimePicker] = useState(false);
+  const [showEditDateDialog, setShowEditDateDialog] = useState(false);
+  const [showEditTimeDialog, setShowEditTimeDialog] = useState(false);
 
   useEffect(() => {
     fetchEvents();
@@ -767,7 +767,7 @@ const EventManagementScreen: React.FC = () => {
                 <Text style={styles.formLabel}>Päivämäärä</Text>
                 <TouchableOpacity
                   style={styles.formInput}
-                  onPress={() => setShowEditDatePicker(true)}
+                  onPress={() => setShowEditDateDialog(true)}
                 >
                   <Text style={{ color: editDate ? "#333" : "#999" }}>
                     {editDate
@@ -780,48 +780,31 @@ const EventManagementScreen: React.FC = () => {
                       : "Valitse päivämäärä"}
                   </Text>
                 </TouchableOpacity>
-                {showEditDatePicker && (
-                  <Modal
-                    visible={showEditDatePicker}
-                    transparent={true}
-                    animationType="fade"
-                    onRequestClose={() => setShowEditDatePicker(false)}
+                <Portal>
+                  <Dialog
+                    visible={showEditDateDialog}
+                    onDismiss={() => setShowEditDateDialog(false)}
                   >
-                    <View style={styles.modalOverlay}>
-                      <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                          <Text style={styles.modalTitle}>
-                            Valitse päivämäärä
-                          </Text>
-                          <TouchableOpacity
-                            style={styles.closeButton}
-                            onPress={() => setShowEditDatePicker(false)}
-                          >
-                            <Ionicons name="close" size={24} color="#666" />
-                          </TouchableOpacity>
-                        </View>
-                        <DateTimePicker
-                          value={editDate || new Date()}
-                          mode="date"
-                          display="spinner"
-                          onChange={(event, date) => {
-                            if (date && event.type !== "dismissed") {
-                              setEditDate(date);
-                            }
-                          }}
-                          minimumDate={new Date()}
-                          style={{ width: "100%", height: 200 }}
-                        />
-                        <TouchableOpacity
-                          style={styles.saveButton}
-                          onPress={() => setShowEditDatePicker(false)}
-                        >
-                          <Text style={styles.saveButtonText}>Valmis</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </Modal>
-                )}
+                    <Dialog.Title>Valitse päivämäärä</Dialog.Title>
+                    <Dialog.Content>
+                      <Button
+                        onPress={() => {
+                          const today = new Date();
+                          setEditDate(today);
+                          setShowEditDateDialog(false);
+                        }}
+                      >
+                        Tänään
+                      </Button>
+                      {/* Voit laajentaa tähän oman kalenterin tai päivämäärän valinnan */}
+                    </Dialog.Content>
+                    <Dialog.Actions>
+                      <Button onPress={() => setShowEditDateDialog(false)}>
+                        Sulje
+                      </Button>
+                    </Dialog.Actions>
+                  </Dialog>
+                </Portal>
               </View>
 
               {/* Kellonaikavalitsin */}
@@ -829,7 +812,7 @@ const EventManagementScreen: React.FC = () => {
                 <Text style={styles.formLabel}>Aika</Text>
                 <TouchableOpacity
                   style={styles.formInput}
-                  onPress={() => setShowEditTimePicker(true)}
+                  onPress={() => setShowEditTimeDialog(true)}
                 >
                   <Text style={{ color: editTime ? "#333" : "#999" }}>
                     {editTime
@@ -840,45 +823,31 @@ const EventManagementScreen: React.FC = () => {
                       : "Valitse aika"}
                   </Text>
                 </TouchableOpacity>
-                {showEditTimePicker && (
-                  <Modal
-                    visible={showEditTimePicker}
-                    transparent={true}
-                    animationType="fade"
-                    onRequestClose={() => setShowEditTimePicker(false)}
+                <Portal>
+                  <Dialog
+                    visible={showEditTimeDialog}
+                    onDismiss={() => setShowEditTimeDialog(false)}
                   >
-                    <View style={styles.modalOverlay}>
-                      <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                          <Text style={styles.modalTitle}>Valitse aika</Text>
-                          <TouchableOpacity
-                            style={styles.closeButton}
-                            onPress={() => setShowEditTimePicker(false)}
-                          >
-                            <Ionicons name="close" size={24} color="#666" />
-                          </TouchableOpacity>
-                        </View>
-                        <DateTimePicker
-                          value={editTime || new Date()}
-                          mode="time"
-                          display="spinner"
-                          onChange={(event, time) => {
-                            if (time && event.type !== "dismissed") {
-                              setEditTime(time);
-                            }
-                          }}
-                          style={{ width: "100%", height: 200 }}
-                        />
-                        <TouchableOpacity
-                          style={styles.saveButton}
-                          onPress={() => setShowEditTimePicker(false)}
-                        >
-                          <Text style={styles.saveButtonText}>Valmis</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </Modal>
-                )}
+                    <Dialog.Title>Valitse aika</Dialog.Title>
+                    <Dialog.Content>
+                      <Button
+                        onPress={() => {
+                          const now = new Date();
+                          setEditTime(now);
+                          setShowEditTimeDialog(false);
+                        }}
+                      >
+                        Nyt
+                      </Button>
+                      {/* Voit laajentaa tähän oman kellonajan valinnan */}
+                    </Dialog.Content>
+                    <Dialog.Actions>
+                      <Button onPress={() => setShowEditTimeDialog(false)}>
+                        Sulje
+                      </Button>
+                    </Dialog.Actions>
+                  </Dialog>
+                </Portal>
               </View>
 
               <View style={styles.formGroup}>
