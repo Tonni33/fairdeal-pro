@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -86,10 +86,18 @@ const SettingsScreen: React.FC = () => {
     Record<string, EventDefaults>
   >({});
 
+  // Helper function to check if user is master admin
+  const isMasterAdmin = (): boolean => {
+    return Boolean(user && user.isMasterAdmin === true);
+  };
+
   // Get teams where user is admin
-  const adminTeams = getUserTeams(user, teams).filter(
-    (team) => team.adminId === user?.email
-  );
+  const adminTeams = useMemo(() => {
+    const availableTeams = isMasterAdmin() ? teams : getUserTeams(user, teams);
+    return availableTeams.filter(
+      (team) => team.adminId === user?.email || isMasterAdmin()
+    );
+  }, [user, teams]);
   useEffect(() => {
     loadSettings();
     loadUsersWithoutPassword();

@@ -135,7 +135,8 @@ const TeamManagementScreen: React.FC = () => {
           name: teamName.trim(),
           color: teamColor,
           code: teamCode.trim().toUpperCase(),
-          members: [],
+          adminId: user?.uid || "",
+          members: [user?.uid || ""],
           createdAt: new Date(),
         });
         Alert.alert(

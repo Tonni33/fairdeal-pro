@@ -24,6 +24,7 @@ const LoginScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showEmailLogin, setShowEmailLogin] = useState(false);
   const [quickAuthAvailable, setQuickAuthAvailable] = useState(false);
+  const [imageError, setImageError] = useState(false);
 
   const { signIn, signUp } = useAuth();
 
@@ -195,11 +196,24 @@ const LoginScreen: React.FC = () => {
     >
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.logoContainer}>
-          <Image
-            source={require("../../assets/fairdealLogo.png")}
-            style={styles.logo}
-            resizeMode="contain"
-          />
+          {!imageError ? (
+            <Image
+              source={require("../../assets/fairdealLogo.png")}
+              style={styles.logo}
+              resizeMode="contain"
+              onError={(error) => {
+                console.log("Logo loading error:", error);
+                setImageError(true);
+              }}
+              onLoad={() => {
+                console.log("Logo loaded successfully");
+              }}
+            />
+          ) : (
+            <View style={styles.logoPlaceholder}>
+              <Text style={styles.logoText}>FairDeal Pro</Text>
+            </View>
+          )}
           <Text style={styles.subtitle}>
             {isRegister ? "Luo uusi tili" : "Kirjaudu sisään"}
           </Text>

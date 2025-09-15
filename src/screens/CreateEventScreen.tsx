@@ -54,11 +54,22 @@ const CreateEventScreen: React.FC = () => {
   const [isTeamModalVisible, setIsTeamModalVisible] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Helper function to check if user is master admin
+  const isMasterAdmin = (): boolean => {
+    return Boolean(user && user.isMasterAdmin === true);
+  };
+
   // Get user teams (memoized to avoid repeated logs)
-  const userTeams = React.useMemo(
-    () => getUserTeams(user, teams),
-    [user, teams]
-  );
+  // Master admin sees all teams, others see only their own
+  const userTeams = React.useMemo(() => {
+    if (isMasterAdmin()) {
+      // Master admin näkee kaikki joukkueet
+      return teams;
+    } else {
+      // Tavalliset käyttäjät näkevät vain ne joukkueet joissa ovat mukana
+      return getUserTeams(user, teams);
+    }
+  }, [user, teams]);
 
   // Common time presets
   const timePresets = [

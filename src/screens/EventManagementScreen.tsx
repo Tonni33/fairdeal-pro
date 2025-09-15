@@ -37,6 +37,48 @@ const EventManagementScreen: React.FC = () => {
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [removingPlayerId, setRemovingPlayerId] = useState<string | null>(null);
 
+  // Multi-select state for adding multiple players
+  const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
+  const [isAddingMultiplePlayers, setIsAddingMultiplePlayers] = useState(false);
+
+  // Helper function to get player's team-specific skills for the event
+  const getPlayerEventSkills = (player: any, eventTeamId?: string) => {
+    if (!eventTeamId || !player.teamSkills?.[eventTeamId]) {
+      // Return default player skills
+      return {
+        category: player.category,
+        multiplier: player.multiplier,
+        position: player.position,
+        hasTeamSkills: false,
+      };
+    }
+
+    // Return team-specific skills
+    const teamSkills = player.teamSkills[eventTeamId];
+    console.log(
+      `📋 EventManagement: Using team skills for ${player.name} in event team ${eventTeamId}:`,
+      teamSkills
+    );
+    return {
+      category: teamSkills.category,
+      multiplier: teamSkills.multiplier,
+      position: teamSkills.position,
+      hasTeamSkills: true,
+    };
+  };
+
+  // Helper function to get players that belong to the event's team
+  const getTeamPlayers = () => {
+    if (!selectedEvent?.teamId) {
+      return players; // If no team specified, show all players
+    }
+    return players.filter(
+      (player) =>
+        player.teamIds?.includes(selectedEvent.teamId) ||
+        player.teams?.includes(selectedEvent.teamId)
+    );
+  };
+
   // Helper functions for player counting by position
   const getFieldPlayers = (playerIds: string[]) => {
     return playerIds.filter((id) => {
@@ -268,6 +310,103 @@ const EventManagementScreen: React.FC = () => {
       Alert.alert("Virhe", "Pelaajan lisääminen epäonnistui");
     }
     setAddingPlayerId(null);
+  };
+
+  const handleAddMultiplePlayersToEvent = async () => {
+    if (!selectedEvent || selectedPlayerIds.length === 0) return;
+
+    setIsAddingMultiplePlayers(true);
+    try {
+      const eventRef = doc(db, "events", selectedEvent.id);
+      const currentPlayers = selectedEvent.registeredPlayers || [];
+
+      // Filter out players already in the event
+      const playersToAdd = selectedPlayerIds.filter(
+        (id) => !currentPlayers.includes(id)
+      );
+
+      if (playersToAdd.length === 0) {
+        Alert.alert(
+          "Ei lisättäviä",
+          "Kaikki valitut pelaajat ovat jo tapahtumassa"
+        );
+        setIsAddingMultiplePlayers(false);
+        return;
+      }
+
+      // Check player limits
+      const playersData = playersToAdd
+        .map((id) => players.find((p) => p.id === id))
+        .filter((p): p is NonNullable<typeof p> => p != null);
+      const fieldPlayersToAdd = playersData.filter((p) =>
+        ["H", "P", "H/P"].includes(p.position)
+      );
+      const goalkeepersToAdd = playersData.filter((p) => p.position === "MV");
+
+      const currentFieldPlayers = getFieldPlayers(currentPlayers);
+      const currentGoalkeepers = getGoalkeepers(currentPlayers);
+
+      // Check field player limit
+      if (selectedEvent.maxPlayers) {
+        const totalAfterAdd =
+          currentFieldPlayers.length + fieldPlayersToAdd.length;
+        if (totalAfterAdd > selectedEvent.maxPlayers) {
+          Alert.alert(
+            "Liikaa pelaajia",
+            `Tapahtumassa on tilaa vain ${
+              selectedEvent.maxPlayers - currentFieldPlayers.length
+            } kenttäpelaajalle lisää`
+          );
+          setIsAddingMultiplePlayers(false);
+          return;
+        }
+      }
+
+      // Check goalkeeper limit
+      if (selectedEvent.maxGoalkeepers) {
+        const totalGoalkeepersAfterAdd =
+          currentGoalkeepers.length + goalkeepersToAdd.length;
+        if (totalGoalkeepersAfterAdd > selectedEvent.maxGoalkeepers) {
+          Alert.alert(
+            "Liikaa maalivahteja",
+            `Tapahtumassa on tilaa vain ${
+              selectedEvent.maxGoalkeepers - currentGoalkeepers.length
+            } maalivahtiille lisää`
+          );
+          setIsAddingMultiplePlayers(false);
+          return;
+        }
+      }
+
+      // Add all players at once
+      await updateDoc(eventRef, {
+        registeredPlayers: [...currentPlayers, ...playersToAdd],
+      });
+
+      await fetchEvents();
+      Alert.alert(
+        "Onnistui",
+        `${playersToAdd.length} pelaajaa lisätty tapahtumaan`
+      );
+
+      // Reset selection
+      setSelectedPlayerIds([]);
+      setIsPlayerModalVisible(false);
+    } catch (error) {
+      console.error("Error adding multiple players:", error);
+      Alert.alert("Virhe", "Pelaajien lisääminen epäonnistui");
+    }
+    setIsAddingMultiplePlayers(false);
+  };
+
+  const togglePlayerSelection = (playerId: string) => {
+    setSelectedPlayerIds((prev) => {
+      if (prev.includes(playerId)) {
+        return prev.filter((id) => id !== playerId);
+      } else {
+        return [...prev, playerId];
+      }
+    });
   };
 
   const handleRemovePlayerFromEvent = async (playerId: string) => {
@@ -704,8 +843,19 @@ const EventManagementScreen: React.FC = () => {
                           </Text>
                           {player && (
                             <Text style={styles.playerSubinfo}>
-                              {player.position} • Kat. {player.category} •{" "}
-                              {player.multiplier?.toFixed(1)}
+                              {(() => {
+                                const eventSkills = getPlayerEventSkills(
+                                  player,
+                                  selectedEvent?.teamId
+                                );
+                                return (
+                                  <>
+                                    {eventSkills.position} • Kat.{" "}
+                                    {eventSkills.category} •{" "}
+                                    {eventSkills.multiplier?.toFixed(1)}
+                                  </>
+                                );
+                              })()}
                             </Text>
                           )}
                         </View>
@@ -884,22 +1034,43 @@ const EventManagementScreen: React.FC = () => {
         visible={isPlayerModalVisible}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setIsPlayerModalVisible(false)}
+        onRequestClose={() => {
+          setIsPlayerModalVisible(false);
+          setSelectedPlayerIds([]);
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Lisää pelaaja tapahtumaan</Text>
+              <Text style={styles.modalTitle}>Lisää pelaajia tapahtumaan</Text>
               <TouchableOpacity
                 style={styles.closeButton}
-                onPress={() => setIsPlayerModalVisible(false)}
+                onPress={() => {
+                  setIsPlayerModalVisible(false);
+                  setSelectedPlayerIds([]);
+                }}
               >
                 <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
             </View>
 
+            {/* Multi-select info and controls */}
+            <View style={styles.multiSelectHeader}>
+              <Text style={styles.selectedCountText}>
+                Valittu: {selectedPlayerIds.length} pelaajaa
+              </Text>
+              {selectedPlayerIds.length > 0 && (
+                <TouchableOpacity
+                  style={styles.clearSelectionButton}
+                  onPress={() => setSelectedPlayerIds([])}
+                >
+                  <Text style={styles.clearSelectionText}>Tyhjennä</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
             <ScrollView style={styles.modalScrollView}>
-              {players
+              {getTeamPlayers()
                 .filter(
                   (player) =>
                     !(selectedEvent?.registeredPlayers || []).includes(
@@ -914,28 +1085,46 @@ const EventManagementScreen: React.FC = () => {
                 })
                 .map((player) => {
                   const isGoalkeeper = player.position === "MV";
+                  const isSelected = selectedPlayerIds.includes(player.id);
                   return (
                     <TouchableOpacity
                       key={player.id}
                       style={[
                         styles.modalPlayerButton,
                         isGoalkeeper && styles.goalkeeperCard,
+                        isSelected && styles.selectedPlayerCard,
                       ]}
-                      onPress={() => {
-                        handleAddPlayerToEvent(player.id);
-                        setIsPlayerModalVisible(false);
-                      }}
-                      disabled={addingPlayerId === player.id}
+                      onPress={() => togglePlayerSelection(player.id)}
+                      disabled={
+                        addingPlayerId === player.id || isAddingMultiplePlayers
+                      }
                     >
                       <View style={styles.modalPlayerInfo}>
-                        <Ionicons
-                          name="person"
-                          size={20}
-                          color={getPlayerIconColor(
-                            player,
-                            selectedEvent?.teamId
-                          )}
-                        />
+                        <View style={styles.playerSelectionContainer}>
+                          <View
+                            style={[
+                              styles.selectionCheckbox,
+                              isSelected && styles.selectedCheckbox,
+                            ]}
+                          >
+                            {isSelected && (
+                              <Ionicons
+                                name="checkmark"
+                                size={16}
+                                color="#fff"
+                              />
+                            )}
+                          </View>
+                          <Ionicons
+                            name="person"
+                            size={20}
+                            color={getPlayerIconColor(
+                              player,
+                              selectedEvent?.teamId
+                            )}
+                            style={styles.playerIcon}
+                          />
+                        </View>
                         <View style={styles.modalPlayerDetails}>
                           <Text
                             style={[
@@ -947,12 +1136,24 @@ const EventManagementScreen: React.FC = () => {
                             {isGoalkeeper && " 🥅"}
                           </Text>
                           <Text style={styles.modalPlayerSubinfo}>
-                            {player.position} • Kat. {player.category} •{" "}
-                            {player.multiplier?.toFixed(1)}
+                            {(() => {
+                              const eventSkills = getPlayerEventSkills(
+                                player,
+                                selectedEvent?.teamId
+                              );
+                              return (
+                                <>
+                                  {eventSkills.position} • Kat.{" "}
+                                  {eventSkills.category} •{" "}
+                                  {eventSkills.multiplier?.toFixed(1)}
+                                </>
+                              );
+                            })()}
                           </Text>
                         </View>
                       </View>
-                      {addingPlayerId === player.id ? (
+                      {addingPlayerId === player.id ||
+                      isAddingMultiplePlayers ? (
                         <ActivityIndicator
                           size="small"
                           color={
@@ -961,31 +1162,48 @@ const EventManagementScreen: React.FC = () => {
                               : "#1976d2"
                           }
                         />
-                      ) : (
-                        <Ionicons
-                          name="add"
-                          size={20}
-                          color={
-                            selectedEvent?.teamId
-                              ? getTeamColor(selectedEvent.teamId)
-                              : "#1976d2"
-                          }
-                        />
-                      )}
+                      ) : null}
                     </TouchableOpacity>
                   );
                 })}
-              {players.filter(
+              {getTeamPlayers().filter(
                 (player) =>
                   !(selectedEvent?.registeredPlayers || []).includes(player.id)
               ).length === 0 && (
                 <View style={styles.noPlayersContainer}>
                   <Text style={styles.noPlayersText}>
-                    Kaikki pelaajat on jo lisätty tapahtumaan
+                    Kaikki joukkueen pelaajat on jo lisätty tapahtumaan
                   </Text>
                 </View>
               )}
             </ScrollView>
+
+            {/* Action buttons */}
+            <View style={styles.modalActions}>
+              {selectedPlayerIds.length > 0 && (
+                <TouchableOpacity
+                  style={[
+                    styles.addSelectedButton,
+                    selectedEvent?.teamId && {
+                      backgroundColor: getTeamColor(selectedEvent.teamId),
+                    },
+                  ]}
+                  onPress={handleAddMultiplePlayersToEvent}
+                  disabled={isAddingMultiplePlayers}
+                >
+                  {isAddingMultiplePlayers ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="add" size={20} color="#fff" />
+                      <Text style={styles.addSelectedButtonText}>
+                        Lisää valitut ({selectedPlayerIds.length})
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
       </Modal>
@@ -1394,6 +1612,79 @@ const styles = StyleSheet.create({
   },
   goalkeeperName: {
     color: "#ff9800",
+    fontWeight: "600",
+  },
+  // Multi-select styles
+  multiSelectHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  selectedCountText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+  },
+  clearSelectionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "#f5f5f5",
+    borderRadius: 6,
+  },
+  clearSelectionText: {
+    fontSize: 12,
+    color: "#666",
+    fontWeight: "500",
+  },
+  selectedPlayerCard: {
+    backgroundColor: "#e3f2fd",
+    borderColor: "#1976d2",
+    borderWidth: 2,
+  },
+  playerSelectionContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  selectionCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: "#ddd",
+    backgroundColor: "#fff",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  selectedCheckbox: {
+    backgroundColor: "#1976d2",
+    borderColor: "#1976d2",
+  },
+  playerIcon: {
+    marginLeft: 4,
+  },
+  modalActions: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#eee",
+  },
+  addSelectedButton: {
+    backgroundColor: "#1976d2",
+    borderRadius: 8,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  addSelectedButtonText: {
+    color: "#fff",
+    fontSize: 16,
     fontWeight: "600",
   },
 });

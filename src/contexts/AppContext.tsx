@@ -10,7 +10,14 @@ import {
   getDocs,
 } from "firebase/firestore";
 import { db } from "../services/firebase";
-import { Player, Team, Event, AppContextType, TeamClub } from "../types";
+import {
+  Player,
+  Team,
+  Event,
+  AppContextType,
+  TeamClub,
+  TeamPlayer,
+} from "../types";
 import { useAuth } from "./AuthContext";
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -21,27 +28,80 @@ interface AppProviderProps {
 
 // Palauttaa kaikki joukkueet, joissa käyttäjän sähköposti löytyy members-listasta tai on adminId
 export function getUserTeams(
-  user: { email: string } | null | undefined,
+  user: { email: string; id?: string } | null | undefined,
   teams: Team[]
 ): Team[] {
   if (!user || !user.email) return [];
   const email = user.email;
+  const userId = user.id;
+
   const userTeams = teams.filter(
     (team) =>
+      // Check if user is admin by email
+      team.adminId === email ||
+      // Check if user is member by email (legacy support)
       (Array.isArray(team.members) && team.members.includes(email)) ||
-      team.adminId === email
+      // Check if user is member by user ID (current format)
+      (userId && Array.isArray(team.members) && team.members.includes(userId))
   );
   console.log(
-    `getUserTeams: Käyttäjä ${email} kuuluu ${userTeams.length} joukkueeseen:`,
+    `getUserTeams: Käyttäjä ${email} (ID: ${userId}) kuuluu ${userTeams.length} joukkueeseen:`,
     userTeams.map((t) => t.name)
   );
   return userTeams;
+}
+
+// Hakee pelaajan joukkuekohtaiset taidot
+export function getPlayerTeamSkills(
+  playerId: string,
+  teamId: string,
+  teamPlayers: TeamPlayer[]
+): { category: number; multiplier: number; position: string } | null {
+  const teamPlayer = teamPlayers.find(
+    (tp) => tp.playerId === playerId && tp.teamId === teamId && tp.isActive
+  );
+
+  if (teamPlayer) {
+    return {
+      category: teamPlayer.category,
+      multiplier: teamPlayer.multiplier,
+      position: teamPlayer.position,
+    };
+  }
+
+  return null;
+}
+
+// Luo Player objektin joukkuekohtaisilla taidoilla
+export function createPlayerWithTeamSkills(
+  player: Player,
+  teamId: string,
+  teamPlayers: TeamPlayer[]
+): Player {
+  const teamSkills = getPlayerTeamSkills(player.id, teamId, teamPlayers);
+
+  if (teamSkills) {
+    return {
+      ...player,
+      category: teamSkills.category,
+      multiplier: teamSkills.multiplier,
+      position: teamSkills.position,
+      // Update derived fields
+      skillLevel: Math.round(teamSkills.multiplier * 2.5) || 1,
+      isGoalkeeper: teamSkills.position === "MV",
+      points: Math.round(teamSkills.multiplier * 100) || 100,
+    };
+  }
+
+  // Return player with default skills if no team-specific skills found
+  return player;
 }
 
 export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
   const [players, setPlayers] = useState<Player[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
+  const [teamPlayers, setTeamPlayers] = useState<TeamPlayer[]>([]);
   const [selectedTeamClub, setSelectedTeamClub] = useState<TeamClub | null>(
     null
   );
@@ -92,6 +152,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
               teams: data.teams || [],
               playerId: data.playerId || doc.id,
               licenceCode: data.licenceCode || "",
+              teamSkills: data.teamSkills || {}, // Lisätään teamSkills kenttä
               createdAt: data.createdAt?.toDate
                 ? data.createdAt.toDate()
                 : new Date(data.createdAt || Date.now()),
@@ -227,6 +288,47 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
       );
       unsubscribes.push(unsubscribeEvents);
 
+      // Listen to team players collection
+      const teamPlayersQuery = query(
+        collection(db, "teamPlayers"),
+        orderBy("joinedAt", "desc")
+      );
+      const unsubscribeTeamPlayers = onSnapshot(
+        teamPlayersQuery,
+        (snapshot) => {
+          const teamPlayersData: TeamPlayer[] = [];
+          snapshot.forEach((doc) => {
+            const data = doc.data();
+            teamPlayersData.push({
+              id: doc.id,
+              playerId: data.playerId,
+              teamId: data.teamId,
+              category: data.category || 2,
+              multiplier: data.multiplier || 1.0,
+              position: data.position || "H",
+              isActive: data.isActive !== false,
+              joinedAt: data.joinedAt?.toDate
+                ? data.joinedAt.toDate()
+                : new Date(data.joinedAt || Date.now()),
+              updatedAt: data.updatedAt?.toDate
+                ? data.updatedAt.toDate()
+                : undefined,
+              updatedBy: data.updatedBy || "",
+              notes: data.notes || "",
+            });
+          });
+          setTeamPlayers(teamPlayersData);
+          console.log(
+            `AppContext: Loaded ${teamPlayersData.length} team players relationships`
+          );
+        },
+        (error) => {
+          console.error("Error fetching team players:", error);
+          setError("Failed to load team players");
+        }
+      );
+      unsubscribes.push(unsubscribeTeamPlayers);
+
       setLoading(false);
     } catch (error) {
       console.error("Error setting up data subscriptions:", error);
@@ -279,6 +381,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     players,
     events,
     teams,
+    teamPlayers,
     selectedTeamClub,
     setSelectedTeamClub,
     selectedTeamId,

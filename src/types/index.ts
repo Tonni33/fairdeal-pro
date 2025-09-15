@@ -1,3 +1,18 @@
+// Team-Player relationship with team-specific skills
+export interface TeamPlayer {
+  id: string; // Unique document ID
+  playerId: string; // Reference to Player document
+  teamId: string; // Reference to Team document
+  category: number; // Team-specific category (1, 2, 3)
+  multiplier: number; // Team-specific skill multiplier
+  position: string; // Team-specific position (may differ from global position)
+  isActive: boolean; // Active in this team
+  joinedAt: Date; // When player joined this team
+  updatedAt?: Date; // When team-specific skills were last updated
+  updatedBy?: string; // Who updated the team-specific skills
+  notes?: string; // Team-specific notes about the player
+}
+
 // Player types (from users collection)
 export interface Player {
   id: string;
@@ -14,6 +29,15 @@ export interface Player {
   teamIds: string[]; // Array of team IDs this player belongs to
   teams: string[]; // Array of team names
   createdAt: Date;
+  // Team-specific skills stored in the user document
+  teamSkills?: {
+    [teamId: string]: {
+      category: number;
+      multiplier: number;
+      position: string;
+      updatedAt: Date;
+    };
+  };
   // Legacy fields for compatibility - required to avoid undefined errors
   skillLevel: number; // 1-5 scale (derived from multiplier)
   isActive: boolean;
@@ -258,6 +282,7 @@ export interface AppContextType {
   players: Player[];
   events: Event[];
   teams: Team[];
+  teamPlayers: TeamPlayer[];
   selectedTeamClub: TeamClub | null;
   setSelectedTeamClub: (teamClub: TeamClub | null) => void;
   selectedTeamId: string | null;

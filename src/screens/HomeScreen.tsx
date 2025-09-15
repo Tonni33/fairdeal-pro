@@ -35,10 +35,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useApp, getUserTeams } from "../contexts/AppContext";
 import AdminMenuButton from "../components/AdminMenuButton";
 
-type HomeScreenNavigationProp = StackNavigationProp<
-  RootStackParamList,
-  "CreateEvent"
->;
+type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation<HomeScreenNavigationProp>();
@@ -48,6 +45,7 @@ const HomeScreen: React.FC = () => {
   const [isReserve, setIsReserve] = useState(false);
   const [registrationLoading, setRegistrationLoading] = useState(false);
   const [registeredPlayers, setRegisteredPlayers] = useState<Player[]>([]);
+  const [imageError, setImageError] = useState(false);
   const [reservePlayers, setReservePlayers] = useState<Player[]>([]);
   const [isTeamModalVisible, setIsTeamModalVisible] = useState(false);
   const [isPlayersModalVisible, setIsPlayersModalVisible] = useState(false);
@@ -515,11 +513,16 @@ const HomeScreen: React.FC = () => {
         <View style={styles.header}>
           <View style={styles.headerContent}>
             <View style={styles.logoContainer}>
-              <Image
-                source={require("../../assets/fairdealLogo.png")}
-                style={styles.logo}
-                resizeMode="contain"
-              />
+              {!imageError ? (
+                <Image
+                  source={require("../../assets/fairdealLogo.png")}
+                  style={styles.logo}
+                  resizeMode="contain"
+                  onError={() => setImageError(true)}
+                />
+              ) : (
+                <Text style={styles.logoText}>FairDeal Pro</Text>
+              )}
             </View>
             <AdminMenuButton onNavigate={handleAdminNavigation} />
           </View>
@@ -536,11 +539,16 @@ const HomeScreen: React.FC = () => {
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <View style={styles.logoContainer}>
-            <Image
-              source={require("../../assets/fairdealLogo.png")}
-              style={styles.logo}
-              resizeMode="contain"
-            />
+            {!imageError ? (
+              <Image
+                source={require("../../assets/fairdealLogo.png")}
+                style={styles.logo}
+                resizeMode="contain"
+                onError={() => setImageError(true)}
+              />
+            ) : (
+              <Text style={styles.logoText}>FairDeal Pro</Text>
+            )}
           </View>
           <View>
             <AdminMenuButton onNavigate={handleAdminNavigation} />
@@ -702,6 +710,32 @@ const HomeScreen: React.FC = () => {
                   : "Ilmoittaudu"}
               </Text>
             </TouchableOpacity>
+
+            {/* Generated teams banner */}
+            {nextEvent.generatedTeams &&
+              nextEvent.generatedTeams.teams &&
+              nextEvent.generatedTeams.teams.length > 0 && (
+                <TouchableOpacity
+                  style={styles.generatedTeamsBanner}
+                  onPress={() => (navigation as any).navigate("Teams")}
+                >
+                  <View style={styles.participantsBannerContent}>
+                    <View style={styles.participantsBannerLeft}>
+                      <Ionicons name="trophy" size={24} color="#4CAF50" />
+                      <View style={styles.participantsBannerText}>
+                        <Text style={styles.generatedTeamsBannerTitle}>
+                          Joukkueet arvottu
+                        </Text>
+                        <Text style={styles.participantsBannerSubtitle}>
+                          Tasapaino:{" "}
+                          {nextEvent.generatedTeams.balanceScore || 0}/100
+                        </Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#666" />
+                  </View>
+                </TouchableOpacity>
+              )}
 
             {/* Participants banner */}
             {nextEvent.registeredPlayers &&
@@ -1542,6 +1576,11 @@ const styles = StyleSheet.create({
     height: 100,
     width: 160,
   },
+  logoText: {
+    color: "#1976d2",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
   reserveTitle: {
     color: "#ff9800",
     fontWeight: "600",
@@ -1868,6 +1907,20 @@ const styles = StyleSheet.create({
     color: "#007AFF",
     fontWeight: "500",
     marginLeft: 8,
+  },
+  generatedTeamsBanner: {
+    backgroundColor: "#f8fdf8",
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#e8f5e8",
+  },
+  generatedTeamsBannerTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#2e7d32",
+    marginBottom: 2,
   },
 });
 

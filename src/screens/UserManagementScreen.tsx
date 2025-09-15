@@ -30,13 +30,38 @@ const UserManagementScreen: React.FC = () => {
   const { user } = useAuth();
   const { teams, players: allPlayers, refreshData } = useApp();
 
-  // Filtteröi joukkueet joissa nykyinen käyttäjä on mukana
-  const userTeams = useMemo(() => getUserTeams(user, teams), [user, teams]);
+  // Helper function to check if user is master admin
+  const isMasterAdmin = (): boolean => {
+    return Boolean(user && user.isMasterAdmin === true);
+  };
+
+  // Filtteröi joukkueet: Master admin näkee kaikki, muut vain omat
+  const userTeams = useMemo(() => {
+    if (isMasterAdmin()) {
+      // Master admin näkee kaikki joukkueet
+      return teams;
+    } else {
+      // Tavalliset käyttäjät näkevät vain ne joukkueet joissa ovat mukana
+      return getUserTeams(user, teams);
+    }
+  }, [user, teams]);
 
   // State
   const [selectedTeam, setSelectedTeam] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Local state for optimistic updates of team skills
+  const [localTeamSkills, setLocalTeamSkills] = useState<{
+    [key: string]: { category: number; multiplier: number; position: string };
+  }>({});
+
+  // Tyhjennä optimistic state kun joukkue vaihtuu
+  const handleTeamChange = (teamId: string) => {
+    setSelectedTeam(teamId);
+    setLocalTeamSkills({}); // Tyhjennä optimistic updates kun joukkue vaihtuu
+    console.log("Team changed, cleared local team skills cache");
+  };
 
   // Filtteröi pelaajat valitun joukkueen mukaan
   const filteredPlayers = useMemo(() => {
@@ -76,8 +101,16 @@ const UserManagementScreen: React.FC = () => {
     });
 
     console.log("UserManagement: Filtered players count:", filtered.length);
-    return filtered;
-  }, [selectedTeam, allPlayers, teams]);
+
+    // Lajittele pelaajat aakkosjärjestykseen sukunimen perusteella
+    const sorted = filtered.sort((a, b) => {
+      const aLastName = a.name.split(" ").pop() || a.name;
+      const bLastName = b.name.split(" ").pop() || b.name;
+      return aLastName.localeCompare(bLastName, "fi");
+    });
+
+    return sorted;
+  }, [selectedTeam, allPlayers, teams, localTeamSkills]); // Poistettu teamPlayers riippuvuus
 
   // Modal states
   const [isTeamModalVisible, setIsTeamModalVisible] = useState(false);
@@ -120,6 +153,30 @@ const UserManagementScreen: React.FC = () => {
     }
   };
 
+  // Helper function to get team skills with local state fallback
+  const getTeamSkillsWithLocal = (playerId: string, teamId: string) => {
+    const localKey = `${playerId}-${teamId}`;
+    const localSkills = localTeamSkills[localKey];
+
+    if (localSkills) {
+      console.log(`Using local skills for ${playerId}-${teamId}:`, localSkills);
+      return localSkills;
+    }
+
+    // Löydä pelaaja ja hae teamSkills suoraan player objektista
+    const player = allPlayers.find((p) => p.id === playerId);
+    if (player?.teamSkills?.[teamId]) {
+      console.log(
+        `Using Firestore skills for ${playerId}-${teamId}:`,
+        player.teamSkills[teamId]
+      );
+      return player.teamSkills[teamId];
+    }
+
+    console.log(`No team skills found for ${playerId}-${teamId}`);
+    return null;
+  };
+
   // Päivitä kerroin automaattisesti kategorian muuttuessa
   const handleCategoryChange = (newCategory: number) => {
     setEditCategory(newCategory);
@@ -148,9 +205,19 @@ const UserManagementScreen: React.FC = () => {
     setEditName(player.name);
     setEditEmail(player.email);
     setEditPhone(player.phone || "");
-    setEditPosition(player.position);
-    setEditCategory(player.category);
-    setEditMultiplier(player.multiplier);
+
+    // Jos joukkue on valittu, käytä joukkuekohtaisia taitoja
+    if (selectedTeam) {
+      const teamSkills = getTeamSkillsWithLocal(player.id, selectedTeam);
+      setEditPosition(teamSkills?.position || player.position);
+      setEditCategory(teamSkills?.category || player.category);
+      setEditMultiplier(teamSkills?.multiplier || player.multiplier);
+    } else {
+      // Käytä pelaajan perustaitoja
+      setEditPosition(player.position);
+      setEditCategory(player.category);
+      setEditMultiplier(player.multiplier);
+    }
     // Määritä rooli: jos player.role on olemassa ja eventManager, käytä sitä, muuten isAdmin, muuten member
     const playerRole = (player as any).role;
     if (playerRole === "eventManager") {
@@ -206,25 +273,222 @@ const UserManagementScreen: React.FC = () => {
     }
 
     try {
-      // Käytä users collectioa players sijasta
+      // Käsittele teamPlayers muutokset kun pelaajan joukkueita muutetaan
+      const originalTeams =
+        selectedPlayer.teamIds || selectedPlayer.teams || [];
+      const removedTeams = originalTeams.filter(
+        (teamId) => !editSelectedTeams.includes(teamId)
+      );
+      const addedTeams = editSelectedTeams.filter(
+        (teamId) => !originalTeams.includes(teamId)
+      );
+
+      console.log("Team changes:", {
+        original: originalTeams,
+        new: editSelectedTeams,
+        removed: removedTeams,
+        added: addedTeams,
+      });
+
+      console.log("Current teams data before update:");
+      teams.forEach((team) => {
+        console.log(`Team ${team.name}:`, team.members);
+      });
+
+      // Poista pelaaja poistetuista joukkueista
+      for (const removedTeamId of removedTeams) {
+        // Poista pelaaja joukkueen members-listasta
+        const teamToUpdate = teams.find((team) => team.id === removedTeamId);
+        if (teamToUpdate && teamToUpdate.members.includes(selectedPlayer.id)) {
+          console.log("Removing player from team members:", removedTeamId);
+          const updatedMembers = teamToUpdate.members.filter(
+            (memberId) => memberId !== selectedPlayer.id
+          );
+          const teamRef = doc(db, "teams", removedTeamId);
+          await updateDoc(teamRef, {
+            members: updatedMembers,
+            updatedAt: new Date(),
+          });
+        }
+      }
+
+      // Lisää pelaaja uusien joukkueiden members-listoihin
+      for (const addedTeamId of addedTeams) {
+        const teamToUpdate = teams.find((team) => team.id === addedTeamId);
+        if (teamToUpdate && !teamToUpdate.members.includes(selectedPlayer.id)) {
+          console.log("Adding player to team members:", addedTeamId);
+          const updatedMembers = [...teamToUpdate.members, selectedPlayer.id];
+          const teamRef = doc(db, "teams", addedTeamId);
+          await updateDoc(teamRef, {
+            members: updatedMembers,
+            updatedAt: new Date(),
+          });
+        }
+      }
+
+      // Päivitä pelaajan perustiedot
       const playerRef = doc(db, "users", selectedPlayer.id);
-      await updateDoc(playerRef, {
+
+      // Jos joukkueita on poistettu, poista myös niiden joukkuekohtaiset taidot
+      const currentTeamSkillsData = { ...selectedPlayer.teamSkills };
+      for (const removedTeamId of removedTeams) {
+        if (currentTeamSkillsData[removedTeamId]) {
+          delete currentTeamSkillsData[removedTeamId];
+          console.log("Removed team skills for removed team:", removedTeamId);
+        }
+      }
+
+      if (selectedTeam) {
+        // Jos joukkue on valittu, tallenna myös joukkuekohtaiset taidot
+        const currentTeamSkills = selectedPlayer.teamSkills?.[selectedTeam];
+
+        // Tarkista onko taidot muuttuneet nykyisistä taidoista (joukkuekohtaisista tai perustaidoista)
+        const currentCategory =
+          currentTeamSkills?.category || selectedPlayer.category;
+        const currentMultiplier =
+          currentTeamSkills?.multiplier || selectedPlayer.multiplier;
+        const currentPosition =
+          currentTeamSkills?.position || selectedPlayer.position;
+
+        const skillsChanged =
+          editCategory !== currentCategory ||
+          editMultiplier !== currentMultiplier ||
+          editPosition !== currentPosition;
+
+        console.log("Skills comparison:", {
+          current: {
+            category: currentCategory,
+            multiplier: currentMultiplier,
+            position: currentPosition,
+          },
+          edited: {
+            category: editCategory,
+            multiplier: editMultiplier,
+            position: editPosition,
+          },
+          skillsChanged,
+        });
+
+        console.log("Debug team skills save:", {
+          selectedTeam,
+          hasCurrentTeamSkills: !!currentTeamSkills,
+          willSaveTeamSkills: skillsChanged,
+        });
+
+        if (skillsChanged) {
+          console.log("💾 Saving team skills to Firestore...");
+
+          // Optimistic update - päivitä local state heti
+          const localKey = `${selectedPlayer.id}-${selectedTeam}`;
+          setLocalTeamSkills((prev) => ({
+            ...prev,
+            [localKey]: {
+              category: editCategory,
+              multiplier: editMultiplier,
+              position: editPosition,
+            },
+          }));
+          console.log("⚡ Applied optimistic update for team skills");
+
+          // Tallenna joukkuekohtaiset taidot suoraan pelaajan dokumenttiin
+          // Käytä teamSkills kenttää jossa avaimena on teamId
+          const currentTeamSkills = selectedPlayer.teamSkills || {};
+          const updatedTeamSkills = {
+            ...currentTeamSkills,
+            [selectedTeam]: {
+              category: editCategory,
+              multiplier: editMultiplier,
+              position: editPosition,
+              updatedAt: new Date(),
+            },
+          };
+
+          console.log("Saving team skills to user document:", {
+            playerId: selectedPlayer.id,
+            teamId: selectedTeam,
+            teamSkills: updatedTeamSkills[selectedTeam],
+          });
+
+          // Päivitä pelaajan dokumentti teamSkills kentällä
+          await updateDoc(playerRef, {
+            teamSkills: updatedTeamSkills,
+          });
+
+          console.log("✅ Team skills saved to user document successfully");
+        } else {
+          console.log("⏭️ No team skills changes detected, skipping save");
+        }
+      }
+
+      // Päivitä pelaajan perustiedot (ilman taitoja jos joukkue valittu)
+      const updateData: any = {
         name: editName.trim(),
         email: editEmail.trim().toLowerCase(),
         phone: editPhone.trim(),
-        position: editPosition,
-        category: editCategory,
-        multiplier: editMultiplier,
         isAdmin: editRole === "admin",
         role: editRole,
         teams: editSelectedTeams,
-        teamIds: editSelectedTeams, // Päivitä molemmat kentät varmuuden vuoksi
+        teamIds: editSelectedTeams,
         updatedAt: new Date(),
+      };
+
+      // Jos joukkueita poistettiin, päivitä teamSkills
+      if (removedTeams.length > 0) {
+        updateData.teamSkills = currentTeamSkillsData;
+      }
+
+      // Päivitä perustaidot vain jos ei ole joukkuetta valittu
+      if (!selectedTeam) {
+        updateData.position = editPosition;
+        updateData.category = editCategory;
+        updateData.multiplier = editMultiplier;
+      }
+
+      await updateDoc(playerRef, updateData);
+
+      // Pakota datan päivitys ja komponenttien uudelleen renderöinti
+      await refreshData();
+
+      // Lisää pidempi viive varmistamaan että real-time listenerit päivittyvät
+      console.log("⏳ Waiting for Firestore real-time updates...");
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      // Pakota myös teamPlayers-datan päivitys
+      console.log(
+        "🔄 Refreshing data again to ensure teamPlayers are updated..."
+      );
+      await refreshData();
+
+      // Lisää vielä lyhyt viive
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      console.log("Teams data after update and refresh:");
+      teams.forEach((team) => {
+        console.log(`Team ${team.name}:`, team.members);
       });
 
-      Alert.alert("Onnistui", "Pelaajan tiedot päivitetty");
+      console.log(
+        `Player ${selectedPlayer.name} teamIds after update:`,
+        editSelectedTeams
+      );
+
+      // Debug: Tarkista onko teamSkills-data päivittynyt
+      const updatedPlayer = allPlayers.find((p) => p.id === selectedPlayer.id);
+      const updatedTeamSkills = updatedPlayer?.teamSkills?.[selectedTeam];
+      const localKey = `${selectedPlayer.id}-${selectedTeam}`;
+      const optimisticSkills = localTeamSkills[localKey];
+
+      console.log("🔍 Updated team skills after save:", updatedTeamSkills);
+      console.log("🔍 Optimistic team skills:", optimisticSkills);
+      console.log("🔍 Current player teamSkills:", updatedPlayer?.teamSkills);
+
+      Alert.alert(
+        "Onnistui",
+        selectedTeam
+          ? "Pelaajan tiedot ja joukkuekohtaiset taidot päivitetty"
+          : "Pelaajan tiedot päivitetty"
+      );
       closePlayerModal();
-      refreshData(); // Päivitä globaali data
     } catch (error) {
       console.error("Error updating player:", error);
       Alert.alert("Virhe", "Pelaajan päivittäminen epäonnistui");
@@ -353,6 +617,19 @@ const UserManagementScreen: React.FC = () => {
                     (team) => team.id === selectedTeam
                   );
 
+                  // Get team-specific skills
+                  const teamSkills = getTeamSkillsWithLocal(
+                    player.id,
+                    selectedTeam
+                  );
+                  const displayCategory =
+                    teamSkills?.category || player.category;
+                  const displayMultiplier =
+                    teamSkills?.multiplier || player.multiplier;
+                  const displayPosition =
+                    teamSkills?.position || player.position;
+                  const hasTeamSkills = Boolean(teamSkills);
+
                   return (
                     <TouchableOpacity
                       key={player.id}
@@ -390,10 +667,10 @@ const UserManagementScreen: React.FC = () => {
                           {player.name}
                           {isGoalkeeper && " 🥅"}
                         </Text>
-                        {/* <Text style={styles.playerDetails}>
-                          {player.position} • Kat. {player.category} •{" "}
-                          {player.multiplier.toFixed(1)}
-                        </Text> */}
+                        <Text style={styles.playerDetails}>
+                          {displayPosition} • Kat. {displayCategory} •{" "}
+                          {displayMultiplier.toFixed(1)}
+                        </Text>
                       </View>
                       <Ionicons name="chevron-forward" size={20} color="#666" />
                     </TouchableOpacity>
@@ -432,7 +709,7 @@ const UserManagementScreen: React.FC = () => {
                   selectedTeam === team.id && styles.selectedOption,
                 ]}
                 onPress={() => {
-                  setSelectedTeam(team.id);
+                  handleTeamChange(team.id);
                   setIsTeamModalVisible(false);
                 }}
               >

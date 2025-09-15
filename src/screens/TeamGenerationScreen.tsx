@@ -52,7 +52,29 @@ const TeamGenerationScreen: React.FC = () => {
   const route = useRoute();
   const { eventId } = (route.params as RouteParams) || {};
   const { user } = useAuth();
-  const { players, events, teams, refreshData } = useApp();
+  const { events, players, teams, refreshData } = useApp();
+
+  // Helper function to get player's team-specific skills
+  const getPlayerTeamSkills = (player: Player, teamId?: string) => {
+    if (!teamId || !player.teamSkills?.[teamId]) {
+      // Return default player skills
+      return {
+        category: player.category,
+        multiplier: player.multiplier,
+        position: player.position,
+        points: Math.round(player.multiplier * 100),
+      };
+    }
+
+    // Return team-specific skills
+    const teamSkills = player.teamSkills[teamId];
+    return {
+      category: teamSkills.category,
+      multiplier: teamSkills.multiplier,
+      position: teamSkills.position,
+      points: Math.round(teamSkills.multiplier * 100),
+    };
+  };
 
   const [selectedEventId, setSelectedEventId] = useState<string>("");
   const [generatedTeams, setGeneratedTeams] = useState<GeneratedTeam[]>([]);
@@ -115,15 +137,25 @@ const TeamGenerationScreen: React.FC = () => {
         const teams = event.generatedTeams.teams.map((team: any) => {
           const teamPlayers = team.playerIds.map((id: string) => {
             const player = players.find((p) => p.id === id);
-            return (
-              player || {
+            if (!player) {
+              return {
                 id,
                 name: "Unknown",
                 points: 0,
                 position: "H",
                 multiplier: 1,
-              }
-            );
+              };
+            }
+
+            // Get team-specific skills for this player
+            const teamSkills = getPlayerTeamSkills(player, event.teamId);
+            return {
+              ...player,
+              category: teamSkills.category,
+              multiplier: teamSkills.multiplier,
+              position: teamSkills.position,
+              points: teamSkills.points,
+            };
           });
 
           return {
@@ -166,9 +198,20 @@ const TeamGenerationScreen: React.FC = () => {
   // Get registered players for selected event
   const registeredPlayers = useMemo(() => {
     if (!selectedEvent || !selectedEvent.registeredPlayers) return [];
-    return players.filter((player) =>
-      selectedEvent.registeredPlayers?.includes(player.id)
-    );
+
+    return players
+      .filter((player) => selectedEvent.registeredPlayers?.includes(player.id))
+      .map((player) => {
+        // Apply team-specific skills for this event's team
+        const teamSkills = getPlayerTeamSkills(player, selectedEvent.teamId);
+        return {
+          ...player,
+          category: teamSkills.category,
+          multiplier: teamSkills.multiplier,
+          position: teamSkills.position,
+          points: teamSkills.points,
+        };
+      });
   }, [selectedEvent, players]);
 
   const fieldPlayerCount = getFieldPlayers(
@@ -233,6 +276,21 @@ const TeamGenerationScreen: React.FC = () => {
         teamAName,
         teamBName
       );
+
+      // Debug: Log players with their team-specific skills
+      console.log(
+        "🎯 Team generation using players with team-specific skills:"
+      );
+      registeredPlayers.forEach((player) => {
+        const hasTeamSkills =
+          selectedEvent?.teamId && player.teamSkills?.[selectedEvent.teamId];
+        console.log(
+          `- ${player.name}: ${player.multiplier.toFixed(1)} (${
+            player.points
+          } pts)${hasTeamSkills ? " ⚡ team-specific" : " 📋 default"}`
+        );
+      });
+
       if (result.teams.length === 0) {
         Alert.alert("Virhe", "Joukkueiden luominen epäonnistui");
         setWarnings(result.warnings);

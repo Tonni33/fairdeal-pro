@@ -95,7 +95,7 @@ export class TeamBalancer {
   }
 
   /**
-   * Distribute field players by category using random balanced approach
+   * Distribute field players by category using improved random balanced approach
    */
   private static distributePlayersByCategory(
     teams: Team[],
@@ -103,9 +103,9 @@ export class TeamBalancer {
     warnings: string[]
   ): void {
     // Separate players by category (1-3)
-    const category1 = fieldPlayers.filter((p) => p.category === 1);
-    const category2 = fieldPlayers.filter((p) => p.category === 2);
-    const category3 = fieldPlayers.filter((p) => p.category === 3);
+    let category1 = fieldPlayers.filter((p) => p.category === 1);
+    let category2 = fieldPlayers.filter((p) => p.category === 2);
+    let category3 = fieldPlayers.filter((p) => p.category === 3);
 
     console.log("Category distribution:", {
       cat1: category1.length,
@@ -114,95 +114,133 @@ export class TeamBalancer {
     });
 
     // Process Category 1 players
-    this.distributeCategoryPlayers(teams, category1, category2, 1, warnings);
+    category2 = this.processCategoryWithPairing(
+      teams,
+      category1,
+      category2,
+      1,
+      warnings
+    );
 
-    // Process Category 2 players
-    this.distributeCategoryPlayers(teams, category2, category3, 2, warnings);
+    // Process Category 2 players (with remaining players)
+    category3 = this.processCategoryWithPairing(
+      teams,
+      category2,
+      category3,
+      2,
+      warnings
+    );
 
     // Process remaining Category 3 players
-    this.distributeCategoryPlayers(teams, category3, [], 3, warnings);
+    this.processCategoryWithPairing(teams, category3, [], 3, warnings);
   }
 
   /**
-   * Distribute players from a specific category with balance logic
+   * Process players from a specific category with improved pairing logic
+   * Returns the updated next category array (with used players removed)
    */
-  private static distributeCategoryPlayers(
+  private static processCategoryWithPairing(
     teams: Team[],
     currentCategoryPlayers: Player[],
     nextCategoryPlayers: Player[],
     categoryNum: number,
     warnings: string[]
-  ): void {
-    if (currentCategoryPlayers.length === 0) return;
+  ): Player[] {
+    if (currentCategoryPlayers.length === 0) return nextCategoryPlayers;
 
-    // Shuffle current category players
-    const shuffledPlayers = [...currentCategoryPlayers];
-    this.shuffleArray(shuffledPlayers);
+    let playersToProcess = [...currentCategoryPlayers];
+    let remainingNextCategory = [...nextCategoryPlayers];
 
-    let playerIndex = 0;
-
-    while (playerIndex < shuffledPlayers.length) {
-      if (playerIndex === shuffledPlayers.length - 1) {
-        // Odd number of players - need to pair with next category
-        const remainingPlayer = shuffledPlayers[playerIndex];
-        const bestNextPlayer =
-          this.getBestPlayerFromCategory(nextCategoryPlayers);
-
-        if (bestNextPlayer) {
-          // Get team averages to decide placement
-          const teamA_avg = this.getTeamAverage(teams[0]);
-          const teamB_avg = this.getTeamAverage(teams[1]);
-
-          // Place both players to balance teams
-          if (teamA_avg <= teamB_avg) {
-            // Team A is better (lower average), give them the worse player
-            this.addPlayerToTeam(teams[0], remainingPlayer);
-            this.addPlayerToTeam(teams[1], bestNextPlayer);
-          } else {
-            // Team B is better, give them the worse player
-            this.addPlayerToTeam(teams[1], remainingPlayer);
-            this.addPlayerToTeam(teams[0], bestNextPlayer);
-          }
-
-          // Remove the used next category player
-          const nextIndex = nextCategoryPlayers.indexOf(bestNextPlayer);
-          if (nextIndex > -1) {
-            nextCategoryPlayers.splice(nextIndex, 1);
-          }
-        } else {
-          // No next category player available, place randomly
-          const randomTeam = Math.random() < 0.5 ? teams[0] : teams[1];
-          this.addPlayerToTeam(randomTeam, remainingPlayer);
-        }
-
-        playerIndex++;
-      } else {
-        // Pair of players - distribute based on balance
-        const player1 = shuffledPlayers[playerIndex];
-        const player2 = shuffledPlayers[playerIndex + 1];
-
-        // Get team averages
-        const teamA_avg = this.getTeamAverage(teams[0]);
-        const teamB_avg = this.getTeamAverage(teams[1]);
-
-        // Determine which player is better (lower multiplier = better)
-        const player1Better = player1.multiplier < player2.multiplier;
-        const betterPlayer = player1Better ? player1 : player2;
-        const worsePlayer = player1Better ? player2 : player1;
-
-        if (teamA_avg <= teamB_avg) {
-          // Team A is better, give them worse player, Team B gets better player
-          this.addPlayerToTeam(teams[0], worsePlayer);
-          this.addPlayerToTeam(teams[1], betterPlayer);
-        } else {
-          // Team B is better, give them worse player, Team A gets better player
-          this.addPlayerToTeam(teams[1], worsePlayer);
-          this.addPlayerToTeam(teams[0], betterPlayer);
-        }
-
-        playerIndex += 2;
+    // If odd number of players, pair with best player from next category
+    if (playersToProcess.length % 2 === 1 && remainingNextCategory.length > 0) {
+      const bestNextPlayer = this.getBestPlayerFromCategory(
+        remainingNextCategory
+      );
+      if (bestNextPlayer) {
+        playersToProcess.push(bestNextPlayer);
+        // Remove the used player from next category
+        remainingNextCategory = remainingNextCategory.filter(
+          (p) => p.id !== bestNextPlayer.id
+        );
+        console.log(
+          `Category ${categoryNum}: Added best Category ${
+            categoryNum + 1
+          } player (${bestNextPlayer.name}) to make even pairs`
+        );
       }
     }
+
+    // Process players in pairs
+    while (playersToProcess.length >= 2) {
+      // Randomly select 2 players from remaining
+      const randomIndices = this.selectTwoRandomIndices(
+        playersToProcess.length
+      );
+      const player1 = playersToProcess[randomIndices[0]];
+      const player2 = playersToProcess[randomIndices[1]];
+
+      // Remove selected players from array (remove in reverse order to maintain indices)
+      playersToProcess.splice(Math.max(randomIndices[0], randomIndices[1]), 1);
+      playersToProcess.splice(Math.min(randomIndices[0], randomIndices[1]), 1);
+
+      // Determine which player is better (lower multiplier = better)
+      const player1Better = player1.multiplier < player2.multiplier;
+      const betterPlayer = player1Better ? player1 : player2;
+      const worsePlayer = player1Better ? player2 : player1;
+
+      // Get team averages to determine which team is weaker
+      const teamA_avg = this.getTeamAverage(teams[0]);
+      const teamB_avg = this.getTeamAverage(teams[1]);
+
+      if (teamA_avg >= teamB_avg) {
+        // Team A is weaker (higher average), give them the better player
+        this.addPlayerToTeam(teams[0], betterPlayer);
+        this.addPlayerToTeam(teams[1], worsePlayer);
+        console.log(
+          `Category ${categoryNum}: Better player (${betterPlayer.name}) → Team A (weaker), Worse player (${worsePlayer.name}) → Team B`
+        );
+      } else {
+        // Team B is weaker, give them the better player
+        this.addPlayerToTeam(teams[1], betterPlayer);
+        this.addPlayerToTeam(teams[0], worsePlayer);
+        console.log(
+          `Category ${categoryNum}: Better player (${betterPlayer.name}) → Team B (weaker), Worse player (${worsePlayer.name}) → Team A`
+        );
+      }
+    }
+
+    // Handle any remaining single player (shouldn't happen with our logic, but just in case)
+    if (playersToProcess.length === 1) {
+      const remainingPlayer = playersToProcess[0];
+      const teamA_avg = this.getTeamAverage(teams[0]);
+      const teamB_avg = this.getTeamAverage(teams[1]);
+
+      // Give remaining player to weaker team
+      const weakerTeam = teamA_avg >= teamB_avg ? teams[0] : teams[1];
+      this.addPlayerToTeam(weakerTeam, remainingPlayer);
+      console.log(
+        `Category ${categoryNum}: Remaining player (${remainingPlayer.name}) → ${weakerTeam.name} (weaker team)`
+      );
+    }
+
+    return remainingNextCategory;
+  }
+
+  /**
+   * Select two random indices from array
+   */
+  private static selectTwoRandomIndices(arrayLength: number): [number, number] {
+    if (arrayLength < 2) throw new Error("Array must have at least 2 elements");
+
+    const first = Math.floor(Math.random() * arrayLength);
+    let second = Math.floor(Math.random() * arrayLength);
+
+    // Ensure second index is different from first
+    while (second === first) {
+      second = Math.floor(Math.random() * arrayLength);
+    }
+
+    return [first, second];
   }
 
   /**
@@ -249,7 +287,8 @@ export class TeamBalancer {
   }
 
   /**
-   * Distribute goalkeepers to the weaker team (higher average)
+   * Distribute goalkeepers so that better goalkeepers go to weaker teams
+   * and ensure balanced distribution (one per team when possible)
    */
   private static distributeGoalkeepersByBalance(
     teams: Team[],
@@ -263,17 +302,45 @@ export class TeamBalancer {
       (a, b) => a.multiplier - b.multiplier
     );
 
-    for (const goalkeeper of sortedGoalkeepers) {
+    for (let i = 0; i < sortedGoalkeepers.length; i++) {
+      const goalkeeper = sortedGoalkeepers[i];
+
       // Calculate team averages
       const teamA_avg = this.getTeamAverage(teams[0]);
       const teamB_avg = this.getTeamAverage(teams[1]);
 
-      // Place goalkeeper on weaker team (higher average)
-      const weakerTeam = teamA_avg >= teamB_avg ? teams[0] : teams[1];
+      // Count current goalkeepers in each team
+      const teamA_goalkeepers = teams[0].goalkeepers.length;
+      const teamB_goalkeepers = teams[1].goalkeepers.length;
 
-      weakerTeam.players.push(goalkeeper);
-      weakerTeam.goalkeepers.push(goalkeeper);
-      weakerTeam.members.push(goalkeeper.id);
+      let targetTeam: Team;
+
+      // First, try to balance goalkeeper count (one per team)
+      if (teamA_goalkeepers < teamB_goalkeepers) {
+        targetTeam = teams[0];
+        console.log(
+          `Goalkeeper ${goalkeeper.name} → Team A (fewer goalkeepers: ${teamA_goalkeepers} vs ${teamB_goalkeepers})`
+        );
+      } else if (teamB_goalkeepers < teamA_goalkeepers) {
+        targetTeam = teams[1];
+        console.log(
+          `Goalkeeper ${goalkeeper.name} → Team B (fewer goalkeepers: ${teamB_goalkeepers} vs ${teamA_goalkeepers})`
+        );
+      } else {
+        // Equal goalkeeper count, place on weaker team (higher average = weaker team)
+        targetTeam = teamA_avg >= teamB_avg ? teams[0] : teams[1];
+        console.log(
+          `Goalkeeper ${goalkeeper.name} (multiplier: ${
+            goalkeeper.multiplier
+          }) → ${targetTeam.name} (weaker team, avg: ${
+            teamA_avg >= teamB_avg ? teamA_avg.toFixed(2) : teamB_avg.toFixed(2)
+          })`
+        );
+      }
+
+      targetTeam.players.push(goalkeeper);
+      targetTeam.goalkeepers.push(goalkeeper);
+      targetTeam.members.push(goalkeeper.id);
     }
 
     if (goalkeepers.length > 2) {

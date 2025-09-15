@@ -35,8 +35,21 @@ const CreatePlayerScreen: React.FC = () => {
   const { user } = useAuth();
   const { teams, refreshData } = useApp();
 
-  // Filtteröi joukkueet joissa nykyinen käyttäjä on mukana (sähköpostilla)
-  const userTeams = useMemo(() => getUserTeams(user, teams), [user, teams]);
+  // Helper function to check if user is master admin
+  const isMasterAdmin = (): boolean => {
+    return Boolean(user && user.isMasterAdmin === true);
+  };
+
+  // Filtteröi joukkueet: Master admin näkee kaikki, muut vain omat
+  const userTeams = useMemo(() => {
+    if (isMasterAdmin()) {
+      // Master admin näkee kaikki joukkueet
+      return teams;
+    } else {
+      // Tavalliset käyttäjät näkevät vain ne joukkueet joissa ovat mukana
+      return getUserTeams(user, teams);
+    }
+  }, [user, teams]);
 
   // Form state
   const [name, setName] = useState("");

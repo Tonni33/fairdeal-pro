@@ -45,19 +45,28 @@ const PlayersScreen: React.FC = () => {
 
   // Filtteröi pelaajat valitun joukkueen mukaan
   const filteredPlayers = useMemo(() => {
-    if (!selectedTeamId) return players;
+    let playersToFilter = players;
 
-    const selectedTeam = teams.find((team) => team.id === selectedTeamId);
-    if (!selectedTeam) return players;
+    if (selectedTeamId) {
+      const selectedTeam = teams.find((team) => team.id === selectedTeamId);
+      if (!selectedTeam) return [];
 
-    // Käytetään sekä teamIds että members-kenttää varmuuden vuoksi
-    const filtered = players.filter((player) => {
-      const inTeamByTeamIds = player.teamIds?.includes(selectedTeamId);
-      const inTeamByMembers = selectedTeam.members.includes(player.id);
-      return inTeamByTeamIds || inTeamByMembers;
+      // Käytetään sekä teamIds että members-kenttää varmuuden vuoksi
+      playersToFilter = players.filter((player) => {
+        const inTeamByTeamIds = player.teamIds?.includes(selectedTeamId);
+        const inTeamByMembers = selectedTeam.members.includes(player.id);
+        return inTeamByTeamIds || inTeamByMembers;
+      });
+    }
+
+    // Lajittele pelaajat aakkosjärjestykseen sukunimen perusteella
+    const sorted = playersToFilter.sort((a, b) => {
+      const aLastName = a.name.split(" ").pop() || a.name;
+      const bLastName = b.name.split(" ").pop() || b.name;
+      return aLastName.localeCompare(bLastName, "fi");
     });
 
-    return filtered;
+    return sorted;
   }, [players, teams, selectedTeamId]);
 
   const handleAdminNavigation = (screen: string) => {
@@ -212,7 +221,21 @@ const PlayersScreen: React.FC = () => {
               {selectedTeamId ? ` joukkueessa` : ` yhteensä`}
             </Text>
           </View>
-          <AdminMenuButton onNavigate={handleAdminNavigation} />
+          <View style={styles.headerButtons}>
+            {__DEV__ && (
+              <TouchableOpacity
+                style={styles.debugRefreshButton}
+                onPress={async () => {
+                  console.log("Manual refresh triggered");
+                  await refreshData();
+                  console.log("Manual refresh completed");
+                }}
+              >
+                <Ionicons name="refresh" size={20} color="#007AFF" />
+              </TouchableOpacity>
+            )}
+            <AdminMenuButton onNavigate={handleAdminNavigation} />
+          </View>
         </View>
       </View>
 
@@ -674,6 +697,16 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontWeight: "500",
+  },
+  headerButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  debugRefreshButton: {
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: "rgba(0, 122, 255, 0.1)",
   },
 });
 

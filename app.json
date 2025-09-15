@@ -4,7 +4,7 @@
     "slug": "fairdeal-pro",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/fairdealLogo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "description": "Team management and balancing app for sports events. Create balanced teams, manage players, and organize sports events with ease.",
@@ -18,13 +18,10 @@
       "soccer"
     ],
     "privacy": "public",
-    "platforms": [
-      "ios",
-      "android"
-    ],
+    "platforms": ["ios", "android"],
     "githubUrl": "https://github.com/yourusername/FairDealPro",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/fairdealLogo.png",
       "resizeMode": "contain",
       "backgroundColor": "#1976d2"
     },
@@ -41,7 +38,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/fairdealLogo.png",
         "backgroundColor": "#1976d2"
       },
       "package": "com.fairdeal.pro",
@@ -61,9 +58,7 @@
     "updates": {
       "fallbackToCacheTimeout": 0
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "extra": {
       "eas": {
         "projectId": "a6757272-927e-48b5-aca1-bba25a20e5b4"
