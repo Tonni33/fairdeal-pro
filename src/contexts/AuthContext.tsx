@@ -22,13 +22,21 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initializing, setInitializing] = useState(true);
 
   useEffect(() => {
+    let isComponentMounted = true;
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       console.log(
         "Auth state changed:",
-        firebaseUser ? "User logged in" : "User logged out"
+        firebaseUser
+          ? `User logged in: ${firebaseUser.email}`
+          : "User logged out"
       );
+
+      // Only update state if component is still mounted
+      if (!isComponentMounted) return;
 
       if (firebaseUser) {
         console.log("Firebase user:", firebaseUser.email, firebaseUser.uid);
@@ -36,6 +44,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         try {
           // Get user data from Firestore
           const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
+
+          if (!isComponentMounted) return; // Check again after async operation
 
           if (userDoc.exists()) {
             console.log("User document found in Firestore");
@@ -67,34 +77,47 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               createdAt: new Date(),
             };
 
-            await setDoc(doc(db, "users", firebaseUser.uid), {
-              ...newUser,
-              createdAt: new Date(),
-            });
+            if (isComponentMounted) {
+              await setDoc(doc(db, "users", firebaseUser.uid), {
+                ...newUser,
+                createdAt: new Date(),
+              });
 
-            setUser(newUser);
+              setUser(newUser);
+            }
           }
         } catch (error) {
           console.error("Error handling auth state change:", error);
           // Set user even if Firestore fails (permissions issue)
-          const basicUser: User = {
-            id: firebaseUser.uid,
-            uid: firebaseUser.uid,
-            email: firebaseUser.email!,
-            displayName: firebaseUser.displayName || "",
-            role: "user",
-            createdAt: new Date(),
-          };
-          setUser(basicUser);
+          if (isComponentMounted) {
+            const basicUser: User = {
+              id: firebaseUser.uid,
+              uid: firebaseUser.uid,
+              email: firebaseUser.email!,
+              displayName: firebaseUser.displayName || "",
+              role: "user",
+              createdAt: new Date(),
+            };
+            setUser(basicUser);
+          }
         }
       } else {
         console.log("No user, setting user to null");
-        setUser(null);
+        if (isComponentMounted) {
+          setUser(null);
+        }
       }
-      setLoading(false);
+
+      if (isComponentMounted) {
+        setLoading(false);
+        setInitializing(false);
+      }
     });
 
-    return unsubscribe;
+    return () => {
+      isComponentMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string): Promise<void> => {

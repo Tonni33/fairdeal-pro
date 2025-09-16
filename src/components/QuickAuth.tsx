@@ -93,12 +93,19 @@ const QuickAuth: React.FC<QuickAuthProps> = ({ onSuccess, onFallback }) => {
 
       if (result.success) {
         console.log("Biometric auth successful!");
-        onSuccess();
+        // Wait a moment for Firebase to fully initialize if needed
+        setTimeout(() => {
+          onSuccess();
+        }, 100);
       } else if (result.error === "user_fallback") {
         console.log("User chose fallback option");
         onFallback();
       } else {
         console.log("Biometric auth failed:", result.error);
+        // Don't show error alert for cancelled authentication
+        if (result.error !== "user_cancel") {
+          Alert.alert("Virhe", "Biometrinen tunnistus epäonnistui");
+        }
       }
     } catch (error) {
       console.error("Biometric auth error:", error);
@@ -139,7 +146,10 @@ const QuickAuth: React.FC<QuickAuthProps> = ({ onSuccess, onFallback }) => {
 
       if (storedHashedPin === enteredHashedPin) {
         console.log("PIN auth successful!");
-        onSuccess();
+        // Wait a moment for any state updates
+        setTimeout(() => {
+          onSuccess();
+        }, 100);
       } else {
         console.log("PIN auth failed - hash mismatch");
         Alert.alert("Virhe", "Väärä PIN-koodi");

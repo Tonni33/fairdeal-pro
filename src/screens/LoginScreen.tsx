@@ -30,6 +30,21 @@ const LoginScreen: React.FC = () => {
 
   useEffect(() => {
     checkQuickAuthAvailability();
+
+    // Listen to Firebase auth state changes
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      console.log(
+        "LoginScreen - Firebase auth state changed:",
+        user ? user.email : "no user"
+      );
+      if (user) {
+        console.log(
+          "User is signed in, LoginScreen should navigate away soon..."
+        );
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   // Re-check quick auth when component becomes visible again
@@ -52,14 +67,18 @@ const LoginScreen: React.FC = () => {
 
   const checkQuickAuthAvailability = async () => {
     try {
+      console.log("=== Checking Quick Auth Availability ===");
       const biometricEnabled = await AsyncStorage.getItem("biometric_enabled");
       const pinEnabled = await AsyncStorage.getItem("pin_enabled");
       const wasLoggedIn = await AsyncStorage.getItem("was_logged_in");
+      const quickAuthEmail = await AsyncStorage.getItem("quick_auth_email");
 
       console.log("Quick auth check:", {
         biometricEnabled,
         pinEnabled,
         wasLoggedIn,
+        quickAuthEmail,
+        currentUser: auth.currentUser ? auth.currentUser.email : "none",
       });
 
       // Quick auth is available if:
@@ -70,6 +89,14 @@ const LoginScreen: React.FC = () => {
         (biometricEnabled === "true" || pinEnabled === "true");
 
       console.log("Quick auth available:", isAvailable);
+
+      // If user is already signed in with Firebase, we might not need quick auth UI
+      if (auth.currentUser && isAvailable) {
+        console.log(
+          "User already signed in with Firebase and quick auth available"
+        );
+      }
+
       setQuickAuthAvailable(isAvailable);
     } catch (error) {
       console.error("Error checking quick auth availability:", error);
@@ -123,68 +150,65 @@ const LoginScreen: React.FC = () => {
 
   const handleQuickAuthSuccess = async () => {
     // Biometric/PIN auth was successful
-    console.log("Quick auth success, checking Firebase auth state...");
+    console.log("=== Quick Auth Success ===");
+    console.log("Checking current Firebase auth state...");
+
+    // Wait a bit for Firebase to initialize properly
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     // Check if user is still signed in with Firebase
     const currentUser = auth.currentUser;
+    console.log(
+      "Current Firebase user:",
+      currentUser ? currentUser.email : "none"
+    );
+
     if (currentUser) {
-      console.log("User is already signed in, navigating...");
+      console.log(
+        "✅ User is already signed in with Firebase, authentication complete!"
+      );
       // User is already signed in, Firebase persistence worked
-      // The AuthContext will handle navigation
+      // The AuthContext will handle navigation automatically
+      return;
     } else {
       console.log(
-        "User not signed in, attempting to restore Firebase session..."
+        "⚠️ User not signed in with Firebase, but quick auth passed..."
       );
 
-      try {
-        // Get stored email for re-authentication
-        const storedEmail = await AsyncStorage.getItem("quick_auth_email");
+      // Check if we have stored credentials that we can use for silent re-auth
+      const storedEmail = await AsyncStorage.getItem("quick_auth_email");
 
-        if (storedEmail) {
-          console.log("Found stored email, asking user to confirm password...");
-          // Show a simplified password prompt for security
-          Alert.prompt(
-            "Vahvista salasana",
-            `Syötä salasanasi tilille ${storedEmail}`,
-            [
-              {
-                text: "Peruuta",
-                style: "cancel",
-                onPress: () => setShowEmailLogin(true),
+      if (storedEmail) {
+        console.log("Found stored email:", storedEmail);
+        console.log(
+          "📱 Firebase session expired but biometric/PIN auth succeeded"
+        );
+        console.log(
+          "This is normal behavior - Firebase sessions have limited lifetime for security"
+        );
+
+        // Don't automatically re-authenticate - this would require storing password
+        // Instead, inform user and provide easy re-login
+        Alert.alert(
+          "Istunto vanhentunut",
+          "Biometrinen tunnistus onnistui! Firebase-istunto on vanhentunut turvallisuussyistä. Syötä salasanasi kerran vahvistaaksesi kirjautumisen.",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                setShowEmailLogin(true);
+                setEmail(storedEmail); // Pre-fill email
               },
-              {
-                text: "Kirjaudu",
-                onPress: async (password) => {
-                  if (password) {
-                    try {
-                      console.log("Attempting to sign in with stored email...");
-                      await signIn(storedEmail, password);
-                      console.log("Quick auth re-login successful!");
-                    } catch (error: any) {
-                      console.error("Quick auth re-login failed:", error);
-                      Alert.alert(
-                        "Virhe",
-                        "Salasana virheellinen. Kirjaudu sisään uudelleen."
-                      );
-                      setShowEmailLogin(true);
-                    }
-                  }
-                },
-              },
-            ],
-            "secure-text"
-          );
-        } else {
-          console.log("No stored email found, showing regular login");
-          Alert.alert(
-            "Kirjautuminen vaaditaan",
-            "Vahvista kirjautumisesi sähköpostilla ja salasanalla.",
-            [{ text: "OK", onPress: () => setShowEmailLogin(true) }]
-          );
-        }
-      } catch (error) {
-        console.error("Error during quick auth success:", error);
-        setShowEmailLogin(true);
+            },
+          ]
+        );
+      } else {
+        console.log("No stored email found");
+        Alert.alert(
+          "Kirjautuminen vaaditaan",
+          "Biometrinen tunnistus onnistui, mutta täydellinen kirjautuminen vaatii sähköpostin ja salasanan.",
+          [{ text: "OK", onPress: () => setShowEmailLogin(true) }]
+        );
       }
     }
   };
