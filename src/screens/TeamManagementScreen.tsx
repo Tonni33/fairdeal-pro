@@ -283,6 +283,15 @@ const TeamManagementScreen: React.FC = () => {
       </View>
       <View style={styles.teamActions}>
         <TouchableOpacity
+          style={styles.editButton}
+          onPress={(e) => {
+            e.stopPropagation();
+            handleEditTeam(team);
+          }}
+        >
+          <Ionicons name="pencil" size={18} color="#1976d2" />
+        </TouchableOpacity>
+        <TouchableOpacity
           style={styles.deleteButton}
           onPress={(e) => {
             e.stopPropagation();

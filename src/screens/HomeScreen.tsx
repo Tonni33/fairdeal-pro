@@ -589,7 +589,21 @@ const HomeScreen: React.FC = () => {
               </View>
             </View>
 
-            <Text style={styles.eventTitle}>{nextEvent.title}</Text>
+            {(() => {
+              const eventTeam = teams.find(
+                (team) => team.id === nextEvent.teamId
+              );
+              return (
+                <Text
+                  style={[
+                    styles.eventTitle,
+                    { color: eventTeam?.color || "#1976d2" },
+                  ]}
+                >
+                  {eventTeam?.name || nextEvent.title}
+                </Text>
+              );
+            })()}
 
             <View style={styles.eventDetails}>
               <View style={styles.eventDetailRow}>

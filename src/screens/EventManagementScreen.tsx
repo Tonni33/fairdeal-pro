@@ -627,9 +627,21 @@ const EventManagementScreen: React.FC = () => {
               >
                 <View style={styles.eventCardContent}>
                   <View style={styles.eventCardHeader}>
-                    <Text style={styles.eventName}>
-                      {event.name || event.title}
-                    </Text>
+                    {(() => {
+                      const eventTeam = teams.find(
+                        (team) => team.id === event.teamId
+                      );
+                      return (
+                        <Text
+                          style={[
+                            styles.eventName,
+                            { color: eventTeam?.color || "#1976d2" },
+                          ]}
+                        >
+                          {eventTeam?.name || event.name || event.title}
+                        </Text>
+                      );
+                    })()}
                     <Ionicons
                       name="chevron-forward"
                       size={20}
@@ -639,18 +651,16 @@ const EventManagementScreen: React.FC = () => {
                     />
                   </View>
                   <View style={styles.eventDetails}>
-                    {event.teamId && (
-                      <View style={styles.eventDetailRow}>
-                        <Ionicons
-                          name="people-outline"
-                          size={16}
-                          color={getTeamColor(event.teamId)}
-                        />
-                        <Text style={styles.eventDetailText}>
-                          {getTeamName(event.teamId)}
-                        </Text>
-                      </View>
-                    )}
+                    <View style={styles.eventDetailRow}>
+                      <Ionicons
+                        name="information-circle-outline"
+                        size={16}
+                        color="#666"
+                      />
+                      <Text style={styles.eventDetailText}>
+                        {event.name || event.title}
+                      </Text>
+                    </View>
                     <View style={styles.eventDetailRow}>
                       <Ionicons
                         name="calendar-outline"
@@ -722,9 +732,23 @@ const EventManagementScreen: React.FC = () => {
             ]}
           >
             <View style={styles.eventHeaderTop}>
-              <Text style={styles.title}>
-                {selectedEvent.name || selectedEvent.title}
-              </Text>
+              {(() => {
+                const eventTeam = teams.find(
+                  (team) => team.id === selectedEvent.teamId
+                );
+                return (
+                  <View style={styles.titleContainer}>
+                    <Text
+                      style={[
+                        styles.title,
+                        { color: eventTeam?.color || "#1976d2" },
+                      ]}
+                    >
+                      {eventTeam?.name || "Tuntematon joukkue"}
+                    </Text>
+                  </View>
+                );
+              })()}
               <View style={styles.actionButtons}>
                 <TouchableOpacity
                   style={[
@@ -735,31 +759,17 @@ const EventManagementScreen: React.FC = () => {
                   ]}
                   onPress={() => setIsEditModalVisible(true)}
                 >
-                  <Ionicons name="pencil" size={16} color="#fff" />
-                  <Text style={styles.editButtonText}>Muokkaa</Text>
+                  <Ionicons name="pencil" size={18} color="#fff" />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.deleteButton}
                   onPress={handleDeleteEvent}
                 >
-                  <Ionicons name="trash-outline" size={16} color="#fff" />
-                  <Text style={styles.deleteButtonText}>Poista</Text>
+                  <Ionicons name="trash-outline" size={18} color="#fff" />
                 </TouchableOpacity>
               </View>
             </View>
             <View style={styles.eventInfoRow}>
-              {selectedEvent.teamId && (
-                <View style={styles.eventInfoItem}>
-                  <Ionicons
-                    name="people"
-                    size={16}
-                    color={getTeamColor(selectedEvent.teamId)}
-                  />
-                  <Text style={styles.eventInfoText}>
-                    {getTeamName(selectedEvent.teamId)}
-                  </Text>
-                </View>
-              )}
               <View style={styles.eventInfoItem}>
                 <Ionicons name="calendar" size={16} color="#1976d2" />
                 <Text style={styles.eventInfoText}>
@@ -1318,7 +1328,7 @@ const styles = StyleSheet.create({
   eventInfoRow: {
     flexDirection: "column",
     gap: 8,
-    marginTop: 12,
+    marginTop: 8,
   },
   eventInfoItem: {
     flexDirection: "row",
@@ -1503,16 +1513,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 8,
   },
   editButton: {
     backgroundColor: "#1976d2",
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    flexDirection: "row",
+    borderRadius: 8,
+    width: 36,
+    height: 36,
+    justifyContent: "center",
     alignItems: "center",
-    gap: 4,
   },
   editButtonText: {
     color: "#fff",
@@ -1520,18 +1529,17 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   actionButtons: {
-    flexDirection: "column",
+    flexDirection: "row",
     gap: 8,
-    alignItems: "flex-end",
+    alignItems: "center",
   },
   deleteButton: {
     backgroundColor: "#f44336",
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    flexDirection: "row",
+    borderRadius: 8,
+    width: 36,
+    height: 36,
+    justifyContent: "center",
     alignItems: "center",
-    gap: 4,
   },
   deleteButtonText: {
     color: "#fff",
@@ -1686,6 +1694,9 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  titleContainer: {
+    flex: 1,
   },
 });
 

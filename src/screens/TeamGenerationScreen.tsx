@@ -442,11 +442,34 @@ const TeamGenerationScreen: React.FC = () => {
                 style={[
                   styles.eventCard,
                   selectedEventId === event.id && styles.selectedEventCard,
+                  (() => {
+                    const eventTeam = teams.find(
+                      (team) => team.id === event.teamId
+                    );
+                    return {
+                      borderLeftWidth: 4,
+                      borderLeftColor: eventTeam?.color || "#1976d2",
+                    };
+                  })(),
                 ]}
                 onPress={() => setSelectedEventId(event.id)}
               >
                 <View style={styles.eventHeader}>
-                  <Text style={styles.eventTitle}>{event.title}</Text>
+                  {(() => {
+                    const eventTeam = teams.find(
+                      (team) => team.id === event.teamId
+                    );
+                    return (
+                      <Text
+                        style={[
+                          styles.eventTitle,
+                          { color: eventTeam?.color || "#1976d2" },
+                        ]}
+                      >
+                        {eventTeam?.name || event.title}
+                      </Text>
+                    );
+                  })()}
                   {selectedEventId === event.id && (
                     <Ionicons
                       name="checkmark-circle"
@@ -458,19 +481,21 @@ const TeamGenerationScreen: React.FC = () => {
                 <Text style={styles.eventDate}>
                   {formatDate(event.date)} klo {formatTime(event.date)}
                 </Text>
-                <Text style={styles.eventPlayers}>
-                  {getFieldPlayers(event.registeredPlayers || []).length}{" "}
-                  kenttäpelaajaa
-                  {event.maxGoalkeepers && event.maxGoalkeepers > 0 && (
-                    <Text style={{ color: "#ff9800" }}>
-                      {" • "}
-                      {
-                        getGoalkeepers(event.registeredPlayers || []).length
-                      }{" "}
-                      maalivahtia
-                    </Text>
-                  )}
-                </Text>
+                <View style={styles.eventPlayersContainer}>
+                  <Text style={styles.eventPlayers}>
+                    {getFieldPlayers(event.registeredPlayers || []).length}{" "}
+                    pelaajaa
+                    {event.maxGoalkeepers && event.maxGoalkeepers > 0 && (
+                      <Text style={{ color: "#ff9800" }}>
+                        {" • "}
+                        {
+                          getGoalkeepers(event.registeredPlayers || []).length
+                        }{" "}
+                        MV
+                      </Text>
+                    )}
+                  </Text>
+                </View>
               </TouchableOpacity>
             ))
           )}
@@ -483,12 +508,12 @@ const TeamGenerationScreen: React.FC = () => {
             <View style={styles.playersContainer}>
               <View style={styles.playersHeader}>
                 <Text style={styles.playersCount}>
-                  {fieldPlayerCount} kenttäpelaajaa
+                  {fieldPlayerCount} pelaajaa
                   {selectedEvent.maxGoalkeepers &&
                     selectedEvent.maxGoalkeepers > 0 && (
                       <Text style={{ color: "#ff9800" }}>
                         {" • "}
-                        {goalkeeperCount} maalivahtia
+                        {goalkeeperCount} MV
                       </Text>
                     )}
                 </Text>
@@ -790,6 +815,9 @@ const styles = StyleSheet.create({
   eventPlayers: {
     fontSize: 14,
     color: "#666",
+  },
+  eventPlayersContainer: {
+    marginTop: 8,
   },
   playersContainer: {
     backgroundColor: "white",

@@ -344,6 +344,14 @@ const EventsScreen: React.FC = () => {
           setEventModalVisible(true);
         }}
       >
+        {/* Joukkueen nimi ylimpänä värikoodilla */}
+        <View style={styles.eventTeamHeader}>
+          <Text style={[styles.eventTeamName, { color: teamColor }]}>
+            {team?.name || "Tuntematon joukkue"}
+          </Text>
+        </View>
+
+        {/* Päivämäärä ja aika toisella rivillä */}
         <View style={styles.eventTimeAndTitle}>
           <Ionicons
             name="calendar-outline"
@@ -354,7 +362,6 @@ const EventsScreen: React.FC = () => {
           <Text style={styles.eventTime}>
             {formatDate(eventDate)} klo {formatTime(eventDate)}
           </Text>
-          <Text style={styles.eventName}>{item.title}</Text>
         </View>
 
         <View style={styles.eventInfoRow}>
@@ -378,11 +385,11 @@ const EventsScreen: React.FC = () => {
               style={{ marginRight: 4 }}
             />
             <Text style={styles.participantCount}>
-              {fieldPlayerCount} / {item.maxPlayers || "∞"} pelaajaa
+              {fieldPlayerCount} / {item.maxPlayers || "∞"}
               {item.maxGoalkeepers && item.maxGoalkeepers > 0 && (
                 <Text style={{ color: "#ff9800", fontWeight: "500" }}>
                   {" • "}
-                  {goalkeeperCount} / {item.maxGoalkeepers} MV
+                  {goalkeeperCount}/{item.maxGoalkeepers} MV
                 </Text>
               )}
             </Text>
@@ -863,6 +870,14 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#333",
     flex: 1,
+  },
+  eventTeamHeader: {
+    marginBottom: 8,
+  },
+  eventTeamName: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 4,
   },
   statusBadge: {
     paddingHorizontal: 8,
