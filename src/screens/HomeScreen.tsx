@@ -661,16 +661,19 @@ const HomeScreen: React.FC = () => {
                         styles.capacityFill,
                         {
                           width: `${Math.min(
-                            ((nextEvent.registeredPlayers?.length || 0) /
+                            (getFieldPlayers(nextEvent.registeredPlayers || [])
+                              .length /
                               nextEvent.maxPlayers) *
                               100,
                             100
                           )}%`,
                           backgroundColor:
-                            (nextEvent.registeredPlayers?.length || 0) >=
-                            nextEvent.maxPlayers
+                            getFieldPlayers(nextEvent.registeredPlayers || [])
+                              .length >= nextEvent.maxPlayers
                               ? "#f44336"
-                              : (nextEvent.registeredPlayers?.length || 0) /
+                              : getFieldPlayers(
+                                  nextEvent.registeredPlayers || []
+                                ).length /
                                   nextEvent.maxPlayers >
                                 0.8
                               ? "#ff9800"
@@ -766,7 +769,25 @@ const HomeScreen: React.FC = () => {
                           Osallistujat
                         </Text>
                         <Text style={styles.participantsBannerSubtitle}>
-                          {nextEvent.registeredPlayers.length} pelaajaa
+                          {
+                            getFieldPlayers(nextEvent.registeredPlayers || [])
+                              .length
+                          }{" "}
+                          pelaajaa
+                          {nextEvent.maxGoalkeepers &&
+                            nextEvent.maxGoalkeepers > 0 && (
+                              <Text
+                                style={{ color: "#ff9800", fontWeight: "500" }}
+                              >
+                                {" • "}
+                                {
+                                  getGoalkeepers(
+                                    nextEvent.registeredPlayers || []
+                                  ).length
+                                }{" "}
+                                MV
+                              </Text>
+                            )}
                           {nextEvent.reservePlayers &&
                             nextEvent.reservePlayers.length > 0 && (
                               <Text style={styles.reserveCount}>

@@ -210,13 +210,24 @@ const TeamsScreen: React.FC = () => {
     );
 
     // Only show events that have generated teams
-    filteredEvents = filteredEvents.filter(
-      (event) =>
+    filteredEvents = filteredEvents.filter((event) => {
+      const hasGeneratedTeams =
         event.generatedTeams &&
         event.generatedTeams.teams &&
         Array.isArray(event.generatedTeams.teams) &&
-        event.generatedTeams.teams.length > 0
-    );
+        event.generatedTeams.teams.length > 0;
+
+      if (!hasGeneratedTeams) {
+        console.log(`⚠️ Event ${event.title} (${event.id}) filtered out:`, {
+          hasGeneratedTeams: !!event.generatedTeams,
+          hasTeamsProperty: event.generatedTeams?.teams !== undefined,
+          isTeamsArray: Array.isArray(event.generatedTeams?.teams),
+          teamsLength: event.generatedTeams?.teams?.length || 0,
+        });
+      }
+
+      return hasGeneratedTeams;
+    });
 
     console.log("Filtered events with teams:", filteredEvents.length);
 
@@ -228,8 +239,15 @@ const TeamsScreen: React.FC = () => {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await refreshData();
-    setRefreshing(false);
+    console.log("🔄 TeamsScreen: Starting refresh...");
+    try {
+      await refreshData();
+      console.log("✅ TeamsScreen: Refresh completed");
+    } catch (error) {
+      console.error("❌ TeamsScreen: Refresh failed:", error);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const getSelectedTeamName = () => {

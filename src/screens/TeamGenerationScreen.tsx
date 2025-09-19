@@ -83,6 +83,7 @@ const TeamGenerationScreen: React.FC = () => {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [existingTeams, setExistingTeams] = useState<GeneratedTeam[]>([]);
   const [hasExistingShuffle, setHasExistingShuffle] = useState(false);
+  const [isTeamsSaved, setIsTeamsSaved] = useState(false);
 
   // Helper functions for player counting by position (same as EventsScreen)
   const getFieldPlayers = (playerIds: string[]) => {
@@ -122,6 +123,12 @@ const TeamGenerationScreen: React.FC = () => {
       setSelectedEventId(eventId);
     }
   }, [eventId, availableEvents, selectedEventId]);
+
+  // Reset save state when changing events
+  useEffect(() => {
+    setIsTeamsSaved(false);
+    setGeneratedTeams([]);
+  }, [selectedEventId]);
 
   // Load existing generated teams when event is selected
   useEffect(() => {
@@ -297,6 +304,12 @@ const TeamGenerationScreen: React.FC = () => {
         return;
       }
 
+      console.log("🎯 TeamBalancer result:", {
+        balanceScore: result.balanceScore,
+        teamsCount: result.teams.length,
+        warnings: result.warnings,
+      });
+
       // Convert to our GeneratedTeam format
       const newGeneratedTeams: GeneratedTeam[] = result.teams.map(
         (team, index) => ({
@@ -313,12 +326,55 @@ const TeamGenerationScreen: React.FC = () => {
       setGeneratedTeams(newGeneratedTeams);
       setBalanceScore(result.balanceScore);
       setWarnings(result.warnings);
+      setIsTeamsSaved(false); // Reset save state when new teams are generated
+
+      console.log("🔄 Updated state:", {
+        newBalanceScore: result.balanceScore,
+        teamsGenerated: newGeneratedTeams.length,
+      });
 
       // Clear existing teams when generating new ones
       setExistingTeams([]);
       setHasExistingShuffle(false);
 
-      Alert.alert("Onnistui!", "Joukkueet luotu onnistuneesti");
+      // Ask if user wants to save the teams to the event
+      Alert.alert(
+        "Joukkueet luotu!",
+        "Joukkueet on arvottu onnistuneesti. Haluatko tallentaa joukkueet tapahtumaan?",
+        [
+          {
+            text: "Älä tallenna",
+            style: "cancel",
+            onPress: () => {
+              // Just show the teams without saving
+              console.log("User chose not to save the teams");
+            },
+          },
+          {
+            text: "Tallenna",
+            onPress: async () => {
+              try {
+                console.log("🔔 Dialog: About to save teams");
+                console.log("🔔 Dialog: newGeneratedTeams:", newGeneratedTeams);
+                console.log("🔔 Dialog: generatedTeams state:", generatedTeams);
+                console.log(
+                  "🔔 Dialog: result.balanceScore:",
+                  result.balanceScore
+                );
+
+                // Use the newly generated teams directly instead of state
+                await handleSaveTeamsWithData(
+                  newGeneratedTeams,
+                  result.balanceScore
+                );
+              } catch (error) {
+                console.error("Error saving teams after generation:", error);
+                Alert.alert("Virhe", "Joukkueiden tallentaminen epäonnistui");
+              }
+            },
+          },
+        ]
+      );
     } catch (error) {
       console.error("Error generating teams:", error);
       Alert.alert("Virhe", "Joukkueiden luominen epäonnistui");
@@ -328,35 +384,88 @@ const TeamGenerationScreen: React.FC = () => {
   };
 
   const handleSaveTeams = async () => {
-    if (!selectedEvent || generatedTeams.length === 0) return;
+    console.log("🔍 HandleSaveTeams called");
+    console.log("📊 selectedEvent:", selectedEvent);
+    console.log("👥 generatedTeams:", generatedTeams);
+    console.log("� Current balanceScore state:", balanceScore);
+    console.log("�🆔 selectedEventId:", selectedEventId);
+
+    if (!selectedEvent || !generatedTeams || generatedTeams.length === 0) {
+      console.log("❌ Early return - missing selectedEvent or teams");
+      console.log("selectedEvent exists:", !!selectedEvent);
+      console.log("generatedTeams count:", generatedTeams?.length || 0);
+      Alert.alert("Virhe", "Ei joukkueita tallennettavaksi");
+      return;
+    }
+
+    return handleSaveTeamsWithData(generatedTeams, balanceScore);
+  };
+
+  const handleSaveTeamsWithData = async (
+    teamsToSave: GeneratedTeam[],
+    scoreToSave: number = 0
+  ) => {
+    console.log("🔍 HandleSaveTeamsWithData called");
+    console.log("📊 selectedEvent:", selectedEvent);
+    console.log("👥 teamsToSave:", teamsToSave);
+    console.log("🎯 scoreToSave:", scoreToSave);
+    console.log("🆔 selectedEventId:", selectedEventId);
+
+    if (!selectedEvent || !teamsToSave || teamsToSave.length === 0) {
+      console.log("❌ Early return - missing selectedEvent or teams");
+      console.log("selectedEvent exists:", !!selectedEvent);
+      console.log("teamsToSave count:", teamsToSave?.length || 0);
+      Alert.alert("Virhe", "Ei joukkueita tallennettavaksi");
+      return;
+    }
 
     try {
+      console.log("💾 Starting save process...");
       // Save to Firebase events/generatedTeams
       const teamsData = {
         eventId: selectedEvent.id,
-        teams: generatedTeams.map((team) => ({
+        teams: teamsToSave.map((team: GeneratedTeam) => ({
           name: team.name,
-          playerIds: team.players.map((p) => p.id),
+          playerIds: team.players.map((p: Player) => p.id),
           totalPoints: team.totalPoints,
           color: team.color,
         })),
         generatedAt: new Date(),
         generatedBy: user?.email || "",
-        balanceScore: balanceScore,
+        balanceScore: scoreToSave, // Use the passed score instead of state
       };
+
+      console.log("📋 Teams data to save:", teamsData);
 
       // Update the event document
       const eventRef = doc(db, "events", selectedEvent.id);
+      console.log("🎯 Updating event document:", selectedEvent.id);
       await updateDoc(eventRef, {
         generatedTeams: teamsData,
         lastTeamGeneration: new Date(),
       });
 
+      console.log("✅ Successfully saved to Firebase!");
+
+      // Mark teams as saved
+      setIsTeamsSaved(true);
+
+      // Refresh data to see the changes immediately
       await refreshData();
-      Alert.alert("Tallennettu!", "Joukkueet tallennettu tapahtumaan");
-      navigation.goBack();
+      console.log("🔄 Data refreshed!");
+
+      Alert.alert("Tallennettu!", "Joukkueet tallennettu tapahtumaan", [
+        {
+          text: "OK",
+          onPress: () => {
+            // Navigate to Teams screen to see the saved teams
+            navigation.navigate("Teams" as never);
+          },
+        },
+      ]);
     } catch (error) {
-      console.error("Error saving teams:", error);
+      console.error("❌ Error saving teams:", error);
+      console.log("Error details:", JSON.stringify(error, null, 2));
       Alert.alert("Virhe", "Joukkueiden tallennus epäonnistui");
     }
   };
@@ -381,6 +490,7 @@ const TeamGenerationScreen: React.FC = () => {
 
               setExistingTeams([]);
               setHasExistingShuffle(false);
+              setIsTeamsSaved(false); // Reset save state when clearing teams
               await refreshData();
 
               Alert.alert("Poistettu", "Arvonnan tulos on poistettu");
@@ -715,11 +825,23 @@ const TeamGenerationScreen: React.FC = () => {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.saveButton}
+                style={[styles.saveButton, isTeamsSaved && styles.savedButton]}
                 onPress={handleSaveTeams}
+                disabled={isTeamsSaved}
               >
-                <Ionicons name="checkmark" size={20} color="white" />
-                <Text style={styles.saveButtonText}>Tallenna joukkueet</Text>
+                <Ionicons
+                  name={isTeamsSaved ? "checkmark-circle" : "checkmark"}
+                  size={20}
+                  color={isTeamsSaved ? "#666" : "white"}
+                />
+                <Text
+                  style={[
+                    styles.saveButtonText,
+                    isTeamsSaved && styles.savedButtonText,
+                  ]}
+                >
+                  {isTeamsSaved ? "Tallennettu" : "Tallenna joukkueet"}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -874,6 +996,9 @@ const styles = StyleSheet.create({
   disabledButton: {
     opacity: 0.6,
   },
+  disabledButtonText: {
+    color: "#999",
+  },
   buttonText: {
     color: "white",
     fontSize: 16,
@@ -993,6 +1118,12 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 14,
     fontWeight: "600",
+  },
+  savedButton: {
+    backgroundColor: "#e0e0e0",
+  },
+  savedButtonText: {
+    color: "#666",
   },
   clearButton: {
     flexDirection: "row",

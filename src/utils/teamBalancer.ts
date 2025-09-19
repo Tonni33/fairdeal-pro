@@ -364,21 +364,57 @@ export class TeamBalancer {
    * Calculate how balanced the teams are (0-100 score)
    */
   private static calculateBalanceScore(teams: Team[]): number {
-    if (teams.length === 0) return 0;
+    console.log("🔍 calculateBalanceScore called with teams:", teams.length);
 
-    const teamPoints = teams.map((team) => team.totalPoints);
+    if (teams.length === 0) {
+      console.log("❌ No teams provided");
+      return 0;
+    }
+
+    const teamPoints = teams.map((team) => {
+      const points = team.totalPoints || 0;
+      console.log(`Team ${team.name}: ${points} points`);
+      return points;
+    });
+
+    console.log("📊 All team points:", teamPoints);
+
+    if (teamPoints.length < 2) {
+      console.log("⚠️ Less than 2 teams, returning 100");
+      return 100;
+    }
+
+    // Calculate the difference between highest and lowest scoring teams
+    const maxPoints = Math.max(...teamPoints);
+    const minPoints = Math.min(...teamPoints);
+    const pointDifference = maxPoints - minPoints;
     const averagePoints =
       teamPoints.reduce((sum, points) => sum + points, 0) / teams.length;
 
-    // Calculate variance
-    const variance =
-      teamPoints.reduce((sum, points) => {
-        return sum + Math.pow(points - averagePoints, 2);
-      }, 0) / teams.length;
+    console.log("🎯 Balance Score Calculation:", {
+      teamPoints,
+      maxPoints,
+      minPoints,
+      pointDifference,
+      averagePoints,
+    });
 
-    // Convert variance to balance score (lower variance = higher score)
-    const maxVariance = Math.pow(averagePoints, 2); // Theoretical maximum variance
-    const balanceScore = Math.max(0, 100 - (variance / maxVariance) * 100);
+    // If there's no difference, perfect balance
+    if (pointDifference === 0) {
+      console.log("✅ Perfect balance - no difference");
+      return 100;
+    }
+
+    // Calculate percentage difference relative to average
+    const percentageDifference = (pointDifference / averagePoints) * 100;
+
+    console.log("📊 Percentage difference:", percentageDifference);
+
+    // Balance score: 100 means perfect balance, decreases as difference increases
+    // 5% difference = 95 points, 10% difference = 90 points, etc.
+    const balanceScore = Math.max(0, 100 - percentageDifference);
+
+    console.log("🎯 Final balance score:", Math.round(balanceScore));
 
     return Math.round(balanceScore);
   }
