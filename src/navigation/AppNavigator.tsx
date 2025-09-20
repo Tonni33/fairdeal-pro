@@ -24,6 +24,7 @@ import TeamGenerationScreen from "../screens/TeamGenerationScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 import MigrationScreen from "../screens/MigrationScreen";
 import TeamManagementScreen from "../screens/TeamManagementScreen";
+import AdminMenuScreen from "../screens/AdminMenuScreen";
 
 const Stack = createStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<BottomTabParamList>();
@@ -188,6 +189,15 @@ const AppNavigator = () => {
               options={{
                 headerShown: true,
                 title: "Tietokannan migraatio",
+                headerBackTitle: "Takaisin",
+              }}
+            />
+            <Stack.Screen
+              name="AdminMenu"
+              component={AdminMenuScreen}
+              options={{
+                headerShown: true,
+                title: "Admin-valikko",
                 headerBackTitle: "Takaisin",
               }}
             />

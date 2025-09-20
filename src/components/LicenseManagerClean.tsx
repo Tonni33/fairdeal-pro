@@ -54,11 +54,6 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
   const [teamAdmins, setTeamAdmins] = useState<User[]>([]);
   const [loadingAdmins, setLoadingAdmins] = useState(false);
 
-  // Add admin functionality
-  const [showAddAdmin, setShowAddAdmin] = useState(false);
-  const [newAdminEmail, setNewAdminEmail] = useState("");
-  const [addingAdmin, setAddingAdmin] = useState(false);
-
   // Create license states
   const [licenseType, setLicenseType] = useState<
     "trial" | "monthly" | "yearly"
@@ -68,58 +63,28 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
   // Activate license states
   const [licenseCode, setLicenseCode] = useState("");
 
-  // Tarkista onko käyttäjä joukkueen admin adminIds arrayn perusteella
+  // Tarkista onko käyttäjä joukkueen admin
   const isTeamAdmin = (team?: Team): boolean => {
     if (!team) return false;
 
-    console.log(
-      "🔍 isTeamAdmin: Checking admin status for team:",
-      team.name,
-      "teamId:",
-      team.id
-    );
-    console.log(
-      "🔍 isTeamAdmin: currentUserId:",
-      currentUserId,
-      "currentUserEmail:",
-      currentUserEmail
-    );
-    console.log("🔍 isTeamAdmin: team.adminIds:", team.adminIds);
-
-    // Ensisijaisesti tarkista adminIds arraysta
+    // Tarkista uudesta adminIds arraysta
     if (team.adminIds && Array.isArray(team.adminIds)) {
-      const isInAdminIds = team.adminIds.includes(currentUserId || "");
-      console.log("🔍 isTeamAdmin: Is in adminIds array:", isInAdminIds);
-      if (isInAdminIds) return true;
+      return team.adminIds.some(
+        (adminId) =>
+          (typeof currentUserId === "string" && adminId === currentUserId) ||
+          (typeof currentUserEmail === "string" && adminId === currentUserEmail)
+      );
     }
 
-    // Fallback: tarkista haetusta teamAdmins listasta
-    if (team.members && currentUserId) {
-      const isTeamMember = team.members.includes(currentUserId);
-      console.log("🔍 isTeamAdmin: Is team member:", isTeamMember);
-
-      if (isTeamMember) {
-        // Käyttäjä on joukkueen jäsen, tarkista admin rooli teamAdmins listasta
-        const isAdminInList = teamAdmins.some(
-          (admin) =>
-            admin.id === currentUserId || admin.email === currentUserEmail
-        );
-        console.log("🔍 isTeamAdmin: Is admin in fetched list:", isAdminInList);
-        if (isAdminInList) return true;
-      }
-    }
-
-    // Legacy fallback: tarkista vanhasta adminId kentästä
+    // Legacy support: tarkista vanhasta adminId kentästä
     if (team.adminId) {
-      const isLegacyAdmin =
+      return (
         (typeof currentUserId === "string" && team.adminId === currentUserId) ||
         (typeof currentUserEmail === "string" &&
-          team.adminId === currentUserEmail);
-      console.log("🔍 isTeamAdmin: Is legacy admin:", isLegacyAdmin);
-      if (isLegacyAdmin) return true;
+          team.adminId === currentUserEmail)
+      );
     }
 
-    console.log("🔍 isTeamAdmin: No admin access found for team:", team.id);
     return false;
   };
 
@@ -154,114 +119,39 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
     try {
       const admins: User[] = [];
 
-      console.log(
-        "🔍 fetchTeamAdmins: Starting adminIds search for team:",
-        team.name,
-        "teamId:",
-        team.id
-      );
-      console.log("🔍 fetchTeamAdmins: team.adminIds:", team.adminIds);
-
-      // Ensisijaisesti hae adminit adminIds arrayn perusteella
-      if (
-        team.adminIds &&
-        Array.isArray(team.adminIds) &&
-        team.adminIds.length > 0
-      ) {
+      // Hae adminit uudesta adminIds arraysta
+      if (team.adminIds && Array.isArray(team.adminIds)) {
         console.log(
-          "🔍 LicenseManager: Fetching admins from adminIds:",
+          "🔍 LicenseManager: Fetching admins with IDs:",
           team.adminIds
         );
 
         for (const adminId of team.adminIds) {
-          console.log("🔍 fetchTeamAdmins: Fetching admin with ID:", adminId);
           const userDoc = await getDoc(doc(db, "users", adminId));
           if (userDoc.exists()) {
             const userData = { id: userDoc.id, ...userDoc.data() } as User;
-            console.log(
-              "✅ LicenseManager: Admin found from adminIds:",
-              userData.email
-            );
+            console.log("✅ LicenseManager: Admin found:", userData);
             admins.push(userData);
           } else {
             console.log("❌ LicenseManager: No admin found with ID:", adminId);
           }
         }
-        console.log(
-          "🔍 fetchTeamAdmins: Found",
-          admins.length,
-          "admins from adminIds array"
-        );
-      } else {
-        console.log(
-          "⚠️ fetchTeamAdmins: No adminIds found, checking team members with admin roles"
-        );
-
-        // Fallback: hae kaikki joukkueen jäsenet ja tarkista heidän roolinsa
-        if (team.members && Array.isArray(team.members)) {
-          console.log(
-            "🔍 LicenseManager: Fetching team members count:",
-            team.members.length
-          );
-
-          for (const memberId of team.members) {
-            console.log(
-              "🔍 fetchTeamAdmins: Fetching member with ID:",
-              memberId
-            );
-            const userDoc = await getDoc(doc(db, "users", memberId));
-            if (userDoc.exists()) {
-              const userData = { id: userDoc.id, ...userDoc.data() } as User;
-              console.log(
-                "🔍 LicenseManager: Member found:",
-                userData.email,
-                "role:",
-                (userData as any).role,
-                "isAdmin:",
-                (userData as any).isAdmin
-              );
-
-              // Tarkista onko admin roolissa
-              const globalRole = (userData as any).role;
-              const isLegacyAdmin = (userData as any).isAdmin;
-
-              if (globalRole === "admin" || isLegacyAdmin) {
-                console.log(
-                  "✅ LicenseManager: Admin found from role:",
-                  userData.email
-                );
-                admins.push(userData);
-              }
-            } else {
-              console.log(
-                "❌ LicenseManager: No member found with ID:",
-                memberId
-              );
-            }
-          }
-          console.log(
-            "🔍 fetchTeamAdmins: Found",
-            admins.length,
-            "admins from team members with admin roles"
-          );
-        }
       }
 
-      // Viimeinen fallback: legacy adminId kenttä
+      // Legacy support: jos ei löydy adminIds arraysta, yritä vanhaa adminId kenttää
       if (admins.length === 0 && team.adminId) {
         console.log(
-          "🔍 LicenseManager: Final fallback to legacy adminId:",
+          "🔍 LicenseManager: Fallback to legacy adminId:",
           team.adminId
         );
         const userDoc = await getDoc(doc(db, "users", team.adminId));
         if (userDoc.exists()) {
           const userData = { id: userDoc.id, ...userDoc.data() } as User;
-          console.log("✅ LicenseManager: Final legacy admin found:", userData);
+          console.log("✅ LicenseManager: Legacy admin found:", userData);
           admins.push(userData);
         }
       }
 
-      console.log("🔍 fetchTeamAdmins: Total admins found:", admins.length);
       return admins;
     } catch (error) {
       console.error("❌ LicenseManager: Error fetching team admins:", error);
@@ -300,42 +190,34 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
       if (isMasterAdmin) {
         loadTeamNames();
       }
-    }
-  }, [visible, isMasterAdmin]);
 
-  // Erillinen useEffect admin-tietojen hakemiseen joukkueen vaihtuessa
-  useEffect(() => {
-    // Nollaa admin-tiedot heti kun joukkue vaihtuu
-    setTeamAdmins([]);
-    setLoadingAdmins(false);
-    setShowAddAdmin(false); // Sulje admin-lisäyslomake
-    setNewAdminEmail(""); // Tyhjennä admin email kenttä
-
-    // Fetch team admin information if team is provided
-    if (team && visible) {
-      console.log(
-        "🔍 LicenseManager: Team changed, fetching admins for:",
-        team.name,
-        "adminIds:",
-        team.adminIds,
-        "legacy adminId:",
-        team.adminId
-      );
-      console.log(
-        "🔍 LicenseManager: Full team object:",
-        JSON.stringify(team, null, 2)
-      );
-      setLoadingAdmins(true);
-      fetchTeamAdmins(team).then((adminInfos) => {
-        console.log("👤 LicenseManager: Admin infos received:", adminInfos);
-        console.log("👤 LicenseManager: Admin count:", adminInfos.length);
-        setTeamAdmins(adminInfos);
-        setLoadingAdmins(false);
-      });
-    } else if (!team) {
-      console.log("⚠️ LicenseManager: No team provided, clearing admin data");
+      // Fetch team admin information if team is provided
+      if (team && (team.adminIds || team.adminId)) {
+        console.log(
+          "🔍 LicenseManager: Fetching admins for team:",
+          team.name,
+          "adminIds:",
+          team.adminIds,
+          "legacy adminId:",
+          team.adminId
+        );
+        setLoadingAdmins(true);
+        fetchTeamAdmins(team).then((adminInfos) => {
+          console.log("👤 LicenseManager: Admin infos received:", adminInfos);
+          setTeamAdmins(adminInfos);
+          setLoadingAdmins(false);
+        });
+      } else {
+        console.log("⚠️ LicenseManager: No team or admin info", {
+          hasTeam: !!team,
+          teamName: team?.name,
+          adminIds: team?.adminIds,
+          adminId: team?.adminId,
+        });
+        setTeamAdmins([]);
+      }
     }
-  }, [team, visible]);
+  }, [visible, isMasterAdmin, team]);
 
   const loadLicenses = async () => {
     try {
@@ -641,105 +523,6 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
     );
   };
 
-  const addAdminToTeam = async (team: Team, adminEmail: string) => {
-    if (!adminEmail.trim()) {
-      Alert.alert("Virhe", "Syötä admin-käyttäjän sähköpostiosoite");
-      return;
-    }
-
-    setAddingAdmin(true);
-    try {
-      // Find user by email
-      const usersRef = collection(db, "users");
-      const q = query(
-        usersRef,
-        where("email", "==", adminEmail.trim().toLowerCase())
-      );
-      const userSnapshot = await getDocs(q);
-
-      if (userSnapshot.empty) {
-        Alert.alert(
-          "Virhe",
-          "Käyttäjää ei löytynyt sähköpostiosoitteella: " + adminEmail
-        );
-        setAddingAdmin(false);
-        return;
-      }
-
-      const newAdminDoc = userSnapshot.docs[0];
-      const newAdminId = newAdminDoc.id;
-      const newAdminData = newAdminDoc.data();
-
-      console.log("🔍 Found user to add as admin:", newAdminData);
-
-      // Tarkista onko käyttäjä jo joukkueen jäsen
-      let currentMembers = team.members || [];
-      if (!currentMembers.includes(newAdminId)) {
-        // Lisää käyttäjä joukkueen jäseneksi
-        currentMembers.push(newAdminId);
-      }
-
-      // Tarkista onko käyttäjä jo adminIds listassa
-      let currentAdminIds = team.adminIds || [];
-      if (currentAdminIds.includes(newAdminId)) {
-        Alert.alert("Huomio", "Käyttäjä on jo tämän joukkueen admin");
-        setAddingAdmin(false);
-        return;
-      }
-
-      // Lisää käyttäjä adminIds listaan
-      currentAdminIds.push(newAdminId);
-
-      // Päivitä joukkueen tiedot
-      const teamRef = doc(db, "teams", team.id);
-      await updateDoc(teamRef, {
-        members: currentMembers,
-        adminIds: currentAdminIds,
-        updatedAt: new Date(),
-      });
-
-      console.log("✅ Added user to team adminIds:", newAdminId);
-
-      // Päivitä käyttäjän rooli adminiksi
-      const userRef = doc(db, "users", newAdminId);
-      await updateDoc(userRef, {
-        isAdmin: true,
-        role: "admin",
-        updatedAt: new Date(),
-      });
-
-      console.log("✅ Updated user role to admin");
-
-      Alert.alert(
-        "Onnistui",
-        `${
-          newAdminData.displayName || newAdminData.name || newAdminData.email
-        } lisätty joukkueen ${team.name} adminiksi`,
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              setShowAddAdmin(false);
-              setNewAdminEmail("");
-              // Refresh admin list
-              if (team) {
-                setLoadingAdmins(true);
-                fetchTeamAdmins(team).then((adminInfos) => {
-                  setTeamAdmins(adminInfos);
-                  setLoadingAdmins(false);
-                });
-              }
-            },
-          },
-        ]
-      );
-    } catch (error) {
-      console.error("Error adding admin:", error);
-      Alert.alert("Virhe", "Admin-käyttäjän lisääminen epäonnistui");
-    }
-    setAddingAdmin(false);
-  };
-
   const getLicenseTypeText = (type: string): string => {
     switch (type) {
       case "trial":
@@ -1043,22 +826,11 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
                         "🎯 LicenseManager: Rendering admin section (active license), teamAdmins:",
                         teamAdmins,
                         "loadingAdmins:",
-                        loadingAdmins,
-                        "team adminIds:",
-                        team?.adminIds
+                        loadingAdmins
                       );
                       return null;
                     })()}
-                    {loadingAdmins ? (
-                      <View style={styles.adminInfo}>
-                        <View style={styles.adminHeader}>
-                          <ActivityIndicator size="small" color="#1976d2" />
-                          <Text style={styles.adminTitle}>
-                            Ladataan admin-tietoja...
-                          </Text>
-                        </View>
-                      </View>
-                    ) : teamAdmins && teamAdmins.length > 0 ? (
+                    {teamAdmins && teamAdmins.length > 0 ? (
                       <View style={styles.adminInfo}>
                         <View style={styles.adminHeader}>
                           <Ionicons name="people" size={16} color="#666" />
@@ -1066,14 +838,6 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
                             Ylläpitäjä{teamAdmins.length > 1 ? "t" : ""} (
                             {teamAdmins.length})
                           </Text>
-                          {isTeamAdmin(team) && (
-                            <TouchableOpacity
-                              style={styles.addAdminButton}
-                              onPress={() => setShowAddAdmin(!showAddAdmin)}
-                            >
-                              <Ionicons name="add" size={16} color="#1976d2" />
-                            </TouchableOpacity>
-                          )}
                         </View>
                         {teamAdmins.map((admin, index) => (
                           <View key={admin.id} style={styles.adminItem}>
@@ -1083,51 +847,13 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
                             <Text style={styles.adminEmail}>{admin.email}</Text>
                           </View>
                         ))}
-
-                        {/* Add Admin Form */}
-                        {showAddAdmin && isTeamAdmin(team) && (
-                          <View style={styles.addAdminForm}>
-                            <Text style={styles.addAdminLabel}>
-                              Lisää uusi admin:
-                            </Text>
-                            <View style={styles.addAdminInputContainer}>
-                              <TextInput
-                                style={styles.addAdminInput}
-                                value={newAdminEmail}
-                                onChangeText={setNewAdminEmail}
-                                placeholder="admin@example.com"
-                                keyboardType="email-address"
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                              />
-                              <TouchableOpacity
-                                style={styles.addAdminSubmitButton}
-                                onPress={() =>
-                                  addAdminToTeam(team, newAdminEmail)
-                                }
-                                disabled={addingAdmin}
-                              >
-                                {addingAdmin ? (
-                                  <ActivityIndicator
-                                    size="small"
-                                    color="#fff"
-                                  />
-                                ) : (
-                                  <>
-                                    <Ionicons
-                                      name="add"
-                                      size={16}
-                                      color="#fff"
-                                    />
-                                    <Text style={styles.addAdminSubmitText}>
-                                      Lisää
-                                    </Text>
-                                  </>
-                                )}
-                              </TouchableOpacity>
-                            </View>
-                          </View>
-                        )}
+                      </View>
+                    ) : loadingAdmins ? (
+                      <View style={styles.adminInfo}>
+                        <ActivityIndicator size="small" color="#1976d2" />
+                        <Text style={styles.adminTitle}>
+                          Ladataan admin-tietoja...
+                        </Text>
                       </View>
                     ) : (
                       <View style={styles.adminInfo}>
@@ -1283,22 +1009,11 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
                         "🎯 LicenseManager: Rendering admin section (no license), teamAdmins:",
                         teamAdmins,
                         "loadingAdmins:",
-                        loadingAdmins,
-                        "team adminIds:",
-                        team?.adminIds
+                        loadingAdmins
                       );
                       return null;
                     })()}
-                    {loadingAdmins ? (
-                      <View style={styles.adminInfo}>
-                        <View style={styles.adminHeader}>
-                          <ActivityIndicator size="small" color="#1976d2" />
-                          <Text style={styles.adminTitle}>
-                            Ladataan admin-tietoja...
-                          </Text>
-                        </View>
-                      </View>
-                    ) : teamAdmins && teamAdmins.length > 0 ? (
+                    {teamAdmins && teamAdmins.length > 0 ? (
                       <View style={styles.adminInfo}>
                         <View style={styles.adminHeader}>
                           <Ionicons name="people" size={16} color="#666" />
@@ -1306,14 +1021,6 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
                             Ylläpitäjä{teamAdmins.length > 1 ? "t" : ""} (
                             {teamAdmins.length})
                           </Text>
-                          {isTeamAdmin(team) && (
-                            <TouchableOpacity
-                              style={styles.addAdminButton}
-                              onPress={() => setShowAddAdmin(!showAddAdmin)}
-                            >
-                              <Ionicons name="add" size={16} color="#1976d2" />
-                            </TouchableOpacity>
-                          )}
                         </View>
                         {teamAdmins.map((admin, index) => (
                           <View key={admin.id} style={styles.adminItem}>
@@ -1323,51 +1030,13 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
                             <Text style={styles.adminEmail}>{admin.email}</Text>
                           </View>
                         ))}
-
-                        {/* Add Admin Form */}
-                        {showAddAdmin && isTeamAdmin(team) && (
-                          <View style={styles.addAdminForm}>
-                            <Text style={styles.addAdminLabel}>
-                              Lisää uusi admin:
-                            </Text>
-                            <View style={styles.addAdminInputContainer}>
-                              <TextInput
-                                style={styles.addAdminInput}
-                                value={newAdminEmail}
-                                onChangeText={setNewAdminEmail}
-                                placeholder="admin@example.com"
-                                keyboardType="email-address"
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                              />
-                              <TouchableOpacity
-                                style={styles.addAdminSubmitButton}
-                                onPress={() =>
-                                  addAdminToTeam(team, newAdminEmail)
-                                }
-                                disabled={addingAdmin}
-                              >
-                                {addingAdmin ? (
-                                  <ActivityIndicator
-                                    size="small"
-                                    color="#fff"
-                                  />
-                                ) : (
-                                  <>
-                                    <Ionicons
-                                      name="add"
-                                      size={16}
-                                      color="#fff"
-                                    />
-                                    <Text style={styles.addAdminSubmitText}>
-                                      Lisää
-                                    </Text>
-                                  </>
-                                )}
-                              </TouchableOpacity>
-                            </View>
-                          </View>
-                        )}
+                      </View>
+                    ) : loadingAdmins ? (
+                      <View style={styles.adminInfo}>
+                        <ActivityIndicator size="small" color="#1976d2" />
+                        <Text style={styles.adminTitle}>
+                          Ladataan admin-tietoja...
+                        </Text>
                       </View>
                     ) : (
                       <View style={styles.adminInfo}>
@@ -2032,54 +1701,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#666",
     marginTop: 2,
-  },
-  // Add admin styles
-  addAdminButton: {
-    marginLeft: "auto",
-    padding: 4,
-    borderRadius: 4,
-    backgroundColor: "#e3f2fd",
-  },
-  addAdminForm: {
-    marginTop: 12,
-    padding: 8,
-    backgroundColor: "#f0f8ff",
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#e3f2fd",
-  },
-  addAdminLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#1976d2",
-    marginBottom: 8,
-  },
-  addAdminInputContainer: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  addAdminInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 4,
-    padding: 8,
-    fontSize: 12,
-    backgroundColor: "#fff",
-  },
-  addAdminSubmitButton: {
-    backgroundColor: "#1976d2",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 4,
-    gap: 4,
-  },
-  addAdminSubmitText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "600",
   },
 });
 

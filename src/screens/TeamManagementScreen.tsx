@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import { Team, License } from "../types";
+import { Team, License, User } from "../types";
 import LicenseManager from "../components/LicenseManager";
 import { useAuth } from "../contexts/AuthContext";
 import {
@@ -27,6 +27,7 @@ import {
   query,
   orderBy,
   where,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "../services/firebase";
 
@@ -45,7 +46,6 @@ const TeamManagementScreen: React.FC = () => {
   const [licenseManagerVisible, setLicenseManagerVisible] = useState(false);
   const [selectedTeamForLicense, setSelectedTeamForLicense] =
     useState<Team | null>(null);
-
   const predefinedColors = [
     "#1976d2", // Blue
     "#388e3c", // Green
@@ -89,6 +89,18 @@ const TeamManagementScreen: React.FC = () => {
       result += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     return result;
+  };
+
+  const handleTeamPress = async (team: Team) => {
+    console.log("🏈 TeamManagement: Opening license manager for team:", {
+      id: team.id,
+      name: team.name,
+      adminIds: team.adminIds,
+      adminId: team.adminId, // Legacy support
+      members: team.members,
+    });
+    setSelectedTeamForLicense(team);
+    setLicenseManagerVisible(true);
   };
 
   const handleCreateTeam = () => {
@@ -135,7 +147,8 @@ const TeamManagementScreen: React.FC = () => {
           name: teamName.trim(),
           color: teamColor,
           code: teamCode.trim().toUpperCase(),
-          adminId: user?.uid || "",
+          adminIds: [user?.uid || ""], // New array format
+          adminId: user?.uid || "", // Legacy support
           members: [user?.uid || ""],
           createdAt: new Date(),
         });
@@ -240,10 +253,7 @@ const TeamManagementScreen: React.FC = () => {
     <TouchableOpacity
       style={styles.teamItem}
       activeOpacity={0.85}
-      onPress={() => {
-        setSelectedTeamForLicense(team);
-        setLicenseManagerVisible(true);
-      }}
+      onPress={() => handleTeamPress(team)}
     >
       <View style={styles.teamInfo}>
         <View

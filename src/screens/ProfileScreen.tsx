@@ -86,7 +86,9 @@ const ProfileScreen: React.FC = () => {
   };
 
   const handleAdminNavigation = (screen: string) => {
-    if (screen === "CreateEvent") {
+    if (screen === "AdminMenu") {
+      navigation.navigate("AdminMenu");
+    } else if (screen === "CreateEvent") {
       navigation.navigate("CreateEvent");
     } else if (screen === "CreatePlayer") {
       navigation.navigate("CreatePlayer");

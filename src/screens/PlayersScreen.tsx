@@ -70,7 +70,9 @@ const PlayersScreen: React.FC = () => {
   }, [players, teams, selectedTeamId]);
 
   const handleAdminNavigation = (screen: string) => {
-    if (screen === "CreateEvent") {
+    if (screen === "AdminMenu") {
+      navigation.navigate("AdminMenu");
+    } else if (screen === "CreateEvent") {
       navigation.navigate("CreateEvent");
     } else if (screen === "CreatePlayer") {
       navigation.navigate("CreatePlayer");

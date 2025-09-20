@@ -23,7 +23,12 @@ export interface Player {
   multiplier: number; // Skill multiplier for balancing
   position: string; // Player position
   image?: string; // Profile image URL
-  isAdmin: boolean;
+  isAdmin: boolean; // Legacy admin field for compatibility
+  role?: "member" | "admin" | "eventManager"; // Global role (legacy)
+  // Team-specific roles - NEW!
+  teamRoles?: {
+    [teamId: string]: "member" | "admin" | "eventManager";
+  };
   licenceCode?: string;
   playerId: string;
   teamIds: string[]; // Array of team IDs this player belongs to
@@ -55,8 +60,10 @@ export interface Team {
   description?: string;
   color?: string;
   code?: string; // Team join code
-  adminId: string; // User ID of team admin
+  adminIds: string[]; // Array of admin user IDs
   members: string[]; // Array of player/user IDs
+  // Backward compatibility
+  adminId?: string; // Legacy field for compatibility
   // License fields
   licenceCode?: string; // License code for app usage
   licenseStatus?: "active" | "expired" | "inactive"; // Current license status
@@ -226,6 +233,7 @@ export type RootStackParamList = {
   Settings: undefined;
   Migration: undefined;
   TeamManagement: undefined;
+  AdminMenu: undefined;
 };
 
 export type BottomTabParamList = {

@@ -124,10 +124,8 @@ const UserManagementScreen: React.FC = () => {
   const [editPosition, setEditPosition] = useState("H");
   const [editCategory, setEditCategory] = useState(1);
   const [editMultiplier, setEditMultiplier] = useState(1.0);
-  // Rooli: "member" | "admin" | "eventManager"
-  const [editRole, setEditRole] = useState<"member" | "admin" | "eventManager">(
-    "member"
-  );
+  // Rooli: "member" | "admin"
+  const [editRole, setEditRole] = useState<"member" | "admin">("member");
   const [editSelectedTeams, setEditSelectedTeams] = useState<string[]>([]);
 
   // Yksi dropdown-tila: mikä valinta auki ('position' | 'category' | 'multiplier' | 'role' | 'teams' | null)
@@ -218,15 +216,27 @@ const UserManagementScreen: React.FC = () => {
       setEditCategory(player.category);
       setEditMultiplier(player.multiplier);
     }
-    // Määritä rooli: jos player.role on olemassa ja eventManager, käytä sitä, muuten isAdmin, muuten member
-    const playerRole = (player as any).role;
-    if (playerRole === "eventManager") {
-      setEditRole("eventManager");
-    } else if (player.isAdmin) {
-      setEditRole("admin");
+
+    // Määritä rooli: jos joukkue on valittu, käytä joukkuekohtaista roolia
+    if (selectedTeam) {
+      // Tarkista onko käyttäjä valitun joukkueen adminIds listassa
+      const selectedTeamData = teams.find((team) => team.id === selectedTeam);
+      if (selectedTeamData?.adminIds?.includes(player.id)) {
+        setEditRole("admin");
+      } else {
+        // Kun joukkue on valittu, käytä vain "member" ellei ole kyseisen joukkueen adminIds-listassa
+        setEditRole("member");
+      }
     } else {
-      setEditRole("member");
+      // Jos ei ole joukkuetta valittu, käytä globaalia roolia
+      const playerRole = (player as any).role;
+      if (player.isAdmin) {
+        setEditRole("admin");
+      } else {
+        setEditRole("member");
+      }
     }
+
     setEditSelectedTeams(player.teamIds || player.teams || []);
     setIsPlayerModalVisible(true);
   };
@@ -420,17 +430,21 @@ const UserManagementScreen: React.FC = () => {
         }
       }
 
-      // Päivitä pelaajan perustiedot (ilman taitoja jos joukkue valittu)
+      // Päivitä pelaajan perustiedot
       const updateData: any = {
         name: editName.trim(),
         email: editEmail.trim().toLowerCase(),
         phone: editPhone.trim(),
-        isAdmin: editRole === "admin",
-        role: editRole,
         teams: editSelectedTeams,
         teamIds: editSelectedTeams,
         updatedAt: new Date(),
       };
+
+      // Päivitä globaalit roolitiedot vain jos ei ole joukkuetta valittu
+      if (!selectedTeam) {
+        updateData.isAdmin = editRole === "admin";
+        updateData.role = editRole;
+      }
 
       // Jos joukkueita poistettiin, päivitä teamSkills
       if (removedTeams.length > 0) {
@@ -445,6 +459,58 @@ const UserManagementScreen: React.FC = () => {
       }
 
       await updateDoc(playerRef, updateData);
+
+      // Jos rooli on admin ja joukkue on valittu, lisää käyttäjä joukkueen adminIds listaan
+      if (editRole === "admin" && selectedTeam) {
+        console.log("Adding user to team adminIds:", {
+          userId: selectedPlayer.id,
+          teamId: selectedTeam,
+          role: editRole,
+        });
+
+        const selectedTeamData = teams.find((team) => team.id === selectedTeam);
+        if (selectedTeamData) {
+          const currentAdminIds = selectedTeamData.adminIds || [];
+          if (!currentAdminIds.includes(selectedPlayer.id)) {
+            const updatedAdminIds = [...currentAdminIds, selectedPlayer.id];
+
+            const teamRef = doc(db, "teams", selectedTeam);
+            await updateDoc(teamRef, {
+              adminIds: updatedAdminIds,
+              updatedAt: new Date(),
+            });
+
+            console.log("✅ User added to team adminIds successfully");
+          }
+        }
+      }
+
+      // Jos rooli ei ole admin mutta käyttäjä on adminIds listassa, poista se
+      if (editRole !== "admin" && selectedTeam) {
+        console.log("Removing user from team adminIds if present:", {
+          userId: selectedPlayer.id,
+          teamId: selectedTeam,
+          role: editRole,
+        });
+
+        const selectedTeamData = teams.find((team) => team.id === selectedTeam);
+        if (
+          selectedTeamData &&
+          selectedTeamData.adminIds?.includes(selectedPlayer.id)
+        ) {
+          const updatedAdminIds = selectedTeamData.adminIds.filter(
+            (id) => id !== selectedPlayer.id
+          );
+
+          const teamRef = doc(db, "teams", selectedTeam);
+          await updateDoc(teamRef, {
+            adminIds: updatedAdminIds,
+            updatedAt: new Date(),
+          });
+
+          console.log("✅ User removed from team adminIds successfully");
+        }
+      }
 
       // Pakota datan päivitys ja komponenttien uudelleen renderöinti
       await refreshData();
@@ -630,6 +696,27 @@ const UserManagementScreen: React.FC = () => {
                     teamSkills?.position || player.position;
                   const hasTeamSkills = Boolean(teamSkills);
 
+                  // Määritä rooli joukkuekohtaisesti
+                  let playerRole = "Jäsen";
+                  if (selectedTeam) {
+                    const selectedTeamData = teams.find(
+                      (team) => team.id === selectedTeam
+                    );
+                    if (selectedTeamData?.adminIds?.includes(player.id)) {
+                      playerRole = "Admin";
+                    } else {
+                      // Kun joukkue on valittu, näytä vain "Jäsen" ellei ole kyseisen joukkueen adminIds-listassa
+                      // Globaalit roolit eivät näy joukkuenäkymässä
+                      playerRole = "Jäsen";
+                    }
+                  } else {
+                    // Jos ei ole joukkuetta valittu, näytä globaali rooli
+                    const globalRole = (player as any).role;
+                    if (player.isAdmin) {
+                      playerRole = "Admin";
+                    }
+                  }
+
                   return (
                     <TouchableOpacity
                       key={player.id}
@@ -670,6 +757,16 @@ const UserManagementScreen: React.FC = () => {
                         <Text style={styles.playerDetails}>
                           {displayPosition} • Kat. {displayCategory} •{" "}
                           {displayMultiplier.toFixed(1)}
+                          {playerRole !== "Jäsen" && (
+                            <Text
+                              style={[
+                                styles.roleIndicator,
+                                playerRole === "Admin" && styles.adminRole,
+                              ]}
+                            >
+                              {" • " + playerRole}
+                            </Text>
+                          )}
                         </Text>
                       </View>
                       <Ionicons name="chevron-forward" size={20} color="#666" />
@@ -987,11 +1084,7 @@ const UserManagementScreen: React.FC = () => {
                   }
                 >
                   <Text style={styles.selectorText}>
-                    {editRole === "admin"
-                      ? "Admin"
-                      : editRole === "eventManager"
-                      ? "Tapahtumahallinta"
-                      : "Jäsen"}
+                    {editRole === "admin" ? "Admin" : "Jäsen"}
                   </Text>
                   <Ionicons name="chevron-down" size={20} color="#666" />
                 </TouchableOpacity>
@@ -1018,18 +1111,6 @@ const UserManagementScreen: React.FC = () => {
                     >
                       <Text style={styles.optionText}>Admin</Text>
                       {editRole === "admin" && (
-                        <Ionicons name="checkmark" size={20} color="#007AFF" />
-                      )}
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.dropdownOption}
-                      onPress={() => {
-                        setEditRole("eventManager");
-                        setEditDropdown(null);
-                      }}
-                    >
-                      <Text style={styles.optionText}>Tapahtumahallinta</Text>
-                      {editRole === "eventManager" && (
                         <Ionicons name="checkmark" size={20} color="#007AFF" />
                       )}
                     </TouchableOpacity>
@@ -1340,6 +1421,12 @@ const styles = StyleSheet.create({
   },
   modalScrollView: {
     maxHeight: 300,
+  },
+  roleIndicator: {
+    fontWeight: "600",
+  },
+  adminRole: {
+    color: "#d32f2f",
   },
 });
 

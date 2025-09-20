@@ -196,6 +196,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
               description: data.description || "",
               color: data.color || "#000000",
               adminId: data.adminId,
+              adminIds: data.adminIds || (data.adminId ? [data.adminId] : []), // Support multiple admins with legacy fallback
               members: data.members || [],
               licenceCode: data.licenceCode || "",
               createdAt: data.createdAt?.toDate
