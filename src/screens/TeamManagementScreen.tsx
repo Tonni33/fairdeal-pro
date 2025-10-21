@@ -9,11 +9,12 @@ import {
   TextInput,
   Modal,
   ActivityIndicator,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import { Team, License, User } from "../types";
+import { Team, License, User, TeamCreationRequest } from "../types";
 import LicenseManager from "../components/LicenseManager";
 import { useAuth } from "../contexts/AuthContext";
 import {
@@ -28,6 +29,7 @@ import {
   orderBy,
   where,
   getDoc,
+  setDoc,
 } from "firebase/firestore";
 import { db } from "../services/firebase";
 
@@ -46,6 +48,18 @@ const TeamManagementScreen: React.FC = () => {
   const [licenseManagerVisible, setLicenseManagerVisible] = useState(false);
   const [selectedTeamForLicense, setSelectedTeamForLicense] =
     useState<Team | null>(null);
+
+  // Team request states
+  const [teamRequests, setTeamRequests] = useState<TeamCreationRequest[]>([]);
+  const [requestModalVisible, setRequestModalVisible] = useState(false);
+  const [selectedRequest, setSelectedRequest] =
+    useState<TeamCreationRequest | null>(null);
+  const [rejectionReason, setRejectionReason] = useState<string>("");
+  const [rejectModalVisible, setRejectModalVisible] = useState<boolean>(false);
+
+  // Get current user
+  const { user: currentUser } = useAuth();
+
   const predefinedColors = [
     "#1976d2", // Blue
     "#388e3c", // Green
@@ -67,6 +81,26 @@ const TeamManagementScreen: React.FC = () => {
     return Boolean(user && user.isMasterAdmin === true);
   };
 
+  const isUserTeamAdmin = (teamId: string): boolean => {
+    if (isMasterAdmin()) return true; // Master admin has access to everything
+    if (!currentUser?.uid) return false;
+
+    // Check if user is admin via team's adminIds array
+    const team = teams.find((t) => t.id === teamId);
+    const isAdmin =
+      team?.adminIds?.includes(currentUser.uid) ||
+      team?.adminId === currentUser.uid;
+
+    // Debug logging
+    console.log("🔍 Admin check for teamId:", teamId);
+    console.log("👤 Current user:", currentUser?.uid, currentUser?.email);
+    console.log("🏒 Team found:", team?.name);
+    console.log("👑 Team adminIds:", team?.adminIds);
+    console.log("👑 Team adminId (legacy):", team?.adminId);
+    console.log("✅ Is admin:", isAdmin);
+
+    return Boolean(isAdmin);
+  };
   useEffect(() => {
     const teamsQuery = query(collection(db, "teams"), orderBy("name", "asc"));
 
@@ -81,6 +115,35 @@ const TeamManagementScreen: React.FC = () => {
 
     return () => unsubscribe();
   }, []);
+
+  // Filter teams to show only those where user has admin rights
+  const adminTeams = teams.filter((team) => {
+    const isAdmin = isUserTeamAdmin(team.id);
+    console.log(`🔍 Team ${team.name} (${team.id}): isAdmin = ${isAdmin}`);
+    return isAdmin;
+  });
+
+  console.log("📋 Total teams:", teams.length);
+  console.log("👑 Admin teams:", adminTeams.length);
+  console.log("🔧 Is master admin:", isMasterAdmin()); // Load team creation requests (only for master admin)
+  useEffect(() => {
+    if (!user?.isMasterAdmin) return;
+
+    const requestsQuery = query(
+      collection(db, "teamCreationRequests"),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsubscribe = onSnapshot(requestsQuery, (snapshot) => {
+      const requestsData: TeamCreationRequest[] = [];
+      snapshot.forEach((doc) => {
+        requestsData.push({ id: doc.id, ...doc.data() } as TeamCreationRequest);
+      });
+      setTeamRequests(requestsData);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   const generateTeamCode = (): string => {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -143,7 +206,7 @@ const TeamManagementScreen: React.FC = () => {
         Alert.alert("Onnistui", "Joukkue päivitetty");
       } else {
         // Luodaan uusi joukkue
-        await addDoc(collection(db, "teams"), {
+        const teamRef = await addDoc(collection(db, "teams"), {
           name: teamName.trim(),
           color: teamColor,
           code: teamCode.trim().toUpperCase(),
@@ -152,6 +215,7 @@ const TeamManagementScreen: React.FC = () => {
           members: [user?.uid || ""],
           createdAt: new Date(),
         });
+
         Alert.alert(
           "Onnistui",
           `Joukkue luotu koodilla: ${teamCode.trim().toUpperCase()}`
@@ -186,6 +250,109 @@ const TeamManagementScreen: React.FC = () => {
         },
       ]
     );
+  };
+
+  // Team request management functions
+  const handleTeamRequest = (request: TeamCreationRequest) => {
+    const message = `Joukkue: ${request.teamName}\nPyytäjä: ${
+      request.userName
+    } (${request.userEmail})\nKuvaus: ${
+      request.description || "Ei kuvausta"
+    }\nYhteystiedot: ${request.contactInfo || "Ei yhteystietoja"}\nYritys: ${
+      request.businessInfo || "Ei yritystietoja"
+    }\nArvioitu pelaajamäärä: ${
+      request.estimatedPlayerCount || "Ei arvioitu"
+    }\nTila: ${request.status}\nPyydetty: ${new Date(
+      request.createdAt
+    ).toLocaleDateString("fi-FI")}`;
+
+    if (request.status === "pending") {
+      Alert.alert(`Joukkuepyyntö: ${request.teamName}`, message, [
+        { text: "Peruuta", style: "cancel" },
+        {
+          text: "Hylkää",
+          style: "destructive",
+          onPress: () => showRejectDialog(request),
+        },
+        {
+          text: "Hyväksy",
+          onPress: () => approveRequest(request),
+        },
+      ]);
+    } else {
+      Alert.alert(`Joukkuepyyntö: ${request.teamName}`, message);
+    }
+  };
+
+  const showRejectDialog = (request: TeamCreationRequest) => {
+    Alert.prompt(
+      "Hylkää pyyntö",
+      "Anna hylkäyksen syy:",
+      (reason) => {
+        if (reason && reason.trim()) {
+          rejectRequest(request, reason.trim());
+        }
+      },
+      "plain-text",
+      "",
+      "default"
+    );
+  };
+
+  const approveRequest = async (request: TeamCreationRequest) => {
+    try {
+      // Create the new team
+      const newTeamData: Omit<Team, "id"> = {
+        name: request.teamName,
+        description: request.description || "",
+        color:
+          predefinedColors[Math.floor(Math.random() * predefinedColors.length)],
+        adminIds: [request.userId],
+        members: [request.userId],
+        licenceCode: generateTeamCode(),
+        licenseStatus: "active",
+        licenseExpiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        createdAt: new Date(),
+        totalPoints: 0,
+        fieldPlayers: [],
+        goalkeepers: [],
+        players: [],
+      };
+
+      const teamRef = await addDoc(collection(db, "teams"), newTeamData);
+
+      // Update the request status
+      await updateDoc(doc(db, "teamCreationRequests", request.id), {
+        status: "approved",
+        reviewedAt: new Date(),
+        reviewedBy: user?.uid,
+        approvedTeamId: teamRef.id,
+      });
+
+      Alert.alert("Onnistui", `Joukkue "${request.teamName}" on luotu!`);
+    } catch (error) {
+      console.error("Error approving request:", error);
+      Alert.alert("Virhe", "Pyynnön hyväksyminen epäonnistui");
+    }
+  };
+
+  const rejectRequest = async (
+    request: TeamCreationRequest,
+    reason: string
+  ) => {
+    try {
+      await updateDoc(doc(db, "teamCreationRequests", request.id), {
+        status: "rejected",
+        reviewedAt: new Date(),
+        reviewedBy: user?.uid,
+        rejectionReason: reason,
+      });
+
+      Alert.alert("Onnistui", "Pyyntö on hylätty");
+    } catch (error) {
+      console.error("Error rejecting request:", error);
+      Alert.alert("Virhe", "Pyynnön hylkääminen epäonnistui");
+    }
   };
 
   const activateLicense = async (team: Team, code: string) => {
@@ -246,6 +413,121 @@ const TeamManagementScreen: React.FC = () => {
     } catch (error) {
       console.error("Virhe lisenssin aktivoinnissa:", error);
       Alert.alert("Virhe", "Lisenssin aktivointi epäonnistui");
+    }
+  };
+
+  // Team request helper functions
+  const handleApproveRequest = async (request: TeamCreationRequest) => {
+    Alert.alert(
+      "Hyväksy pyyntö",
+      `Haluatko hyväksyä joukkueen "${request.teamName}" luomisen käyttäjälle ${request.userName}?`,
+      [
+        { text: "Peruuta", style: "cancel" },
+        {
+          text: "Hyväksy",
+          onPress: () => processApproval(request),
+        },
+      ]
+    );
+  };
+
+  const processApproval = async (request: TeamCreationRequest) => {
+    try {
+      // Create the new team
+      const newTeamData: Omit<Team, "id"> = {
+        name: request.teamName,
+        description: request.description || "",
+        color: generateRandomColor(),
+        adminIds: [request.userId],
+        members: [request.userId],
+        licenceCode: generateLicenseCode(),
+        licenseStatus: "active",
+        licenseExpiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year
+        createdAt: new Date(),
+        totalPoints: 0,
+        fieldPlayers: [],
+        goalkeepers: [],
+        players: [],
+      };
+
+      const teamRef = await addDoc(collection(db, "teams"), newTeamData);
+
+      // Update the request status
+      await updateDoc(doc(db, "teamCreationRequests", request.id), {
+        status: "approved",
+        reviewedAt: new Date(),
+        reviewedBy: user?.uid,
+        approvedTeamId: teamRef.id,
+      });
+
+      Alert.alert("Onnistui", `Joukkue "${request.teamName}" on luotu!`);
+    } catch (error) {
+      console.error("Error approving request:", error);
+      Alert.alert("Virhe", "Pyynnön hyväksyminen epäonnistui");
+    }
+  };
+
+  const generateRandomColor = () => {
+    const colors = [
+      "#1976d2",
+      "#388e3c",
+      "#f57c00",
+      "#d32f2f",
+      "#7b1fa2",
+      "#303f9f",
+      "#0097a7",
+      "#689f38",
+      "#f9a825",
+      "#e64a19",
+    ];
+    return colors[Math.floor(Math.random() * colors.length)];
+  };
+
+  const generateLicenseCode = () => {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let result = "FD2024-";
+    for (let i = 0; i < 7; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  };
+
+  // Helper functions for team requests
+  const formatDate = (timestamp: any): string => {
+    if (!timestamp) return "";
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleDateString("fi-FI", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const getStatusColor = (status: string): string => {
+    switch (status) {
+      case "pending":
+        return "#FF9800";
+      case "approved":
+        return "#4CAF50";
+      case "rejected":
+        return "#f44336";
+      default:
+        return "#999";
+    }
+  };
+
+  const getStatusText = (status: string): string => {
+    switch (status) {
+      case "pending":
+        return "Odottaa";
+      case "approved":
+        return "Hyväksytty";
+      case "rejected":
+        return "Hylätty";
+      default:
+        return status;
     }
   };
 
@@ -357,36 +639,14 @@ const TeamManagementScreen: React.FC = () => {
           <Text style={styles.createButtonText}>Luo uusi joukkue</Text>
         </TouchableOpacity>
 
-        {/* MasterAdmin banner */}
-        {isMasterAdmin() && (
-          <TouchableOpacity
-            style={styles.masterAdminBanner}
-            onPress={() => {
-              setSelectedTeamForLicense(null); // Null tarkoittaa yleistä hallintaa
-              setLicenseManagerVisible(true);
-            }}
-          >
-            <View style={styles.bannerContent}>
-              <Ionicons name="shield-checkmark" size={24} color="#fff" />
-              <View style={styles.bannerText}>
-                <Text style={styles.bannerTitle}>
-                  MasterAdmin - Lisenssinhallinta
-                </Text>
-                <Text style={styles.bannerSubtitle}>
-                  Luo lisenssejä ja käsittele joukkueiden pyyntöjä
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#fff" />
-            </View>
-          </TouchableOpacity>
-        )}
-
         <Text style={styles.sectionTitle}>
-          Joukkueita yhteensä: {teams.length}
+          {isMasterAdmin()
+            ? `Kaikki joukkueet: ${teams.length}`
+            : `Omat joukkueet: ${adminTeams.length}`}
         </Text>
 
         <FlatList
-          data={teams}
+          data={isMasterAdmin() ? teams : adminTeams}
           keyExtractor={(item) => item.id}
           renderItem={renderTeamItem}
           showsVerticalScrollIndicator={false}
@@ -394,13 +654,118 @@ const TeamManagementScreen: React.FC = () => {
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Ionicons name="people-outline" size={64} color="#ccc" />
-              <Text style={styles.emptyText}>Ei joukkueita</Text>
+              <Text style={styles.emptyText}>
+                {isMasterAdmin() ? "Ei joukkueita" : "Ei admin-oikeuksia"}
+              </Text>
               <Text style={styles.emptySubtext}>
-                Luo ensimmäinen joukkue painamalla yllä olevaa painiketta
+                {isMasterAdmin()
+                  ? "Luo ensimmäinen joukkue painamalla yllä olevaa painiketta"
+                  : "Et ole minkään joukkueen admin. Luo uusi joukkue tai pyydä admin-oikeuksia."}
               </Text>
             </View>
           }
         />
+
+        {/* Master Admin Section */}
+        {user?.isMasterAdmin && (
+          <View style={styles.masterAdminSection}>
+            <Text style={styles.masterAdminTitle}>Master Admin -hallinta</Text>
+
+            {/* License Management */}
+            <TouchableOpacity
+              style={styles.adminControlButton}
+              onPress={() => {
+                setSelectedTeamForLicense(null);
+                setLicenseManagerVisible(true);
+              }}
+            >
+              <View style={styles.adminButtonContent}>
+                <Ionicons name="shield-checkmark" size={24} color="#1976d2" />
+                <View style={styles.adminButtonText}>
+                  <Text style={styles.adminButtonTitle}>Lisenssinhallinta</Text>
+                  <Text style={styles.adminButtonSubtitle}>
+                    Luo ja hallinnoi lisenssejä
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#666" />
+              </View>
+            </TouchableOpacity>
+
+            {/* Team Creation Requests */}
+            <TouchableOpacity
+              style={styles.adminControlButton}
+              onPress={() => {
+                console.log("🔍 Team requests button pressed");
+                console.log("📋 Current requests:", teamRequests);
+                if (teamRequests.length === 0) {
+                  Alert.alert(
+                    "Ei pyyntöjä",
+                    "Joukkueiden luomispyyntöjä ei ole vielä lähetetty."
+                  );
+                  return;
+                }
+
+                // Show simple list alert for now
+                const requestsList = teamRequests
+                  .map(
+                    (req, index) =>
+                      `${index + 1}. ${req.teamName} (${req.userName}) - ${
+                        req.status === "pending"
+                          ? "Odottaa"
+                          : req.status === "approved"
+                          ? "Hyväksytty"
+                          : "Hylätty"
+                      }`
+                  )
+                  .join("\n\n");
+
+                Alert.alert(
+                  `Joukkuepyynnöt (${teamRequests.length})`,
+                  requestsList,
+                  [
+                    { text: "Sulje", style: "cancel" },
+                    ...(teamRequests.filter((r) => r.status === "pending")
+                      .length > 0
+                      ? [
+                          {
+                            text: "Hallitse pyyntöjä",
+                            onPress: () => {
+                              setRequestModalVisible(true);
+                            },
+                          },
+                        ]
+                      : []),
+                  ]
+                );
+              }}
+            >
+              <View style={styles.adminButtonContent}>
+                <Ionicons name="document-text" size={24} color="#ff9800" />
+                <View style={styles.adminButtonText}>
+                  <Text style={styles.adminButtonTitle}>
+                    Joukkuepyynnöt
+                    {teamRequests.filter((r) => r.status === "pending").length >
+                      0 && (
+                      <Text style={styles.pendingBadge}>
+                        {" "}
+                        (
+                        {
+                          teamRequests.filter((r) => r.status === "pending")
+                            .length
+                        }
+                        )
+                      </Text>
+                    )}
+                  </Text>
+                  <Text style={styles.adminButtonSubtitle}>
+                    Käsittele käyttäjien joukkueluontipyyntöjä
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#666" />
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* Joukkueen luonti/muokkaus modal */}
@@ -493,6 +858,265 @@ const TeamManagementScreen: React.FC = () => {
               <Text style={styles.saveButtonText}>
                 {editingTeam ? "Tallenna muutokset" : "Luo joukkue"}
               </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Team Request Management Modal */}
+      <Modal
+        visible={requestModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setRequestModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[styles.modalContent, { height: "85%", maxHeight: "85%" }]}
+          >
+            <View style={styles.modalHeader}>
+              {selectedRequest ? (
+                <TouchableOpacity
+                  style={styles.requestBackButton}
+                  onPress={() => {
+                    setSelectedRequest(null);
+                    setRejectionReason("");
+                  }}
+                >
+                  <Ionicons name="arrow-back" size={24} color="#666" />
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.placeholder} />
+              )}
+
+              <Text style={styles.modalTitle}>
+                {selectedRequest ? "Pyynnön tiedot" : "Joukkuepyynnöt"}
+              </Text>
+
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => {
+                  setRequestModalVisible(false);
+                  setSelectedRequest(null);
+                  setRejectionReason("");
+                }}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            {selectedRequest ? (
+              // Show request details
+              <ScrollView
+                style={styles.requestDetailsContainer}
+                showsVerticalScrollIndicator={false}
+              >
+                <Text style={styles.requestDetailTitle}>
+                  {selectedRequest.teamName}
+                </Text>
+
+                <View style={styles.requestDetailSection}>
+                  <Text style={styles.requestSectionTitle}>
+                    Pyytäjän tiedot
+                  </Text>
+                  <Text style={styles.requestDetailItem}>
+                    <Text style={styles.requestLabel}>Nimi: </Text>
+                    {selectedRequest.userName}
+                  </Text>
+                  <Text style={styles.requestDetailItem}>
+                    <Text style={styles.requestLabel}>Sähköposti: </Text>
+                    {selectedRequest.userEmail}
+                  </Text>
+                  {selectedRequest.contactInfo && (
+                    <Text style={styles.requestDetailItem}>
+                      <Text style={styles.requestLabel}>Yhteystiedot: </Text>
+                      {selectedRequest.contactInfo}
+                    </Text>
+                  )}
+                  {selectedRequest.businessInfo && (
+                    <Text style={styles.requestDetailItem}>
+                      <Text style={styles.requestLabel}>Yritys: </Text>
+                      {selectedRequest.businessInfo}
+                    </Text>
+                  )}
+                </View>
+
+                <View style={styles.requestDetailSection}>
+                  <Text style={styles.requestSectionTitle}>
+                    Joukkueen tiedot
+                  </Text>
+                  {selectedRequest.description && (
+                    <Text style={styles.requestDetailItem}>
+                      <Text style={styles.requestLabel}>Kuvaus: </Text>
+                      {selectedRequest.description}
+                    </Text>
+                  )}
+                  {selectedRequest.estimatedPlayerCount && (
+                    <Text style={styles.requestDetailItem}>
+                      <Text style={styles.requestLabel}>
+                        Arvioitu pelaajamäärä:{" "}
+                      </Text>
+                      {selectedRequest.estimatedPlayerCount}
+                    </Text>
+                  )}
+                </View>
+
+                <View style={styles.requestDetailSection}>
+                  <Text style={styles.requestSectionTitle}>Pyynnön tila</Text>
+                  <View style={styles.statusRow}>
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        {
+                          backgroundColor: getStatusColor(
+                            selectedRequest.status
+                          ),
+                        },
+                      ]}
+                    >
+                      <Text style={styles.statusBadgeText}>
+                        {getStatusText(selectedRequest.status)}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.requestDetailItem}>
+                    <Text style={styles.requestLabel}>Pyydetty: </Text>
+                    {formatDate(selectedRequest.createdAt)}
+                  </Text>
+                  {selectedRequest.reviewedAt && (
+                    <Text style={styles.requestDetailItem}>
+                      <Text style={styles.requestLabel}>Käsitelty: </Text>
+                      {formatDate(selectedRequest.reviewedAt)}
+                    </Text>
+                  )}
+                  {selectedRequest.rejectionReason && (
+                    <Text style={styles.requestDetailItem}>
+                      <Text style={styles.requestLabel}>Hylkäyksen syy: </Text>
+                      {selectedRequest.rejectionReason}
+                    </Text>
+                  )}
+                </View>
+
+                {selectedRequest.status === "pending" && (
+                  <View style={styles.actionButtonsContainer}>
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.approveButton]}
+                      onPress={() => approveRequest(selectedRequest)}
+                    >
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={20}
+                        color="white"
+                      />
+                      <Text style={styles.actionButtonText}>Hyväksy</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.rejectButton]}
+                      onPress={() => setRejectModalVisible(true)}
+                    >
+                      <Ionicons name="close-circle" size={20} color="white" />
+                      <Text style={styles.actionButtonText}>Hylkää</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </ScrollView>
+            ) : (
+              // Show requests list
+              <FlatList
+                data={teamRequests}
+                keyExtractor={(item) => item.id}
+                showsVerticalScrollIndicator={false}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.requestListItem}
+                    onPress={() => setSelectedRequest(item)}
+                  >
+                    <View style={styles.requestListHeader}>
+                      <Text style={styles.requestListTitle}>
+                        {item.teamName}
+                      </Text>
+                      <View
+                        style={[
+                          styles.statusBadge,
+                          { backgroundColor: getStatusColor(item.status) },
+                        ]}
+                      >
+                        <Text style={styles.statusBadgeText}>
+                          {getStatusText(item.status)}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.requestListSubtitle}>
+                      Pyytäjä: {item.userName}
+                    </Text>
+                    <Text style={styles.requestListDate}>
+                      {formatDate(item.createdAt)}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <View style={styles.emptyRequestsContainer}>
+                    <Ionicons
+                      name="document-text-outline"
+                      size={48}
+                      color="#ccc"
+                    />
+                    <Text style={styles.emptyRequestsText}>
+                      Ei joukkuepyyntöjä
+                    </Text>
+                  </View>
+                }
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Rejection Reason Modal */}
+      <Modal
+        visible={rejectModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setRejectModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Hylkää pyyntö</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setRejectModalVisible(false)}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.rejectReasonLabel}>Anna hylkäyksen syy:</Text>
+            <TextInput
+              style={styles.rejectReasonInput}
+              value={rejectionReason}
+              onChangeText={setRejectionReason}
+              placeholder="Esim. Puutteelliset tiedot, maksuvaikeudet..."
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+
+            <TouchableOpacity
+              style={[
+                styles.rejectConfirmButton,
+                !rejectionReason.trim() && styles.disabledButton,
+              ]}
+              onPress={() => {
+                if (selectedRequest && rejectionReason.trim()) {
+                  rejectRequest(selectedRequest, rejectionReason.trim());
+                  setRejectModalVisible(false);
+                  setRejectionReason("");
+                }
+              }}
+              disabled={!rejectionReason.trim()}
+            >
+              <Text style={styles.rejectConfirmText}>Hylkää pyyntö</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -682,6 +1306,8 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     color: "#333",
+    flex: 1,
+    textAlign: "center",
   },
   closeButton: {
     padding: 8,
@@ -772,12 +1398,6 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 20,
   },
-  masterAdminBanner: {
-    backgroundColor: "#1976d2", // Purple for MasterAdmin
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-  },
   bannerContent: {
     flexDirection: "row",
     alignItems: "center",
@@ -853,6 +1473,195 @@ const styles = StyleSheet.create({
     color: "#4caf50",
     marginLeft: 4,
     fontWeight: "600",
+  },
+  // Master Admin styles
+  masterAdminSection: {
+    marginTop: 20,
+    paddingHorizontal: 16,
+  },
+  masterAdminTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 16,
+  },
+  adminControlButton: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  adminButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  adminButtonText: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  adminButtonTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 4,
+  },
+  adminButtonSubtitle: {
+    fontSize: 14,
+    color: "#666",
+    lineHeight: 20,
+  },
+  pendingBadge: {
+    color: "#ff9800",
+    fontWeight: "700",
+  },
+  // Request Management Modal Styles
+  requestBackButton: {
+    padding: 8,
+    width: 40,
+  },
+  requestDetailsContainer: {
+    flex: 1,
+    padding: 16,
+  },
+  requestDetailTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 20,
+  },
+  requestDetailSection: {
+    marginBottom: 20,
+  },
+  requestSectionTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 8,
+  },
+  requestDetailItem: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 4,
+  },
+  requestLabel: {
+    fontWeight: "600",
+    color: "#333",
+  },
+  statusRow: {
+    marginVertical: 8,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: "flex-start",
+  },
+  statusBadgeText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  actionButtonsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#eee",
+  },
+  actionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    flex: 0.4,
+    justifyContent: "center",
+  },
+  approveButton: {
+    backgroundColor: "#4CAF50",
+  },
+  rejectButton: {
+    backgroundColor: "#f44336",
+  },
+  actionButtonText: {
+    color: "white",
+    fontWeight: "600",
+    marginLeft: 8,
+  },
+  // Request List Styles
+  requestListItem: {
+    backgroundColor: "white",
+    padding: 16,
+    marginVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#eee",
+  },
+  requestListHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  requestListTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    flex: 1,
+  },
+  requestListSubtitle: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 4,
+  },
+  requestListDate: {
+    fontSize: 12,
+    color: "#999",
+  },
+  emptyRequestsContainer: {
+    alignItems: "center",
+    paddingVertical: 40,
+  },
+  emptyRequestsText: {
+    fontSize: 16,
+    color: "#999",
+    marginTop: 16,
+  },
+  // Rejection Modal Styles
+  rejectReasonLabel: {
+    fontSize: 16,
+    color: "#333",
+    marginBottom: 8,
+  },
+  rejectReasonInput: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    padding: 12,
+    minHeight: 100,
+    marginBottom: 16,
+    fontSize: 14,
+    color: "#333",
+  },
+  rejectConfirmButton: {
+    backgroundColor: "#f44336",
+    padding: 16,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  rejectConfirmText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  disabledButton: {
+    backgroundColor: "#ccc",
   },
 });
 

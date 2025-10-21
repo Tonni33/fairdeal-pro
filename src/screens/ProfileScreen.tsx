@@ -12,12 +12,14 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { collection, addDoc } from "firebase/firestore";
 import UserProfileEditor from "../components/UserProfileEditor";
 import AdminMenuButton from "../components/AdminMenuButton";
 import BiometricAuthSetup from "../components/BiometricAuthSetup";
 import { useAuth } from "../contexts/AuthContext";
-import { useApp } from "../contexts/AppContext";
-import { RootStackParamList } from "../types";
+import { useApp, getUserTeams } from "../contexts/AppContext";
+import { RootStackParamList, TeamCreationRequest } from "../types";
+import { db } from "../services/firebase";
 
 type ProfileScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -32,13 +34,60 @@ const ProfileScreen: React.FC = () => {
   // Password change state
   const [isPasswordModalVisible, setIsPasswordModalVisible] = useState(false);
   const [isBiometricModalVisible, setIsBiometricModalVisible] = useState(false);
+  const [isTeamRequestModalVisible, setIsTeamRequestModalVisible] =
+    useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
 
-  // Hae pelaaja käyttäjän sähköpostilla
-  const player = players.find((p) => p.email === user?.email);
+  // Team creation request state
+  const [teamRequestLoading, setTeamRequestLoading] = useState(false);
+  const [requestedTeamName, setRequestedTeamName] = useState("");
+  const [teamDescription, setTeamDescription] = useState("");
+  const [estimatedPlayers, setEstimatedPlayers] = useState("");
+  const [contactInfo, setContactInfo] = useState("");
+  const [businessInfo, setBusinessInfo] = useState("");
+
+  // Hae pelaaja käyttäjän sähköpostilla tai ID:llä
+  console.log("ProfileScreen: user =", user);
+  console.log("ProfileScreen: players count =", players.length);
+  console.log(
+    "ProfileScreen: players =",
+    players.map((p) => ({ id: p.id, email: p.email, name: p.name }))
+  );
+
+  const player = players.find(
+    (p) => p.email === user?.email || p.id === user?.uid
+  );
+
+  // Jos löydettiin pelaaja mutta nimi puuttuu, yritä löytää toinen dokumentti samalla emaililla
+  let enrichedPlayer = player;
+  if (player && !player.name && user?.email) {
+    const playerWithName = players.find(
+      (p) => p.email === user.email && p.name && p.id !== player.id
+    );
+    if (playerWithName) {
+      console.log(
+        "ProfileScreen: Found player with name, merging data:",
+        playerWithName
+      );
+      enrichedPlayer = {
+        ...player,
+        name: playerWithName.name,
+        phone: playerWithName.phone || player.phone,
+        image: playerWithName.image || player.image,
+        // Säilytä alkuperäisen pelaajan teamIds ja muut Firebase Auth -dokumentin tiedot
+      };
+    }
+  }
+
+  console.log("ProfileScreen: found player =", player);
+  console.log("ProfileScreen: enriched player =", enrichedPlayer);
+
+  // Check if user is already in any teams
+  const userTeams = getUserTeams(user, teams, players);
+  const hasTeamMembership = userTeams.length > 0;
 
   const handleProfileSave = async () => {
     // Refresh data after profile changes
@@ -85,6 +134,69 @@ const ProfileScreen: React.FC = () => {
     }
   };
 
+  const handleTeamCreationRequest = async () => {
+    if (!requestedTeamName.trim()) {
+      Alert.alert("Virhe", "Joukkueen nimi on pakollinen");
+      return;
+    }
+
+    if (!user) {
+      Alert.alert("Virhe", "Käyttäjätietoja ei löytynyt");
+      return;
+    }
+
+    setTeamRequestLoading(true);
+    try {
+      const requestData: Omit<TeamCreationRequest, "id"> = {
+        userId: user.uid,
+        userEmail: user.email || "",
+        userName:
+          enrichedPlayer?.name ||
+          user.displayName ||
+          user.email?.split("@")[0] ||
+          "Tuntematon käyttäjä",
+        teamName: requestedTeamName.trim(),
+        description: teamDescription.trim() || undefined,
+        estimatedPlayerCount: estimatedPlayers
+          ? parseInt(estimatedPlayers)
+          : undefined,
+        contactInfo: contactInfo.trim() || undefined,
+        businessInfo: businessInfo.trim() || undefined,
+        status: "pending",
+        createdAt: new Date(),
+      };
+
+      await addDoc(collection(db, "teamCreationRequests"), requestData);
+
+      Alert.alert(
+        "Pyyntö lähetetty!",
+        "Joukkueen luomispyyntö on lähetetty master adminille tarkistettavaksi. Saat ilmoituksen kun pyyntö on käsitelty.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              setIsTeamRequestModalVisible(false);
+              // Clear form
+              setRequestedTeamName("");
+              setTeamDescription("");
+              setEstimatedPlayers("");
+              setContactInfo("");
+              setBusinessInfo("");
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error("Error submitting team creation request:", error);
+      Alert.alert(
+        "Virhe",
+        "Pyynnön lähettäminen epäonnistui. Yritä uudelleen."
+      );
+    } finally {
+      setTeamRequestLoading(false);
+    }
+  };
+
   const handleAdminNavigation = (screen: string) => {
     if (screen === "AdminMenu") {
       navigation.navigate("AdminMenu");
@@ -116,12 +228,45 @@ const ProfileScreen: React.FC = () => {
         <AdminMenuButton onNavigate={handleAdminNavigation} />
       </View>
       <ScrollView style={styles.content}>
-        {player && (
+        {enrichedPlayer ? (
           <UserProfileEditor
-            player={player}
+            player={enrichedPlayer}
             teams={teams}
             onSave={handleProfileSave}
           />
+        ) : (
+          <View style={styles.noPlayerContainer}>
+            <Text style={styles.noPlayerText}>
+              Käyttäjätietoja ei löytynyt.
+              {user
+                ? ` (Email: ${user.email}, ID: ${user.id})`
+                : " (Ei kirjauduttu sisään)"}
+            </Text>
+            <TouchableOpacity
+              style={styles.refreshButton}
+              onPress={() => refreshData()}
+            >
+              <Text style={styles.refreshButtonText}>Päivitä tiedot</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Show team creation request button only if user is not in any teams */}
+        {!hasTeamMembership && (
+          <TouchableOpacity
+            style={styles.createTeamButton}
+            onPress={() => setIsTeamRequestModalVisible(true)}
+          >
+            <Ionicons
+              name="people-outline"
+              size={20}
+              color="white"
+              style={styles.buttonIcon}
+            />
+            <Text style={styles.createTeamText}>
+              Pyydä oman joukkueen luomista
+            </Text>
+          </TouchableOpacity>
         )}
 
         <TouchableOpacity
@@ -154,6 +299,113 @@ const ProfileScreen: React.FC = () => {
           <Text style={styles.signOutText}>Kirjaudu ulos</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Team Creation Request Modal */}
+      <Modal
+        visible={isTeamRequestModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setIsTeamRequestModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Pyydä joukkueen luomista</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setIsTeamRequestModalVisible(false)}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.formScrollView}>
+              <Text style={styles.formDescription}>
+                Lähetä pyyntö master adminille oman joukkueen luomista varten.
+                Admin tarkistaa pyynnön ja hyväksyy sen esimerkiksi
+                maksusuorituksen jälkeen.
+              </Text>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>Joukkueen nimi *</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={requestedTeamName}
+                  onChangeText={setRequestedTeamName}
+                  placeholder="Esim. HC Kiekkoilijat"
+                  autoCapitalize="words"
+                />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>Kuvaus</Text>
+                <TextInput
+                  style={[styles.textInput, styles.multilineInput]}
+                  value={teamDescription}
+                  onChangeText={setTeamDescription}
+                  placeholder="Kuvaile joukkuettasi lyhyesti..."
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>Arvioitu pelaajamäärä</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={estimatedPlayers}
+                  onChangeText={setEstimatedPlayers}
+                  placeholder="Esim. 20"
+                  keyboardType="numeric"
+                />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>Yhteystiedot</Text>
+                <TextInput
+                  style={[styles.textInput, styles.multilineInput]}
+                  value={contactInfo}
+                  onChangeText={setContactInfo}
+                  placeholder="Puhelinnumero, osoite tms. lisätiedot..."
+                  multiline
+                  numberOfLines={2}
+                  textAlignVertical="top"
+                />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>Yritys/organisaatio</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={businessInfo}
+                  onChangeText={setBusinessInfo}
+                  placeholder="Jos joukkue liittyy yritykseen tai organisaatioon..."
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.submitRequestButton,
+                  teamRequestLoading && styles.disabledButton,
+                ]}
+                onPress={handleTeamCreationRequest}
+                disabled={teamRequestLoading}
+              >
+                <Ionicons
+                  name="send"
+                  size={20}
+                  color="white"
+                  style={styles.buttonIcon}
+                />
+                <Text style={styles.submitRequestText}>
+                  {teamRequestLoading ? "Lähetetään..." : "Lähetä pyyntö"}
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Biometric Auth Setup Modal */}
       <BiometricAuthSetup
@@ -361,6 +613,73 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   biometricButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  noPlayerContainer: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 20,
+    alignItems: "center",
+  },
+  noPlayerText: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 16,
+    lineHeight: 24,
+  },
+  refreshButton: {
+    backgroundColor: "#2196F3",
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  refreshButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  createTeamButton: {
+    backgroundColor: "#4CAF50",
+    borderRadius: 8,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  createTeamText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  formScrollView: {
+    maxHeight: 400,
+  },
+  formDescription: {
+    fontSize: 14,
+    color: "#666",
+    lineHeight: 20,
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  multilineInput: {
+    height: 80,
+    paddingTop: 12,
+  },
+  submitRequestButton: {
+    backgroundColor: "#2196F3",
+    borderRadius: 8,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 10,
+  },
+  submitRequestText: {
     color: "white",
     fontSize: 16,
     fontWeight: "bold",

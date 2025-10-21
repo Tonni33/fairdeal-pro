@@ -90,7 +90,10 @@ const HomeScreen: React.FC = () => {
   }, [user, players]);
 
   // Filtteröi joukkueet joissa nykyinen käyttäjä on mukana (sähköpostilla)
-  const userTeams = useMemo(() => getUserTeams(user, teams), [user, teams]);
+  const userTeams = useMemo(
+    () => getUserTeams(user, teams, players),
+    [user, teams, players]
+  );
 
   const getSelectedTeamName = () => {
     if (!selectedTeamId) return "Kaikki joukkueet";
@@ -100,22 +103,82 @@ const HomeScreen: React.FC = () => {
 
   // Find the next upcoming event
   const nextEvent = useMemo(() => {
+    console.log("HomeScreen: nextEvent calculation");
+    console.log("HomeScreen: events count:", events.length);
+    console.log(
+      "HomeScreen: userTeams:",
+      userTeams.map((t) => ({ id: t.id, name: t.name }))
+    );
+    console.log("HomeScreen: selectedTeamId:", selectedTeamId);
+
     const now = new Date();
     let filteredEvents = events;
+
+    // Jos käyttäjä on valinnut tietyn joukkueen, näytä sen tapahtumat
     if (selectedTeamId) {
       filteredEvents = events.filter(
         (event) => event.teamId === selectedTeamId
       );
+      console.log(
+        "HomeScreen: filtered by selectedTeamId, count:",
+        filteredEvents.length
+      );
+    } else {
+      // Jos joukkuetta ei ole valittu, näytä vain niiden joukkueiden tapahtumat joissa käyttäjä on jäsenenä
+      if (userTeams.length > 0) {
+        const userTeamIds = userTeams.map((team) => team.id);
+        console.log("HomeScreen: userTeamIds:", userTeamIds);
+        filteredEvents = events.filter(
+          (event) => event.teamId && userTeamIds.includes(event.teamId)
+        );
+        console.log(
+          "HomeScreen: filtered by user teams, count:",
+          filteredEvents.length
+        );
+        if (filteredEvents.length > 0) {
+          console.log(
+            "HomeScreen: filtered events:",
+            filteredEvents.map((e) => ({
+              id: e.id,
+              teamId: e.teamId,
+              title: e.title,
+            }))
+          );
+        }
+      } else {
+        // Jos käyttäjä ei kuulu mihinkään joukkueeseen, älä näytä tapahtumia
+        console.log("HomeScreen: user has no teams, showing no events");
+        filteredEvents = [];
+      }
     }
+
     const upcomingEvents = filteredEvents
       .filter((event) => event.date >= now)
       .sort((a, b) => a.date.getTime() - b.date.getTime());
-    return upcomingEvents.length > 0 ? upcomingEvents[0] : null;
-  }, [events, selectedTeamId]);
+
+    const result = upcomingEvents.length > 0 ? upcomingEvents[0] : null;
+    console.log(
+      "HomeScreen: nextEvent result:",
+      result
+        ? { id: result.id, teamId: result.teamId, title: result.title }
+        : null
+    );
+    return result;
+  }, [events, selectedTeamId, userTeams]);
 
   useEffect(() => {
     if (nextEvent && currentPlayer) {
       console.log("HomeScreen: Checking registration status");
+      console.log("HomeScreen: players array length:", players.length);
+      console.log(
+        "HomeScreen: sample players:",
+        players.slice(0, 3).map((p) => ({
+          id: p.id,
+          name: p.name,
+          email: p.email,
+          playerId: p.playerId,
+        }))
+      );
       console.log(
         "HomeScreen: nextEvent.registeredPlayers:",
         nextEvent.registeredPlayers
@@ -125,27 +188,118 @@ const HomeScreen: React.FC = () => {
         nextEvent.reservePlayers
       );
       console.log("HomeScreen: currentPlayer.id:", currentPlayer.id);
+      console.log(
+        "HomeScreen: currentPlayer.playerId:",
+        currentPlayer.playerId
+      );
+      console.log("HomeScreen: currentPlayer.email:", currentPlayer.email);
 
+      // Käytä Firebase user ID:tä ilmoittautumistilan tarkistuksessa
+      const userIdForCheck = user?.id;
       setIsRegistered(
-        nextEvent.registeredPlayers?.includes(currentPlayer.id) || false
+        (userIdForCheck &&
+          nextEvent.registeredPlayers?.includes(userIdForCheck)) ||
+          nextEvent.registeredPlayers?.includes(currentPlayer.id) ||
+          nextEvent.registeredPlayers?.includes(currentPlayer.playerId) ||
+          nextEvent.registeredPlayers?.includes(currentPlayer.email) ||
+          false
       );
       setIsReserve(
-        nextEvent.reservePlayers?.includes(currentPlayer.id) || false
+        (userIdForCheck &&
+          nextEvent.reservePlayers?.includes(userIdForCheck)) ||
+          nextEvent.reservePlayers?.includes(currentPlayer.id) ||
+          nextEvent.reservePlayers?.includes(currentPlayer.playerId) ||
+          nextEvent.reservePlayers?.includes(currentPlayer.email) ||
+          false
       );
 
+      // Helper function to find player by various IDs and enrich with legacy data
+      const findPlayerByAnyId = (searchId: string) => {
+        console.log("HomeScreen: searching for player with ID:", searchId);
+
+        // Etsi pelaaja ensisijaisesti ID:n perusteella
+        let foundPlayer = players.find(
+          (p) =>
+            p.id === searchId || p.playerId === searchId || p.email === searchId
+        );
+
+        // Jos löytyi Firebase Auth dokumentti mutta siinä ei ole nimeä, etsi legacy dokumentti
+        if (foundPlayer && !foundPlayer.name) {
+          const legacyPlayer = players.find(
+            (p) =>
+              p.email === foundPlayer!.email &&
+              p.name &&
+              p.name !== foundPlayer!.name
+          );
+
+          if (legacyPlayer) {
+            console.log("HomeScreen: found legacy player data, merging:", {
+              firebase: { id: foundPlayer.id, name: foundPlayer.name },
+              legacy: { id: legacyPlayer.id, name: legacyPlayer.name },
+            });
+
+            // Yhdistä tiedot: käytä Firebase Auth dokumentin ID:tä mutta legacy dokumentin nimeä
+            foundPlayer = {
+              ...foundPlayer,
+              name: legacyPlayer.name,
+              phone: legacyPlayer.phone || foundPlayer.phone,
+              // Säilytä Firebase Auth dokumentin ID ja muut tiedot
+            };
+          }
+        }
+
+        console.log(
+          "HomeScreen: final found player:",
+          foundPlayer
+            ? {
+                id: foundPlayer.id,
+                name: foundPlayer.name,
+                email: foundPlayer.email,
+                playerId: foundPlayer.playerId,
+              }
+            : "NOT FOUND"
+        );
+        return foundPlayer;
+      };
+
       // Update registered players list
-      const registeredPlayerData = players.filter((player) =>
-        nextEvent.registeredPlayers?.includes(player.id)
+      console.log(
+        "HomeScreen: nextEvent.registeredPlayers:",
+        nextEvent.registeredPlayers
       );
+      const registeredPlayerData = (nextEvent.registeredPlayers || [])
+        .map((playerId) => findPlayerByAnyId(playerId))
+        .filter(Boolean) as any[];
       setRegisteredPlayers(registeredPlayerData);
 
       // Update reserve players list
-      const reservePlayerData = players.filter((player) =>
-        nextEvent.reservePlayers?.includes(player.id)
+      console.log(
+        "HomeScreen: nextEvent.reservePlayers:",
+        nextEvent.reservePlayers
       );
+      const reservePlayerData = (nextEvent.reservePlayers || [])
+        .map((playerId) => findPlayerByAnyId(playerId))
+        .filter(Boolean) as any[];
       setReservePlayers(reservePlayerData);
 
-      console.log("HomeScreen: reservePlayerData:", reservePlayerData);
+      console.log(
+        "HomeScreen: registeredPlayerData:",
+        registeredPlayerData.map((p) => ({
+          id: p.id,
+          name: p.name,
+          email: p.email,
+          playerId: p.playerId,
+        }))
+      );
+      console.log(
+        "HomeScreen: reservePlayerData:",
+        reservePlayerData.map((p) => ({
+          id: p.id,
+          name: p.name,
+          email: p.email,
+          playerId: p.playerId,
+        }))
+      );
     } else {
       setIsRegistered(false);
       setIsReserve(false);
@@ -200,7 +354,11 @@ const HomeScreen: React.FC = () => {
   }, [nextEvent]);
 
   const handleRegistration = async () => {
-    if (!nextEvent || !currentPlayer) return;
+    if (!nextEvent || !currentPlayer || !user) return;
+
+    // Käytä aina Firebase user ID:tä ilmoittautumisessa johdonmukaisuuden vuoksi
+    const playerIdToUse = user.id;
+    console.log("HomeScreen: Registration - using player ID:", playerIdToUse);
 
     setRegistrationLoading(true);
     try {
@@ -209,7 +367,7 @@ const HomeScreen: React.FC = () => {
       if (isRegistered) {
         // Unregister from main registration
         await updateDoc(eventRef, {
-          registeredPlayers: arrayRemove(currentPlayer.id),
+          registeredPlayers: arrayRemove(playerIdToUse),
         });
 
         // Check if there are reserve players to promote
@@ -255,7 +413,7 @@ const HomeScreen: React.FC = () => {
       } else if (isReserve) {
         // Unregister from reserve list
         await updateDoc(eventRef, {
-          reservePlayers: arrayRemove(currentPlayer.id),
+          reservePlayers: arrayRemove(playerIdToUse),
         });
         setIsReserve(false);
         Alert.alert("Onnistui", "Varalla-ilmoittautuminen peruttu");
@@ -287,7 +445,7 @@ const HomeScreen: React.FC = () => {
                 onPress: async () => {
                   try {
                     await updateDoc(eventRef, {
-                      reservePlayers: arrayUnion(currentPlayer.id),
+                      reservePlayers: arrayUnion(playerIdToUse),
                     });
                     setIsReserve(true);
                     Alert.alert("Onnistui", "Ilmoittautunut varalla olijaksi");
@@ -305,7 +463,7 @@ const HomeScreen: React.FC = () => {
         } else {
           // Register normally
           await updateDoc(eventRef, {
-            registeredPlayers: arrayUnion(currentPlayer.id),
+            registeredPlayers: arrayUnion(playerIdToUse),
           });
           setIsRegistered(true);
           Alert.alert("Onnistui", "Ilmoittautuminen tallennettu");
@@ -552,9 +710,7 @@ const HomeScreen: React.FC = () => {
               <Text style={styles.logoText}>FairDeal Pro</Text>
             )}
           </View>
-          <View>
-            <AdminMenuButton onNavigate={handleAdminNavigation} />
-          </View>
+          <AdminMenuButton onNavigate={handleAdminNavigation} />
         </View>
       </View>
 
@@ -958,53 +1114,72 @@ const HomeScreen: React.FC = () => {
                     </Text>
 
                     <View style={styles.modalPlayersList}>
-                      {sortPlayersByPosition(registeredPlayers).map(
-                        (player, index) => {
-                          const isGoalkeeper = player?.position === "MV";
-                          return (
-                            <View
-                              key={player.id}
-                              style={[
-                                styles.modalPlayerItem,
-                                isGoalkeeper && styles.modalGoalkeeperItem,
-                              ]}
-                            >
+                      {(() => {
+                        console.log(
+                          "HomeScreen Modal: registeredPlayers state:",
+                          registeredPlayers.map((p) => ({
+                            id: p.id,
+                            name: p.name,
+                            email: p.email,
+                            playerId: p.playerId,
+                          }))
+                        );
+                        return sortPlayersByPosition(registeredPlayers).map(
+                          (player, index) => {
+                            console.log("HomeScreen Modal: rendering player:", {
+                              id: player.id,
+                              name: player.name,
+                              email: player.email,
+                            });
+                            const isGoalkeeper = player?.position === "MV";
+                            return (
                               <View
+                                key={player.id}
                                 style={[
-                                  styles.modalPlayerIcon,
-                                  isGoalkeeper && styles.modalGoalkeeperIcon,
+                                  styles.modalPlayerItem,
+                                  isGoalkeeper && styles.modalGoalkeeperItem,
                                 ]}
                               >
-                                <Text
+                                <View
                                   style={[
-                                    styles.modalPlayerNumber,
-                                    isGoalkeeper &&
-                                      styles.modalGoalkeeperNumber,
+                                    styles.modalPlayerIcon,
+                                    isGoalkeeper && styles.modalGoalkeeperIcon,
                                   ]}
                                 >
-                                  {index + 1}
-                                </Text>
-                              </View>
-                              <View style={styles.modalPlayerInfo}>
-                                <Text
-                                  style={[
-                                    styles.modalPlayerName,
-                                    isGoalkeeper && styles.modalGoalkeeperName,
-                                  ]}
-                                >
-                                  {player.name}
-                                  {isGoalkeeper && " 🥅"}
-                                </Text>
-                                {player.email && (
-                                  <Text style={styles.modalPlayerEmail}>
-                                    {player.email}
+                                  <Text
+                                    style={[
+                                      styles.modalPlayerNumber,
+                                      isGoalkeeper &&
+                                        styles.modalGoalkeeperNumber,
+                                    ]}
+                                  >
+                                    {index + 1}
                                   </Text>
-                                )}
+                                </View>
+                                <View style={styles.modalPlayerInfo}>
+                                  <Text
+                                    style={[
+                                      styles.modalPlayerName,
+                                      isGoalkeeper &&
+                                        styles.modalGoalkeeperName,
+                                    ]}
+                                  >
+                                    {player.name ||
+                                      player.email ||
+                                      `ID: ${player.id}`}
+                                    {isGoalkeeper && " 🥅"}
+                                  </Text>
+                                  {player.email && (
+                                    <Text style={styles.modalPlayerEmail}>
+                                      {player.email}
+                                    </Text>
+                                  )}
+                                </View>
                               </View>
-                            </View>
-                          );
-                        }
-                      )}
+                            );
+                          }
+                        );
+                      })()}
                     </View>
                   </View>
                 )}

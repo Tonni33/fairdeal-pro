@@ -298,4 +298,27 @@ export interface AppContextType {
   loading: boolean;
   error: string | null;
   refreshData: () => Promise<void>;
+  getUserAdminTeams: (
+    user: { uid: string; isMasterAdmin?: boolean } | null | undefined,
+    teams: Team[]
+  ) => Team[];
+}
+
+// Team creation request types
+export interface TeamCreationRequest {
+  id: string;
+  userId: string; // ID of user requesting team creation
+  userEmail: string; // Email of user requesting team creation
+  userName: string; // Name of user requesting team creation
+  teamName: string; // Requested team name
+  description?: string; // Optional team description
+  estimatedPlayerCount?: number; // Estimated number of players
+  contactInfo?: string; // Additional contact information
+  businessInfo?: string; // Business/organization information if applicable
+  status: "pending" | "approved" | "rejected"; // Request status
+  createdAt: Date;
+  reviewedAt?: Date; // When master admin reviewed the request
+  reviewedBy?: string; // Master admin who reviewed
+  rejectionReason?: string; // Reason for rejection if applicable
+  approvedTeamId?: string; // Team ID if request was approved
 }

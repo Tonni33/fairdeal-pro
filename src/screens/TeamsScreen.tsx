@@ -181,13 +181,32 @@ const TeamsScreen: React.FC = () => {
   };
 
   // Filter user teams
-  const userTeams = useMemo(() => getUserTeams(user, teams), [user, teams]);
+  const userTeams = useMemo(
+    () => getUserTeams(user, teams, players),
+    [user, teams, players]
+  );
 
   // Filter events with generated teams
   const eventsWithTeams = useMemo(() => {
-    let filteredEvents = selectedTeamId
-      ? events.filter((event) => event.teamId === selectedTeamId)
-      : events;
+    let filteredEvents: Event[];
+
+    // Jos käyttäjä on valinnut tietyn joukkueen, näytä sen tapahtumat
+    if (selectedTeamId) {
+      filteredEvents = events.filter(
+        (event) => event.teamId === selectedTeamId
+      );
+    } else {
+      // Jos joukkuetta ei ole valittu, näytä vain niiden joukkueiden tapahtumat joissa käyttäjä on jäsenenä
+      if (userTeams.length > 0) {
+        const userTeamIds = userTeams.map((team) => team.id);
+        filteredEvents = events.filter(
+          (event) => event.teamId && userTeamIds.includes(event.teamId)
+        );
+      } else {
+        // Jos käyttäjä ei kuulu mihinkään joukkueeseen, älä näytä tapahtumia
+        filteredEvents = [];
+      }
+    }
 
     // Debug: Log all events and their generatedTeams
     console.log("=== TEAMS SCREEN DEBUG ===");
@@ -235,7 +254,7 @@ const TeamsScreen: React.FC = () => {
     return filteredEvents.sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
-  }, [events, selectedTeamId]);
+  }, [events, selectedTeamId, userTeams]);
 
   const onRefresh = async () => {
     setRefreshing(true);

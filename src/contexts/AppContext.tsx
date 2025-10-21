@@ -27,13 +27,19 @@ interface AppProviderProps {
 }
 
 // Palauttaa kaikki joukkueet, joissa käyttäjän sähköposti löytyy members-listasta tai on adminId
+// Ottaa myös huomioon pelaajan teamIds-kentän
 export function getUserTeams(
   user: { email: string; id?: string } | null | undefined,
-  teams: Team[]
+  teams: Team[],
+  players: Player[] = []
 ): Team[] {
   if (!user || !user.email) return [];
   const email = user.email;
   const userId = user.id;
+
+  // Find user's player record to get teamIds
+  const userPlayer = players.find((p) => p.email === email);
+  const playerTeamIds = userPlayer?.teamIds || [];
 
   const userTeams = teams.filter(
     (team) =>
@@ -42,13 +48,45 @@ export function getUserTeams(
       // Check if user is member by email (legacy support)
       (Array.isArray(team.members) && team.members.includes(email)) ||
       // Check if user is member by user ID (current format)
-      (userId && Array.isArray(team.members) && team.members.includes(userId))
+      (userId &&
+        Array.isArray(team.members) &&
+        team.members.includes(userId)) ||
+      // Check if user is member by playerId (for backwards compatibility)
+      (userPlayer?.playerId &&
+        Array.isArray(team.members) &&
+        team.members.includes(userPlayer.playerId)) ||
+      // Check if user's player record has this team ID
+      playerTeamIds.includes(team.id)
   );
+
   console.log(
     `getUserTeams: Käyttäjä ${email} (ID: ${userId}) kuuluu ${userTeams.length} joukkueeseen:`,
     userTeams.map((t) => t.name)
   );
+  console.log(`getUserTeams: Pelaajan teamIds:`, playerTeamIds);
   return userTeams;
+}
+
+// Palauttaa vain ne joukkueet joissa käyttäjä on admin
+export function getUserAdminTeams(
+  user: { uid: string; isMasterAdmin?: boolean } | null | undefined,
+  teams: Team[]
+): Team[] {
+  if (!user?.uid) return [];
+
+  // MasterAdmin näkee kaikki joukkueet
+  if (user.isMasterAdmin) return teams;
+
+  // Palauta vain joukkueet joissa käyttäjä on admin
+  const adminTeams = teams.filter(
+    (team) => team.adminIds?.includes(user.uid) || team.adminId === user.uid
+  );
+
+  console.log(
+    `getUserAdminTeams: Käyttäjä ${user.uid} on admin ${adminTeams.length} joukkueessa:`,
+    adminTeams.map((t) => t.name)
+  );
+  return adminTeams;
 }
 
 // Hakee pelaajan joukkuekohtaiset taidot
@@ -390,8 +428,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     loading,
     error,
     refreshData,
-    // getUserTeams voidaan käyttää myös contextin kautta, jos halutaan
-    // getUserTeams: (userArg, teamsArg) => getUserTeams(userArg, teamsArg ?? teams),
+    getUserAdminTeams,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

@@ -12,8 +12,10 @@ import {
   Image,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as LocalAuthentication from "expo-local-authentication";
 import { useAuth } from "../contexts/AuthContext";
 import { auth } from "../services/firebase";
+import { SecureStorage } from "../utils/secureStorage";
 import QuickAuth from "../components/QuickAuth";
 
 const LoginScreen: React.FC = () => {
@@ -47,6 +49,30 @@ const LoginScreen: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
+  // Auto-trigger biometric auth if available and enabled
+  useEffect(() => {
+    const autoTriggerBiometric = async () => {
+      // Only auto-trigger if:
+      // 1. Quick auth is available
+      // 2. Not already showing email login
+      // 3. Not in register mode
+      // 4. User is not already signed in
+      if (quickAuthAvailable && !showEmailLogin && !isRegister && !auth.currentUser) {
+        const biometricEnabled = await AsyncStorage.getItem("biometric_enabled");
+        
+        if (biometricEnabled === "true") {
+          console.log("Auto-triggering biometric authentication...");
+          // Small delay to ensure UI is ready
+          setTimeout(() => {
+            handleAutoBiometricAuth();
+          }, 500);
+        }
+      }
+    };
+
+    autoTriggerBiometric();
+  }, [quickAuthAvailable, showEmailLogin, isRegister]);
+
   // Re-check quick auth when component becomes visible again
   useEffect(() => {
     const focusListener = () => {
@@ -68,33 +94,12 @@ const LoginScreen: React.FC = () => {
   const checkQuickAuthAvailability = async () => {
     try {
       console.log("=== Checking Quick Auth Availability ===");
-      const biometricEnabled = await AsyncStorage.getItem("biometric_enabled");
-      const pinEnabled = await AsyncStorage.getItem("pin_enabled");
-      const wasLoggedIn = await AsyncStorage.getItem("was_logged_in");
-      const quickAuthEmail = await AsyncStorage.getItem("quick_auth_email");
-
-      console.log("Quick auth check:", {
-        biometricEnabled,
-        pinEnabled,
-        wasLoggedIn,
-        quickAuthEmail,
-        currentUser: auth.currentUser ? auth.currentUser.email : "none",
-      });
-
-      // Quick auth is available if:
-      // 1. User was previously logged in AND
-      // 2. Either biometric auth or PIN is enabled
-      const isAvailable =
-        wasLoggedIn === "true" &&
-        (biometricEnabled === "true" || pinEnabled === "true");
-
+      const isAvailable = await SecureStorage.isQuickAuthAvailable();
       console.log("Quick auth available:", isAvailable);
 
       // If user is already signed in with Firebase, we might not need quick auth UI
       if (auth.currentUser && isAvailable) {
-        console.log(
-          "User already signed in with Firebase and quick auth available"
-        );
+        console.log("User already signed in with Firebase and quick auth available");
       }
 
       setQuickAuthAvailable(isAvailable);
@@ -127,18 +132,20 @@ const LoginScreen: React.FC = () => {
         await signIn(email, password);
 
         // Mark that user has successfully logged in
-        await AsyncStorage.setItem("was_logged_in", "true");
+        await SecureStorage.setWasLoggedIn(true);
 
-        // Store encrypted credentials for quick auth (if user has biometric/PIN enabled)
-        const biometricEnabled = await AsyncStorage.getItem(
-          "biometric_enabled"
-        );
+        // Store credentials for quick auth if user has biometric/PIN enabled
+        const biometricEnabled = await AsyncStorage.getItem("biometric_enabled");
         const pinEnabled = await AsyncStorage.getItem("pin_enabled");
 
         if (biometricEnabled === "true" || pinEnabled === "true") {
           console.log("Storing credentials for quick auth...");
-          // Store email for quick auth (password should not be stored for security)
-          await AsyncStorage.setItem("quick_auth_email", email);
+          
+          // Store credentials securely
+          await SecureStorage.storeCredentials(email, password);
+          await SecureStorage.storeTempPassword(email, password);
+          
+          console.log("Credentials stored for automatic re-authentication");
         }
       }
     } catch (error: any) {
@@ -158,58 +165,89 @@ const LoginScreen: React.FC = () => {
 
     // Check if user is still signed in with Firebase
     const currentUser = auth.currentUser;
-    console.log(
-      "Current Firebase user:",
-      currentUser ? currentUser.email : "none"
-    );
+    console.log("Current Firebase user:", currentUser ? currentUser.email : "none");
 
     if (currentUser) {
-      console.log(
-        "✅ User is already signed in with Firebase, authentication complete!"
-      );
+      console.log("✅ User is already signed in with Firebase, authentication complete!");
       // User is already signed in, Firebase persistence worked
       // The AuthContext will handle navigation automatically
       return;
     } else {
-      console.log(
-        "⚠️ User not signed in with Firebase, but quick auth passed..."
-      );
+      console.log("⚠️ User not signed in with Firebase, but quick auth passed...");
 
-      // Check if we have stored credentials that we can use for silent re-auth
-      const storedEmail = await AsyncStorage.getItem("quick_auth_email");
+      // Check if we have stored credentials for auto re-authentication
+      const storedCredentials = await SecureStorage.getStoredCredentials();
 
-      if (storedEmail) {
-        console.log("Found stored email:", storedEmail);
-        console.log(
-          "📱 Firebase session expired but biometric/PIN auth succeeded"
-        );
-        console.log(
-          "This is normal behavior - Firebase sessions have limited lifetime for security"
-        );
-
-        // Don't automatically re-authenticate - this would require storing password
-        // Instead, inform user and provide easy re-login
-        Alert.alert(
-          "Istunto vanhentunut",
-          "Biometrinen tunnistus onnistui! Firebase-istunto on vanhentunut turvallisuussyistä. Syötä salasanasi kerran vahvistaaksesi kirjautumisen.",
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                setShowEmailLogin(true);
-                setEmail(storedEmail); // Pre-fill email
-              },
-            },
-          ]
-        );
+      if (storedCredentials) {
+        console.log("Found stored credentials, attempting auto re-login...");
+        
+        try {
+          await signIn(storedCredentials.email, storedCredentials.password);
+          console.log("✅ Auto re-login successful!");
+          // Mark successful login
+          await SecureStorage.setWasLoggedIn(true);
+          
+        } catch (error) {
+          console.error("Auto re-login failed:", error);
+          // Fall back to manual login
+          handleFallbackToManualLogin(storedCredentials.email);
+        }
       } else {
-        console.log("No stored email found");
-        Alert.alert(
-          "Kirjautuminen vaaditaan",
-          "Biometrinen tunnistus onnistui, mutta täydellinen kirjautuminen vaatii sähköpostin ja salasanan.",
-          [{ text: "OK", onPress: () => setShowEmailLogin(true) }]
-        );
+        console.log("No stored credentials found");
+        const quickAuthEmail = await SecureStorage.getQuickAuthEmail();
+        handleFallbackToManualLogin(quickAuthEmail);
       }
+    }
+  };
+
+  const handleFallbackToManualLogin = (storedEmail?: string | null) => {
+    Alert.alert(
+      "Istunto vanhentunut",
+      "Biometrinen tunnistus onnistui! Syötä salasanasi kerran vahvistaaksesi kirjautumisen.",
+      [
+        {
+          text: "OK",
+          onPress: () => {
+            setShowEmailLogin(true);
+            if (storedEmail) {
+              setEmail(storedEmail); // Pre-fill email
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Auto-trigger biometric authentication
+  const handleAutoBiometricAuth = async () => {
+    try {
+      console.log("Auto-triggering biometric authentication...");
+      
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: "Kirjaudu sisään",
+        fallbackLabel: "Käytä salasanaa",
+        cancelLabel: "Peruuta",
+        disableDeviceFallback: false,
+      });
+
+      console.log("Auto biometric auth result:", result);
+
+      if (result.success) {
+        console.log("Auto biometric auth successful!");
+        await handleQuickAuthSuccess();
+      } else if (result.error === "user_fallback") {
+        console.log("User chose fallback option");
+        setShowEmailLogin(true);
+      } else if (result.error === "user_cancel") {
+        console.log("User cancelled biometric auth, showing alternative options");
+        // Don't force email login, let user choose
+      } else {
+        console.log("Auto biometric auth failed:", result.error);
+        // Don't show error for auto-triggered auth
+      }
+    } catch (error) {
+      console.error("Auto biometric auth error:", error);
+      // Silently fail for auto-triggered auth
     }
   };
 

@@ -67,22 +67,109 @@ const EventsScreen: React.FC = () => {
 
   const navigation = useNavigation<EventsScreenNavigationProp>();
   const { user } = useAuth();
-  const { events, teams, loading, refreshData } = useApp();
+  const { events, teams, loading, refreshData, players } = useApp();
+
+  // Helper function to find player by any ID and enrich with Firebase Auth data
+  const findPlayerByAnyId = async (playerId: string) => {
+    console.log(
+      "DEBUG - EventsScreen findPlayerByAnyId called with:",
+      playerId
+    );
+
+    // First try to find in players array
+    let player = players.find((p) => p.id === playerId);
+    console.log("DEBUG - EventsScreen found in players array:", player);
+
+    // Always try to enrich with Firebase Auth data, even if found in players array
+    try {
+      const userRef = doc(db, "users", playerId);
+      const userSnap = await getDoc(userRef);
+
+      if (userSnap.exists()) {
+        const userData = userSnap.data();
+        console.log("DEBUG - EventsScreen found Firebase Auth user:", userData);
+        console.log(
+          "DEBUG - EventsScreen userData.displayName:",
+          userData.displayName
+        );
+        console.log("DEBUG - EventsScreen player?.name:", player?.name);
+
+        // Create enriched player object - prioritize legacy player name, then Firebase Auth displayName
+        const enrichedPlayer = {
+          id: playerId,
+          position: player?.position || "H",
+          skillLevel: player?.skillLevel || 5,
+          teamIds: player?.teamIds || [],
+          isActive: player?.isActive !== false,
+          ...player, // Include all legacy data
+          // Override with proper name resolution - prioritize legacy name, then Firebase displayName
+          name:
+            player?.name ||
+            userData.displayName ||
+            userData.email?.split("@")[0] ||
+            "Nimeä ei löydy",
+          email: userData.email || player?.email || "",
+        };
+
+        console.log("DEBUG - EventsScreen enriched player:", enrichedPlayer);
+        return enrichedPlayer;
+      }
+    } catch (error) {
+      console.error("DEBUG - EventsScreen error fetching user:", error);
+    }
+
+    if (player) {
+      // If found in players but no Firebase Auth data, return player as-is
+      return player;
+    }
+
+    // Return basic object with ID if nothing found
+    return {
+      id: playerId,
+      name: `ID: ${playerId}`,
+      email: "",
+      position: "H",
+      skillLevel: 5,
+      teamIds: [],
+      isActive: true,
+    };
+  };
 
   // Filtteröi joukkueet joissa nykyinen käyttäjä on mukana (sähköpostilla)
-  const userTeams = useMemo(() => getUserTeams(user, teams), [user, teams]);
+  const userTeams = useMemo(() => {
+    try {
+      console.log("EventsScreen: user =", user);
+      console.log("EventsScreen: teams count =", teams.length);
+      console.log("EventsScreen: players count =", players.length);
+      const result = getUserTeams(user, teams, players);
+      console.log("EventsScreen: userTeams =", result);
+      return result;
+    } catch (error) {
+      console.error("EventsScreen: Error in getUserTeams:", error);
+      return [];
+    }
+  }, [user, teams, players]);
 
   // Filtteröi tapahtumat valitun joukkueen mukaan
   const filteredEvents = useMemo(() => {
-    let filteredList = selectedTeamId
-      ? events.filter((event) => event.teamId === selectedTeamId)
-      : events;
+    let filteredList: Event[];
+
+    if (selectedTeamId) {
+      // Jos joukkue on valittu, näytä vain sen tapahtumat
+      filteredList = events.filter((event) => event.teamId === selectedTeamId);
+    } else {
+      // Jos "Kaikki joukkueet" valittu, näytä vain käyttäjän joukkueiden tapahtumat
+      const userTeamIds = userTeams.map((team) => team.id);
+      filteredList = events.filter(
+        (event) => event.teamId && userTeamIds.includes(event.teamId)
+      );
+    }
 
     // Järjestä tapahtumat ajan mukaan (uusin ylhäällä)
     return filteredList.sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
-  }, [events, selectedTeamId]);
+  }, [events, selectedTeamId, userTeams]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -131,13 +218,27 @@ const EventsScreen: React.FC = () => {
   const [registeredPlayers, setRegisteredPlayers] = useState<any[]>([]);
   const [reservePlayers, setReservePlayers] = useState<any[]>([]);
 
-  const { players } = useApp();
-
   // Hae nykyinen pelaaja käyttäjän sähköpostilla
   const currentPlayer = useMemo(() => {
     if (!user) return null;
-    return players.find((p) => p.email === user.email);
-  }, [user, players]);
+
+    // Prioritize Firebase Auth user ID for registration
+    const playerIdToUse = user.uid;
+    console.log(
+      "DEBUG - EventsScreen currentPlayer using Firebase Auth ID:",
+      playerIdToUse
+    );
+
+    return {
+      id: playerIdToUse,
+      name: user.displayName || user.email?.split("@")[0] || "Käyttäjä",
+      email: user.email || "",
+      position: "H",
+      skillLevel: 5,
+      teamIds: [],
+      isActive: true,
+    };
+  }, [user]);
 
   // Päivitä valittu tapahtuma kun events-data muuttuu
   useEffect(() => {
@@ -170,18 +271,34 @@ const EventsScreen: React.FC = () => {
       setIsReserve(
         selectedEvent.reservePlayers?.includes(currentPlayer.id) || false
       );
-      // Update registered players list
-      const registeredPlayerData = players.filter((player) =>
-        selectedEvent.registeredPlayers?.includes(player.id)
-      );
-      setRegisteredPlayers(registeredPlayerData);
-      // Update reserve players list
-      const reservePlayerData = players.filter((player) =>
-        selectedEvent.reservePlayers?.includes(player.id)
-      );
-      setReservePlayers(reservePlayerData);
 
-      console.log("EventsScreen: reservePlayerData:", reservePlayerData);
+      // Update registered players list with enriched data
+      const loadRegisteredPlayers = async () => {
+        const registeredPlayerData = [];
+        for (const playerId of selectedEvent.registeredPlayers || []) {
+          const player = await findPlayerByAnyId(playerId);
+          registeredPlayerData.push(player);
+        }
+        console.log(
+          "DEBUG - EventsScreen registered players:",
+          registeredPlayerData
+        );
+        setRegisteredPlayers(registeredPlayerData);
+      };
+
+      // Update reserve players list with enriched data
+      const loadReservePlayers = async () => {
+        const reservePlayerData = [];
+        for (const playerId of selectedEvent.reservePlayers || []) {
+          const player = await findPlayerByAnyId(playerId);
+          reservePlayerData.push(player);
+        }
+        console.log("DEBUG - EventsScreen reserve players:", reservePlayerData);
+        setReservePlayers(reservePlayerData);
+      };
+
+      loadRegisteredPlayers();
+      loadReservePlayers();
     } else {
       setIsRegistered(false);
       setIsReserve(false);
@@ -721,7 +838,9 @@ const EventsScreen: React.FC = () => {
                                         },
                                       ]}
                                     >
-                                      {player.name}
+                                      {player.name ||
+                                        player.email ||
+                                        `ID: ${player.id}`}
                                       {isGoalkeeper && " 🥅"}
                                     </Text>
                                     {player.email && (
@@ -790,7 +909,9 @@ const EventsScreen: React.FC = () => {
                                         },
                                       ]}
                                     >
-                                      {player.name}
+                                      {player.name ||
+                                        player.email ||
+                                        `ID: ${player.id}`}
                                       {isGoalkeeper && " 🥅"}
                                     </Text>
                                     {player.email && (

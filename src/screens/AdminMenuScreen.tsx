@@ -11,6 +11,7 @@ import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../types";
 import { useAuth } from "../contexts/AuthContext";
+import { useApp } from "../contexts/AppContext";
 
 type AdminMenuScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -20,8 +21,27 @@ type AdminMenuScreenNavigationProp = StackNavigationProp<
 const AdminMenuScreen: React.FC = () => {
   const navigation = useNavigation<AdminMenuScreenNavigationProp>();
   const { user } = useAuth();
+  const { teams, selectedTeamId } = useApp();
 
-  const userRole = (user as any)?.role;
+  // Check if user has admin privileges for the selected team
+  const isUserAdmin = (): boolean => {
+    if (!user?.uid) return false;
+
+    // Check if user is master admin
+    if (user.isMasterAdmin) return true;
+
+    // If no team is selected, don't show admin functions
+    if (!selectedTeamId) return false;
+
+    // Check if user is admin of the selected team
+    const selectedTeam = teams.find((team) => team.id === selectedTeamId);
+    if (!selectedTeam) return false;
+
+    return (
+      selectedTeam.adminIds?.includes(user.uid) ||
+      selectedTeam.adminId === user.uid
+    );
+  };
 
   const menuItems = [
     {
@@ -66,6 +86,7 @@ const AdminMenuScreen: React.FC = () => {
       description: "Luo ja hallinnoi joukkueita",
       adminOnly: true,
     },
+
     {
       title: "Asetukset",
       icon: "cog-outline",
@@ -94,7 +115,7 @@ const AdminMenuScreen: React.FC = () => {
 
         <View style={styles.menuItems}>
           {menuItems
-            .filter((item) => !item.adminOnly || userRole === "admin")
+            .filter((item) => !item.adminOnly || isUserAdmin())
             .map((item, index) => (
               <TouchableOpacity
                 key={index}

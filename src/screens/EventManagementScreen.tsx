@@ -24,10 +24,12 @@ import {
 } from "firebase/firestore";
 import { Button, Dialog, Portal } from "react-native-paper";
 import { db } from "../services/firebase";
-import { useApp } from "../contexts/AppContext";
+import { useApp, getUserAdminTeams } from "../contexts/AppContext";
+import { useAuth } from "../contexts/AuthContext";
 
 const EventManagementScreen: React.FC = () => {
   const navigation = useNavigation();
+  const { user } = useAuth();
   const { players, teams } = useApp();
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -142,8 +144,23 @@ const EventManagementScreen: React.FC = () => {
         ...doc.data(),
       }));
 
+      // Filter events to show only those from teams where user is admin
+      const userAdminTeams = getUserAdminTeams(user, teams);
+      const adminTeamIds = userAdminTeams.map((team) => team.id);
+
+      const filteredEvents = eventList.filter((event: any) => {
+        // If user is MasterAdmin, show all events
+        if (user?.isMasterAdmin) return true;
+
+        // If event has no teamId, don't show it (should belong to a team)
+        if (!event.teamId) return false;
+
+        // Show only events from teams where user is admin
+        return adminTeamIds.includes(event.teamId);
+      });
+
       // Sort events by date, newest first
-      const sortedEvents = eventList.sort((a: any, b: any) => {
+      const sortedEvents = filteredEvents.sort((a: any, b: any) => {
         const dateA = new Date(a.date || 0);
         const dateB = new Date(b.date || 0);
         return dateB.getTime() - dateA.getTime(); // Newest first
@@ -1091,7 +1108,7 @@ const EventManagementScreen: React.FC = () => {
                   // Sort goalkeepers to the end
                   if (a.position === "MV" && b.position !== "MV") return 1;
                   if (a.position !== "MV" && b.position === "MV") return -1;
-                  return a.name.localeCompare(b.name);
+                  return (a.name || "").localeCompare(b.name || "");
                 })
                 .map((player) => {
                   const isGoalkeeper = player.position === "MV";

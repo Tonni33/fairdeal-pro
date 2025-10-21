@@ -45,8 +45,39 @@ const UserProfileEditor: React.FC<UserProfileEditorProps> = ({
   const [teamCode, setTeamCode] = useState("");
   const [joiningTeam, setJoiningTeam] = useState(false);
 
-  // For now, just show team names
-  const userTeams = teams.filter((t) => player.teamIds.includes(t.id));
+  // Hae kaikki joukkueet joissa käyttäjä on mukana (sekä teamIds että team.members kautta)
+  const userTeams = teams.filter((team) => {
+    // Tarkista teamIds-kenttä
+    const inTeamByTeamIds = player.teamIds?.includes(team.id);
+    // Tarkista team.members-lista (Firebase Auth ID, email, tai playerId)
+    const inTeamByMembers =
+      team.members?.includes(player.id) ||
+      team.members?.includes(player.email) ||
+      team.members?.includes(player.playerId);
+
+    console.log(`UserProfileEditor: Team ${team.name}:`);
+    console.log(
+      `  - inTeamByTeamIds: ${inTeamByTeamIds} (player.teamIds: ${JSON.stringify(
+        player.teamIds
+      )})`
+    );
+    console.log(
+      `  - inTeamByMembers: ${inTeamByMembers} (team.members: ${JSON.stringify(
+        team.members
+      )})`
+    );
+    console.log(
+      `  - player.id: ${player.id}, player.email: ${player.email}, player.playerId: ${player.playerId}`
+    );
+
+    return inTeamByTeamIds || inTeamByMembers;
+  });
+
+  console.log(
+    `UserProfileEditor: Löytyi ${userTeams.length} joukkuetta pelaajalle ${
+      player.name || "Nimetön"
+    }`
+  );
 
   const handlePickImage = async () => {
     try {
@@ -119,8 +150,14 @@ const UserProfileEditor: React.FC<UserProfileEditorProps> = ({
       const teamDoc = querySnapshot.docs[0];
       const team = { id: teamDoc.id, ...teamDoc.data() } as Team;
 
-      // Tarkista onko pelaaja jo joukkueessa
-      if (player.teamIds.includes(team.id)) {
+      // Tarkista onko pelaaja jo joukkueessa (sekä teamIds että team.members kautta)
+      const alreadyInTeam =
+        player.teamIds?.includes(team.id) ||
+        team.members?.includes(player.id) ||
+        team.members?.includes(player.email) ||
+        team.members?.includes(player.playerId);
+
+      if (alreadyInTeam) {
         Alert.alert("Tiedoksi", "Olet jo tässä joukkueessa");
         setJoiningTeam(false);
         setJoinModalVisible(false);

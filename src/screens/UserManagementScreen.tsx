@@ -18,7 +18,11 @@ import { collection, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { RootStackParamList, Team, Player } from "../types";
 import { db } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
-import { useApp, getUserTeams } from "../contexts/AppContext";
+import {
+  useApp,
+  getUserTeams,
+  getUserAdminTeams,
+} from "../contexts/AppContext";
 
 type UserManagementScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -35,15 +39,17 @@ const UserManagementScreen: React.FC = () => {
     return Boolean(user && user.isMasterAdmin === true);
   };
 
-  // Filtteröi joukkueet: Master admin näkee kaikki, muut vain omat
+  // Filtteröi joukkueet: Admin näkee vain ne joukkueet joissa on admin
   const userTeams = useMemo(() => {
-    if (isMasterAdmin()) {
-      // Master admin näkee kaikki joukkueet
-      return teams;
-    } else {
-      // Tavalliset käyttäjät näkevät vain ne joukkueet joissa ovat mukana
-      return getUserTeams(user, teams);
+    if (!user || !user.uid) {
+      console.log("UserManagement: No user, returning empty teams array");
+      return [];
     }
+    if (teams.length === 0) {
+      return [];
+    }
+    // Käyttäjä näkee vain ne joukkueet joissa on admin-oikeudet
+    return getUserAdminTeams(user, teams);
   }, [user, teams]);
 
   // State
@@ -111,6 +117,17 @@ const UserManagementScreen: React.FC = () => {
 
     return sorted;
   }, [selectedTeam, allPlayers, teams, localTeamSkills]); // Poistettu teamPlayers riippuvuus
+
+  // Aseta ensimmäinen joukkue valituksi automaattisesti
+  useEffect(() => {
+    if (userTeams.length > 0 && !selectedTeam) {
+      console.log(
+        "UserManagement: Auto-selecting first team:",
+        userTeams[0].id
+      );
+      setSelectedTeam(userTeams[0].id);
+    }
+  }, [userTeams, selectedTeam]);
 
   // Modal states
   const [isTeamModalVisible, setIsTeamModalVisible] = useState(false);

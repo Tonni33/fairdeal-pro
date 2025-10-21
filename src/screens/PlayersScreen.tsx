@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -15,9 +15,11 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { doc, getDoc } from "firebase/firestore";
 import { Player, Team, RootStackParamList } from "../types";
 import { useAuth } from "../contexts/AuthContext";
 import { useApp, getUserTeams } from "../contexts/AppContext";
+import { db } from "../services/firebase";
 import AdminMenuButton from "../components/AdminMenuButton";
 
 type PlayersScreenNavigationProp = StackNavigationProp<
@@ -32,10 +34,155 @@ const PlayersScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [isTeamModalVisible, setIsTeamModalVisible] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [enrichedPlayers, setEnrichedPlayers] = useState<Player[]>([]);
   const { selectedTeamId, setSelectedTeamId } = useApp();
 
+  // Helper function to check if user is admin of selected team
+  const isSelectedTeamAdmin = (): boolean => {
+    if (!selectedTeamId || !user?.uid) return false;
+
+    // Check if user is master admin
+    if (user.isMasterAdmin) return true;
+
+    // Check if user is admin of the selected team
+    const team = teams.find((t) => t.id === selectedTeamId);
+    return team?.adminIds?.includes(user.uid) || team?.adminId === user.uid;
+  };
+
+  // Helper function to find player by any ID and enrich with Firebase Auth data
+  const findPlayerByAnyId = async (playerId: string) => {
+    console.log(
+      "DEBUG - PlayersScreen findPlayerByAnyId called with:",
+      playerId
+    );
+
+    // First try to find in players array
+    let player = players.find((p) => p.id === playerId);
+    console.log("DEBUG - PlayersScreen found in players array:", player);
+
+    // Always try to enrich with Firebase Auth data, even if found in players array
+    try {
+      const userRef = doc(db, "users", playerId);
+      const userSnap = await getDoc(userRef);
+
+      if (userSnap.exists()) {
+        const userData = userSnap.data();
+        console.log(
+          "DEBUG - PlayersScreen found Firebase Auth user:",
+          userData
+        );
+        console.log(
+          "DEBUG - PlayersScreen userData.displayName:",
+          userData.displayName
+        );
+        console.log("DEBUG - PlayersScreen player?.name:", player?.name);
+
+        // Create enriched player object - prioritize legacy player name, then Firebase Auth displayName
+        const enrichedPlayer = {
+          ...player, // Include all legacy data first
+          id: playerId,
+          // Override with proper name resolution - prioritize legacy name, then Firebase displayName
+          name:
+            player?.name ||
+            userData.displayName ||
+            userData.email?.split("@")[0] ||
+            "Nimeä ei löydy",
+          email: userData.email || player?.email || "",
+          // Ensure required fields have defaults
+          position: player?.position || "H",
+          skillLevel: player?.skillLevel || 5,
+          teamIds: player?.teamIds || [],
+          isActive: player?.isActive !== false,
+          category: player?.category || 2,
+          multiplier: player?.multiplier || 1,
+          isAdmin: player?.isAdmin || false,
+          playerId: player?.playerId || playerId,
+          points: player?.points || 0,
+          teamSkills: player?.teamSkills || {},
+          teams: player?.teams || [],
+          isGoalkeeper: player?.isGoalkeeper || false,
+          createdAt: player?.createdAt || new Date(),
+        };
+
+        console.log("DEBUG - PlayersScreen enriched player:", enrichedPlayer);
+        return enrichedPlayer;
+      }
+    } catch (error) {
+      console.error("DEBUG - PlayersScreen error fetching user:", error);
+    }
+
+    if (player) {
+      // If found in players but no Firebase Auth data, return player as-is
+      return player;
+    }
+
+    // Return basic object with ID if nothing found
+    return {
+      id: playerId,
+      name: `ID: ${playerId}`,
+      email: "",
+      position: "H",
+      skillLevel: 5,
+      teamIds: [],
+      isActive: true,
+      category: 2,
+      multiplier: 1,
+      isAdmin: false,
+      playerId: playerId,
+      points: 0,
+      teamSkills: {},
+      teams: [],
+      phone: "",
+      image: "",
+      notes: "",
+      licenceCode: "",
+      isGoalkeeper: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      createdBy: "",
+    } as Player;
+  };
+
+  // Enrich players with Firebase Auth data when players data changes
+  useEffect(() => {
+    const enrichPlayers = async () => {
+      if (!players || players.length === 0) {
+        setEnrichedPlayers([]);
+        return;
+      }
+
+      console.log("DEBUG - PlayersScreen enriching players:", players.length);
+      const enriched = [];
+
+      for (const player of players) {
+        const enrichedPlayer = await findPlayerByAnyId(player.id);
+        enriched.push(enrichedPlayer);
+      }
+
+      console.log(
+        "DEBUG - PlayersScreen enriched players count:",
+        enriched.length
+      );
+      setEnrichedPlayers(enriched);
+    };
+
+    enrichPlayers();
+  }, [players]);
+
   // Filtteröi joukkueet joissa nykyinen käyttäjä on mukana (sähköpostilla)
-  const userTeams = useMemo(() => getUserTeams(user, teams), [user, teams]);
+  const userTeams = useMemo(() => {
+    try {
+      console.log("PlayersScreen: user =", user);
+      console.log("PlayersScreen: teams count =", teams.length);
+      console.log("PlayersScreen: players count =", players.length);
+      const result = getUserTeams(user, teams, players);
+      console.log("PlayersScreen: userTeams =", result);
+      return result;
+    } catch (error) {
+      console.error("PlayersScreen: Error in getUserTeams:", error);
+      return [];
+    }
+  }, [user, teams, players]);
 
   const getSelectedTeamName = () => {
     if (!selectedTeamId) return "Kaikki joukkueet";
@@ -45,29 +192,59 @@ const PlayersScreen: React.FC = () => {
 
   // Filtteröi pelaajat valitun joukkueen mukaan
   const filteredPlayers = useMemo(() => {
-    let playersToFilter = players;
+    try {
+      console.log("PlayersScreen: Filtering players...");
+      console.log(
+        "PlayersScreen: enrichedPlayers count =",
+        enrichedPlayers.length
+      );
+      console.log("PlayersScreen: selectedTeamId =", selectedTeamId);
+      console.log("PlayersScreen: userTeams count =", userTeams.length);
 
-    if (selectedTeamId) {
-      const selectedTeam = teams.find((team) => team.id === selectedTeamId);
-      if (!selectedTeam) return [];
+      if (!enrichedPlayers || !Array.isArray(enrichedPlayers)) {
+        console.log("PlayersScreen: Invalid enrichedPlayers array");
+        return [];
+      }
 
-      // Käytetään sekä teamIds että members-kenttää varmuuden vuoksi
-      playersToFilter = players.filter((player) => {
-        const inTeamByTeamIds = player.teamIds?.includes(selectedTeamId);
-        const inTeamByMembers = selectedTeam.members.includes(player.id);
-        return inTeamByTeamIds || inTeamByMembers;
+      let playersToFilter: Player[];
+
+      if (selectedTeamId) {
+        const selectedTeam = teams.find((team) => team.id === selectedTeamId);
+        if (!selectedTeam) return [];
+
+        // Käytetään sekä teamIds että members-kenttää varmuuden vuoksi
+        playersToFilter = enrichedPlayers.filter((player) => {
+          const inTeamByTeamIds = player.teamIds?.includes(selectedTeamId);
+          const inTeamByMembers = selectedTeam.members?.includes(player.id);
+          return inTeamByTeamIds || inTeamByMembers;
+        });
+      } else {
+        // Jos "Kaikki joukkueet" valittu, näytä vain käyttäjän joukkueiden pelaajat
+        const userTeamIds = userTeams.map((team) => team.id).filter(Boolean);
+        playersToFilter = enrichedPlayers.filter((player) => {
+          // Pelaaja kuuluu johonkin käyttäjän joukkueeseen
+          return (
+            player.teamIds?.some((teamId) => userTeamIds.includes(teamId)) ||
+            userTeams.some((team) => team.members?.includes(player.id))
+          );
+        });
+      }
+
+      // Lajittele pelaajat aakkosjärjestykseen sukunimen perusteella
+      const sorted = playersToFilter.sort((a, b) => {
+        if (!a.name || !b.name) return 0;
+        const aLastName = a.name.split(" ").pop() || a.name;
+        const bLastName = b.name.split(" ").pop() || b.name;
+        return aLastName.localeCompare(bLastName, "fi");
       });
+
+      console.log("PlayersScreen: Filtered players count =", sorted.length);
+      return sorted;
+    } catch (error) {
+      console.error("PlayersScreen: Error in filteredPlayers:", error);
+      return [];
     }
-
-    // Lajittele pelaajat aakkosjärjestykseen sukunimen perusteella
-    const sorted = playersToFilter.sort((a, b) => {
-      const aLastName = a.name.split(" ").pop() || a.name;
-      const bLastName = b.name.split(" ").pop() || b.name;
-      return aLastName.localeCompare(bLastName, "fi");
-    });
-
-    return sorted;
-  }, [players, teams, selectedTeamId]);
+  }, [enrichedPlayers, teams, selectedTeamId, userTeams]);
 
   const handleAdminNavigation = (screen: string) => {
     if (screen === "AdminMenu") {
@@ -236,6 +413,18 @@ const PlayersScreen: React.FC = () => {
                 <Ionicons name="refresh" size={20} color="#007AFF" />
               </TouchableOpacity>
             )}
+
+            {/* Show admin button only if user is admin of selected team */}
+            {selectedTeamId && isSelectedTeamAdmin() && (
+              <TouchableOpacity
+                style={styles.adminButton}
+                onPress={() => navigation.navigate("TeamManagement")}
+              >
+                <Ionicons name="settings" size={20} color="#fff" />
+                <Text style={styles.adminButtonText}>Admin</Text>
+              </TouchableOpacity>
+            )}
+
             <AdminMenuButton onNavigate={handleAdminNavigation} />
           </View>
         </View>
@@ -709,6 +898,20 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 6,
     backgroundColor: "rgba(0, 122, 255, 0.1)",
+  },
+  adminButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FF6B35",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    gap: 6,
+  },
+  adminButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });
 

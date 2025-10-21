@@ -21,7 +21,11 @@ import { collection, addDoc } from "firebase/firestore";
 import { RootStackParamList } from "../types";
 import { db } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
-import { useApp, getUserTeams } from "../contexts/AppContext";
+import {
+  useApp,
+  getUserTeams,
+  getUserAdminTeams,
+} from "../contexts/AppContext";
 import { getEventDefaults, formatTimeString } from "../utils/eventDefaults";
 
 type CreateEventScreenNavigationProp = StackNavigationProp<
@@ -62,13 +66,14 @@ const CreateEventScreen: React.FC = () => {
   // Get user teams (memoized to avoid repeated logs)
   // Master admin sees all teams, others see only their own
   const userTeams = React.useMemo(() => {
-    if (isMasterAdmin()) {
-      // Master admin näkee kaikki joukkueet
-      return teams;
-    } else {
-      // Tavalliset käyttäjät näkevät vain ne joukkueet joissa ovat mukana
-      return getUserTeams(user, teams);
+    if (!user || !user.uid) {
+      console.log("CreateEventScreen: No user, returning empty teams array");
+      return [];
     }
+    if (teams.length === 0) {
+      return [];
+    }
+    return getUserAdminTeams(user, teams);
   }, [user, teams]);
 
   // Common time presets

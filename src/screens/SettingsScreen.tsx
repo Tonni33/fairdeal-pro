@@ -103,6 +103,13 @@ const SettingsScreen: React.FC = () => {
     loadUsersWithoutPassword();
   }, []);
 
+  // Reload users when selected team changes
+  useEffect(() => {
+    if (selectedTeamId) {
+      loadUsersWithoutPassword();
+    }
+  }, [selectedTeamId]);
+
   const loadSettings = async () => {
     try {
       // Load global settings
@@ -145,15 +152,22 @@ const SettingsScreen: React.FC = () => {
         ...doc.data(),
       })) as any[];
 
-      // Find users who don't have a password or need password change
+      // Find users who need password change or don't have Firebase Auth account
       const usersWithoutAuth: UserWithoutPassword[] = [];
 
       for (const user of usersData) {
-        // Check if user has email but no password field or needs password change
-        if (
-          user.email &&
-          (!user.password || user.needsPasswordChange === true)
-        ) {
+        // Check if user needs password change (meaning they don't have a proper password yet)
+        if (user.email && user.needsPasswordChange === true) {
+          // If we're in team mode and have a selected team, filter by team membership
+          if (activeTab === "team" && selectedTeamId) {
+            // Check if user belongs to the selected team
+            const belongsToTeam = user.teamIds?.includes(selectedTeamId);
+
+            if (!belongsToTeam) {
+              continue; // Skip users not in the selected team
+            }
+          }
+
           usersWithoutAuth.push({
             id: user.id,
             email: user.email,
@@ -245,31 +259,56 @@ const SettingsScreen: React.FC = () => {
   };
 
   const createPasswordsForSelectedUsers = async () => {
-    const selectedUsers = usersWithoutPassword.filter((user) => user.selected);
-
-    if (selectedUsers.length === 0) {
-      Alert.alert("Virhe", "Valitse vähintään yksi käyttäjä");
-      return;
-    }
-
-    if (!commonPassword || commonPassword.length < 6) {
-      Alert.alert("Virhe", "Salasanan tulee olla vähintään 6 merkkiä pitkä");
-      return;
-    }
-
-    setCreatingPasswords(true);
-    let successCount = 0;
-    let errorCount = 0;
-
     try {
+      console.log("Starting password creation process...");
+
+      const selectedUsers = usersWithoutPassword.filter(
+        (user) => user.selected
+      );
+      console.log("Selected users:", selectedUsers.length);
+
+      if (selectedUsers.length === 0) {
+        Alert.alert("Virhe", "Valitse vähintään yksi käyttäjä");
+        return;
+      }
+
+      if (!commonPassword || commonPassword.length < 6) {
+        Alert.alert("Virhe", "Salasanan tulee olla vähintään 6 merkkiä pitkä");
+        return;
+      }
+
+      // Check if auth is properly initialized
+      if (!auth) {
+        console.error("Firebase Auth not initialized");
+        Alert.alert("Virhe", "Autentikointi ei ole käytettävissä");
+        return;
+      }
+
+      setCreatingPasswords(true);
+      let successCount = 0;
+      let errorCount = 0;
+      const errors: string[] = [];
+
       for (const userToCreate of selectedUsers) {
         try {
+          console.log(`Creating user: ${userToCreate.email}`);
+
+          // Validate email format
+          if (!userToCreate.email || !userToCreate.email.includes("@")) {
+            console.error(`Invalid email: ${userToCreate.email}`);
+            errors.push(`Virheellinen sähköpostiosoite: ${userToCreate.email}`);
+            errorCount++;
+            continue;
+          }
+
           // Create Firebase Auth user
           const userCredential = await createUserWithEmailAndPassword(
             auth,
             userToCreate.email,
             commonPassword
           );
+
+          console.log(`Auth user created for: ${userToCreate.email}`);
 
           // Create user document in Firestore
           await setDoc(doc(db, "users", userCredential.user.uid), {
@@ -278,36 +317,56 @@ const SettingsScreen: React.FC = () => {
             isAdmin: false,
             playerId: userToCreate.id,
             createdAt: new Date(),
-            needsPasswordChange: true, // Flag to force password change on first login
-            createdBy: user?.email,
+            needsPasswordChange: false, // Password has been created, so no change needed
+            createdBy: user?.email || "unknown",
           });
 
+          console.log(`Firestore document created for: ${userToCreate.email}`);
           successCount++;
         } catch (error: any) {
           console.error(`Error creating user ${userToCreate.email}:`, error);
+          const errorMessage = error?.message || "Tuntematon virhe";
+          errors.push(`${userToCreate.email}: ${errorMessage}`);
           errorCount++;
         }
       }
 
-      // Show result
+      // Show detailed result
       let message = "";
       if (successCount > 0) {
-        message += `${successCount} käyttäjätiliä luotu onnistuneesti. `;
+        message += `✅ ${successCount} käyttäjätiliä luotu onnistuneesti.\n`;
       }
       if (errorCount > 0) {
-        message += `${errorCount} käyttäjätiliä ei voitu luoda. `;
+        message += `❌ ${errorCount} käyttäjätiliä ei voitu luoda.\n`;
+        if (errors.length > 0) {
+          message += `\nVirheet:\n${errors.slice(0, 3).join("\n")}`;
+          if (errors.length > 3) {
+            message += `\n... ja ${errors.length - 3} muuta virhettä`;
+          }
+        }
       }
-      message += `\n\nYleissalasana: ${commonPassword}\n\nJaa tämä salasana käyttäjille turvallisesti.`;
 
-      Alert.alert("Tulos", message);
+      if (successCount > 0) {
+        message += `\n\n🔑 Yleissalasana: ${commonPassword}\n\n⚠️ Jaa tämä salasana käyttäjille turvallisesti.`;
+      }
 
-      // Refresh the list
-      await loadUsersWithoutPassword();
+      Alert.alert("Salasanojen luonti", message);
+
+      // Refresh the list only if we had some success
+      if (successCount > 0) {
+        await loadUsersWithoutPassword();
+      }
+
       setPasswordModalVisible(false);
       setCommonPassword("FairDeal2025!");
-    } catch (error) {
-      console.error("Error creating passwords:", error);
-      Alert.alert("Virhe", "Salasanojen luominen epäonnistui");
+    } catch (error: any) {
+      console.error("Critical error in password creation:", error);
+      Alert.alert(
+        "Kriittinen virhe",
+        `Salasanojen luominen epäonnistui: ${
+          error?.message || "Tuntematon virhe"
+        }`
+      );
     } finally {
       setCreatingPasswords(false);
     }
@@ -618,8 +677,27 @@ const SettingsScreen: React.FC = () => {
             </View>
 
             <TouchableOpacity
-              style={styles.createPasswordsButton}
-              onPress={() => setPasswordModalVisible(true)}
+              style={[
+                styles.createPasswordsButton,
+                usersWithoutPassword.filter((u) => u.selected).length === 0 &&
+                  styles.disabledButton,
+              ]}
+              onPress={() => {
+                const selectedCount = usersWithoutPassword.filter(
+                  (u) => u.selected
+                ).length;
+                if (selectedCount === 0) {
+                  Alert.alert(
+                    "Huomio",
+                    "Valitse ensin vähintään yksi käyttäjä salasanan luontia varten."
+                  );
+                  return;
+                }
+                setPasswordModalVisible(true);
+              }}
+              disabled={
+                usersWithoutPassword.filter((u) => u.selected).length === 0
+              }
             >
               <Ionicons
                 name="key"
@@ -628,7 +706,8 @@ const SettingsScreen: React.FC = () => {
                 style={{ marginRight: 8 }}
               />
               <Text style={styles.createPasswordsText}>
-                Luo salasanat valituille
+                Luo salasanat valituille (
+                {usersWithoutPassword.filter((u) => u.selected).length})
               </Text>
             </TouchableOpacity>
           </View>
@@ -702,12 +781,19 @@ const SettingsScreen: React.FC = () => {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.modalButton, styles.createButton]}
+                style={[
+                  styles.modalButton,
+                  styles.createButton,
+                  (!commonPassword.trim() || creatingPasswords) &&
+                    styles.disabledButton,
+                ]}
                 onPress={createPasswordsForSelectedUsers}
                 disabled={!commonPassword.trim() || creatingPasswords}
               >
                 {creatingPasswords ? (
-                  <Text style={styles.createButtonText}>Luodaan...</Text>
+                  <View style={styles.loadingContainer}>
+                    <Text style={styles.createButtonText}>Luodaan...</Text>
+                  </View>
                 ) : (
                   <Text style={styles.createButtonText}>Luo salasanat</Text>
                 )}
@@ -1091,6 +1177,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "white",
     fontWeight: "500",
+  },
+  disabledButton: {
+    backgroundColor: "#ccc",
+    opacity: 0.6,
   },
 });
 

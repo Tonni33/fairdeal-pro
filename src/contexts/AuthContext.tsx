@@ -12,6 +12,7 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { auth, db } from "../services/firebase";
 import { AuthContextType, User } from "../types";
+import { SecureStorage } from "../utils/secureStorage";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -177,16 +178,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const pinEnabled = await AsyncStorage.getItem("pin_enabled");
 
       if (biometricEnabled === "true" || pinEnabled === "true") {
-        // Keep was_logged_in flag and email if user has quick auth enabled
-        console.log(
-          "Keeping was_logged_in flag and email because biometric/PIN auth is enabled"
-        );
-        // Don't remove quick_auth_email - it's needed for quick auth
+        // Keep was_logged_in flag and credentials if user has quick auth enabled
+        console.log("Keeping was_logged_in flag and credentials because biometric/PIN auth is enabled");
+        // Don't remove credentials - they're needed for quick auth
       } else {
-        // Clear all login-related flags if no quick auth
-        console.log("Clearing all login flags - no quick auth enabled");
-        await AsyncStorage.removeItem("was_logged_in");
-        await AsyncStorage.removeItem("quick_auth_email");
+        // Clear all login-related flags and credentials if no quick auth
+        console.log("Clearing all login flags and credentials - no quick auth enabled");
+        await SecureStorage.setWasLoggedIn(false);
+        await SecureStorage.clearCredentials();
       }
 
       console.log("Signed out successfully");

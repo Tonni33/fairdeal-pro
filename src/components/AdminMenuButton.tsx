@@ -2,6 +2,7 @@ import React from "react";
 import { TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../contexts/AuthContext";
+import { useApp } from "../contexts/AppContext";
 
 interface AdminMenuButtonProps {
   onNavigate?: (screen: string) => void;
@@ -9,14 +10,30 @@ interface AdminMenuButtonProps {
 
 const AdminMenuButton: React.FC<AdminMenuButtonProps> = ({ onNavigate }) => {
   const { user } = useAuth();
+  const { teams, selectedTeamId } = useApp();
 
-  // Only show for admin users - check if user exists first
-  if (!user) {
-    return null;
-  }
+  // Check if user has admin privileges for the selected team
+  const isUserAdmin = (): boolean => {
+    if (!user?.uid) return false;
 
-  const userRole = (user as any).role;
-  if (userRole !== "admin") {
+    // Check if user is master admin
+    if (user.isMasterAdmin) return true;
+
+    // If no team is selected, don't show admin button
+    if (!selectedTeamId) return false;
+
+    // Check if user is admin of the selected team
+    const selectedTeam = teams.find((team) => team.id === selectedTeamId);
+    if (!selectedTeam) return false;
+
+    return (
+      selectedTeam.adminIds?.includes(user.uid) ||
+      selectedTeam.adminId === user.uid
+    );
+  };
+
+  // Only show for users with admin privileges
+  if (!user || !isUserAdmin()) {
     return null;
   }
 

@@ -1,4 +1,4 @@
-<!-- Use this file to provide workspace-specific custom instructions to Copilot. For more details, visit https://code.visualstudio.com/docs/copilot/copilot-customization#_use-a-githubcopilotinstructionsmd-file -->
+<!-- Use this file to provide workspace-specific custom instructions to Copilot. -->
 
 # FairDealPro - Expo React Native Project Instructions
 
@@ -76,3 +76,13 @@ src/
 - Preserve existing business logic and algorithms
 - Focus on mobile-first user experience
 - Implement native mobile patterns and interactions
+
+```
+
+## Important Notes
+
+- This project migrates from a React web application
+- Preserve existing business logic and algorithms
+- Focus on mobile-first user experience
+- Implement native mobile patterns and interactions
+```

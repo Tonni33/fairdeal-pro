@@ -269,23 +269,37 @@ const QuickAuth: React.FC<QuickAuthProps> = ({ onSuccess, onFallback }) => {
         </View>
       ) : (
         <View style={styles.authOptionsContainer}>
-          {biometricEnabled && biometricAvailable && (
-            <TouchableOpacity
-              style={styles.authButton}
-              onPress={handleBiometricAuth}
-              disabled={loading}
+          {/* Show biometric status message */}
+          {biometricAvailable && (
+            <View
+              style={[
+                styles.biometricStatusContainer,
+                biometricEnabled
+                  ? styles.biometricStatusActive
+                  : styles.biometricStatusInactive,
+              ]}
             >
               <Ionicons
-                name={Platform.OS === "ios" ? "scan-outline" : "finger-print"}
-                size={32}
-                color="#1976d2"
+                name={biometricEnabled ? "checkmark-circle" : "alert-circle"}
+                size={20}
+                color={biometricEnabled ? "#4caf50" : "#ff9800"}
               />
-              <Text style={styles.authButtonText}>
-                Kirjaudu {biometricType.toLowerCase()}lla
+              <Text
+                style={[
+                  styles.biometricStatusText,
+                  biometricEnabled
+                    ? styles.biometricStatusTextActive
+                    : styles.biometricStatusTextInactive,
+                ]}
+              >
+                {biometricEnabled
+                  ? `${biometricType} aktiivinen`
+                  : `${biometricType} ei käytössä`}
               </Text>
-            </TouchableOpacity>
+            </View>
           )}
 
+          {/* PIN option as backup */}
           {pinEnabled && (
             <TouchableOpacity
               style={styles.authButton}
@@ -293,7 +307,7 @@ const QuickAuth: React.FC<QuickAuthProps> = ({ onSuccess, onFallback }) => {
               disabled={loading}
             >
               <Ionicons name="keypad-outline" size={32} color="#1976d2" />
-              <Text style={styles.authButtonText}>Kirjaudu PIN-koodilla</Text>
+              <Text style={styles.authButtonText}>Käytä PIN-koodia</Text>
             </TouchableOpacity>
           )}
 
@@ -423,6 +437,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     fontWeight: "500",
+  },
+  biometricStatusContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 15,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 15,
+  },
+  biometricStatusActive: {
+    backgroundColor: "#f1f8e9",
+    borderColor: "#c8e6c9",
+  },
+  biometricStatusInactive: {
+    backgroundColor: "#fff8e1",
+    borderColor: "#ffcc02",
+  },
+  biometricStatusText: {
+    fontSize: 16,
+    marginLeft: 8,
+    fontWeight: "500",
+  },
+  biometricStatusTextActive: {
+    color: "#4caf50",
+  },
+  biometricStatusTextInactive: {
+    color: "#ff9800",
   },
 });
 
