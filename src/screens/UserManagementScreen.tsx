@@ -108,6 +108,8 @@ const UserManagementScreen: React.FC = () => {
         teamIds: player.teamIds,
         inTeamByTeamIds,
         inTeamByMembers,
+        name: player.name,
+        nameIsEmpty: !player.name || !player.name.trim(),
       });
 
       return inTeamByTeamIds || inTeamByMembers;
@@ -117,8 +119,8 @@ const UserManagementScreen: React.FC = () => {
 
     // Lajittele pelaajat aakkosjärjestykseen sukunimen perusteella
     const sorted = filtered.sort((a, b) => {
-      const aName = a.name || a.email || "Tuntematon";
-      const bName = b.name || b.email || "Tuntematon";
+      const aName = (a.name && a.name.trim()) || a.email || "Tuntematon";
+      const bName = (b.name && b.name.trim()) || b.email || "Tuntematon";
       const aLastName = aName.split(" ").pop() || aName;
       const bLastName = bName.split(" ").pop() || bName;
       return aLastName.localeCompare(bLastName, "fi");
@@ -777,7 +779,9 @@ const UserManagementScreen: React.FC = () => {
                             },
                           ]}
                         >
-                          {player.name}
+                          {(player.name && player.name.trim()) ||
+                            player.email ||
+                            "Tuntematon"}
                           {isGoalkeeper && " 🥅"}
                         </Text>
                         <Text style={styles.playerDetails}>
@@ -793,6 +797,10 @@ const UserManagementScreen: React.FC = () => {
                               {" • " + playerRole}
                             </Text>
                           )}
+                        </Text>
+                        <Text style={styles.playerContact}>
+                          {player.email}
+                          {player.phone && ` • ${player.phone}`}
                         </Text>
                       </View>
                       <Ionicons name="chevron-forward" size={20} color="#666" />
@@ -1290,6 +1298,11 @@ const styles = StyleSheet.create({
   playerDetails: {
     fontSize: 14,
     color: "#666",
+  },
+  playerContact: {
+    fontSize: 12,
+    color: "#999",
+    marginTop: 2,
   },
   playerTeamIndicator: {
     position: "absolute",

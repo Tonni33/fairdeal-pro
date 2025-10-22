@@ -214,7 +214,11 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
             }
             playersData.push({
               id: doc.id,
-              name: data.name,
+              name:
+                (data.name && data.name.trim()) ||
+                data.displayName ||
+                data.email ||
+                "",
               email: data.email,
               phone: data.phone || "",
               category: data.category || "Intermediate",

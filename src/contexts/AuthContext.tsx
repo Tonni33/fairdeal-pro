@@ -69,6 +69,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               id: firebaseUser.uid,
               uid: firebaseUser.uid, // Add uid field
               email: firebaseUser.email!,
+              name: userData.name || firebaseUser.displayName,
               displayName: firebaseUser.displayName || userData.displayName,
               role: userData.isAdmin ? "admin" : "user", // Check isAdmin field
               isAdmin: userData.isAdmin || false, // Add isAdmin field for compatibility
@@ -83,6 +84,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               id: firebaseUser.uid,
               uid: firebaseUser.uid,
               email: firebaseUser.email!,
+              name: firebaseUser.displayName || "",
               displayName: firebaseUser.displayName || "",
               role: "user",
               createdAt: new Date(),
@@ -105,6 +107,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               id: firebaseUser.uid,
               uid: firebaseUser.uid,
               email: firebaseUser.email!,
+              name: firebaseUser.displayName || "",
               displayName: firebaseUser.displayName || "",
               role: "user",
               createdAt: new Date(),
@@ -160,6 +163,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         id: result.user.uid,
         uid: result.user.uid,
         email: result.user.email!,
+        name: displayName || "",
         displayName: displayName || "",
         role: "user",
         createdAt: new Date(),

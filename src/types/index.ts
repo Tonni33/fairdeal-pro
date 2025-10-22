@@ -193,6 +193,7 @@ export interface User {
   id: string;
   uid: string; // Firebase auth UID
   email: string;
+  name?: string; // User's full name
   displayName?: string;
   role: "admin" | "user";
   isAdmin?: boolean; // Legacy admin field for compatibility
