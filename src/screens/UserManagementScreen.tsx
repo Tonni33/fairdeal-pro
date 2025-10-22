@@ -69,6 +69,16 @@ const UserManagementScreen: React.FC = () => {
     console.log("Team changed, cleared local team skills cache");
   };
 
+  // Debug: Log data changes
+  useEffect(() => {
+    console.log(
+      "UserManagement: Data updated - Players:",
+      allPlayers.length,
+      "Teams:",
+      teams.length
+    );
+  }, [allPlayers, teams]);
+
   // Filtteröi pelaajat valitun joukkueen mukaan
   const filteredPlayers = useMemo(() => {
     console.log("UserManagement: Filtering players for team:", selectedTeam);
@@ -93,25 +103,24 @@ const UserManagementScreen: React.FC = () => {
     const filtered = allPlayers.filter((player) => {
       const inTeamByTeamIds = player.teamIds?.includes(selectedTeam);
       const inTeamByMembers = selectedTeamData.members.includes(player.id);
-      const inTeamByTeams = player.teams?.includes(selectedTeam);
 
-      console.log(`UserManagement: Player ${player.name}:`, {
+      console.log(`UserManagement: Player ${player.name || player.email}:`, {
         teamIds: player.teamIds,
-        teams: player.teams,
         inTeamByTeamIds,
         inTeamByMembers,
-        inTeamByTeams,
       });
 
-      return inTeamByTeamIds || inTeamByMembers || inTeamByTeams;
+      return inTeamByTeamIds || inTeamByMembers;
     });
 
     console.log("UserManagement: Filtered players count:", filtered.length);
 
     // Lajittele pelaajat aakkosjärjestykseen sukunimen perusteella
     const sorted = filtered.sort((a, b) => {
-      const aLastName = a.name.split(" ").pop() || a.name;
-      const bLastName = b.name.split(" ").pop() || b.name;
+      const aName = a.name || a.email || "Tuntematon";
+      const bName = b.name || b.email || "Tuntematon";
+      const aLastName = aName.split(" ").pop() || aName;
+      const bLastName = bName.split(" ").pop() || bName;
       return aLastName.localeCompare(bLastName, "fi");
     });
 

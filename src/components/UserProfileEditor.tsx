@@ -180,6 +180,11 @@ const UserProfileEditor: React.FC<UserProfileEditorProps> = ({
       Alert.alert("Onnistui!", `Liityit joukkueeseen: ${team.name}`);
       setJoinModalVisible(false);
       setTeamCode("");
+
+      // Kutsu onSave-callbackia päivittääksemme datan
+      if (onSave) {
+        onSave();
+      }
     } catch (error) {
       console.error("Error joining team:", error);
       Alert.alert("Virhe", "Joukkueeseen liittyminen epäonnistui");
@@ -210,6 +215,11 @@ const UserProfileEditor: React.FC<UserProfileEditorProps> = ({
               });
 
               Alert.alert("Onnistui", `Poistuit joukkueesta: ${teamName}`);
+
+              // Kutsu onSave-callbackia päivittääksemme datan
+              if (onSave) {
+                onSave();
+              }
             } catch (error) {
               console.error("Error leaving team:", error);
               Alert.alert("Virhe", "Joukkueesta poistuminen epäonnistui");

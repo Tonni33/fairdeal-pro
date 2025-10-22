@@ -232,9 +232,10 @@ const PlayersScreen: React.FC = () => {
 
       // Lajittele pelaajat aakkosjärjestykseen sukunimen perusteella
       const sorted = playersToFilter.sort((a, b) => {
-        if (!a.name || !b.name) return 0;
-        const aLastName = a.name.split(" ").pop() || a.name;
-        const bLastName = b.name.split(" ").pop() || b.name;
+        const aName = a.name || a.email || "Tuntematon";
+        const bName = b.name || b.email || "Tuntematon";
+        const aLastName = aName.split(" ").pop() || aName;
+        const bLastName = bName.split(" ").pop() || bName;
         return aLastName.localeCompare(bLastName, "fi");
       });
 
@@ -401,30 +402,6 @@ const PlayersScreen: React.FC = () => {
             </Text>
           </View>
           <View style={styles.headerButtons}>
-            {__DEV__ && (
-              <TouchableOpacity
-                style={styles.debugRefreshButton}
-                onPress={async () => {
-                  console.log("Manual refresh triggered");
-                  await refreshData();
-                  console.log("Manual refresh completed");
-                }}
-              >
-                <Ionicons name="refresh" size={20} color="#007AFF" />
-              </TouchableOpacity>
-            )}
-
-            {/* Show admin button only if user is admin of selected team */}
-            {selectedTeamId && isSelectedTeamAdmin() && (
-              <TouchableOpacity
-                style={styles.adminButton}
-                onPress={() => navigation.navigate("TeamManagement")}
-              >
-                <Ionicons name="settings" size={20} color="#fff" />
-                <Text style={styles.adminButtonText}>Admin</Text>
-              </TouchableOpacity>
-            )}
-
             <AdminMenuButton onNavigate={handleAdminNavigation} />
           </View>
         </View>
@@ -893,25 +870,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-  },
-  debugRefreshButton: {
-    padding: 8,
-    borderRadius: 6,
-    backgroundColor: "rgba(0, 122, 255, 0.1)",
-  },
-  adminButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FF6B35",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
-    gap: 6,
-  },
-  adminButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
   },
 });
 

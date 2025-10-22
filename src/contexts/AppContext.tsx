@@ -89,6 +89,42 @@ export function getUserAdminTeams(
   return adminTeams;
 }
 
+// Tarkistaa onko käyttäjä ainoa admin jossain joukkueessa
+export function isUserSoleAdminInAnyTeam(
+  user: { uid: string; isMasterAdmin?: boolean } | null | undefined,
+  teams: Team[]
+): boolean {
+  if (!user?.uid) return false;
+
+  // MasterAdmin ei ole koskaan ainoa admin
+  if (user.isMasterAdmin) return false;
+
+  // Tarkista jokainen joukkue jossa käyttäjä on admin
+  const adminTeams = getUserAdminTeams(user, teams);
+
+  for (const team of adminTeams) {
+    let adminCount = 0;
+
+    // Laske kaikki adminit (vanhassa adminId kentässä)
+    if (team.adminId) adminCount++;
+
+    // Laske adminIds-listassa olevat adminit
+    if (team.adminIds && team.adminIds.length > 0) {
+      adminCount += team.adminIds.length;
+    }
+
+    // Jos käyttäjä on ainoa admin tässä joukkueessa
+    if (adminCount === 1) {
+      console.log(
+        `isUserSoleAdminInAnyTeam: Käyttäjä ${user.uid} on ainoa admin joukkueessa ${team.name}`
+      );
+      return true;
+    }
+  }
+
+  return false;
+}
+
 // Hakee pelaajan joukkuekohtaiset taidot
 export function getPlayerTeamSkills(
   playerId: string,
@@ -429,6 +465,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     error,
     refreshData,
     getUserAdminTeams,
+    isUserSoleAdminInAnyTeam,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

@@ -6,9 +6,19 @@ import {
   onAuthStateChanged,
   updateProfile,
   updatePassword,
+  deleteUser,
   User as FirebaseUser,
 } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  deleteDoc,
+  updateDoc,
+  arrayRemove,
+  collection,
+  getDocs,
+} from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { auth, db } from "../services/firebase";
 import { AuthContextType, User } from "../types";
@@ -179,11 +189,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (biometricEnabled === "true" || pinEnabled === "true") {
         // Keep was_logged_in flag and credentials if user has quick auth enabled
-        console.log("Keeping was_logged_in flag and credentials because biometric/PIN auth is enabled");
+        console.log(
+          "Keeping was_logged_in flag and credentials because biometric/PIN auth is enabled"
+        );
         // Don't remove credentials - they're needed for quick auth
       } else {
         // Clear all login-related flags and credentials if no quick auth
-        console.log("Clearing all login flags and credentials - no quick auth enabled");
+        console.log(
+          "Clearing all login flags and credentials - no quick auth enabled"
+        );
         await SecureStorage.setWasLoggedIn(false);
         await SecureStorage.clearCredentials();
       }
@@ -205,6 +219,48 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const deleteAccount = async (): Promise<void> => {
+    try {
+      if (!auth.currentUser || !user) {
+        throw new Error("Käyttäjä ei ole kirjautunut sisään");
+      }
+
+      const userId = auth.currentUser.uid;
+
+      // Remove user from all teams' member lists
+      const teamsSnapshot = await getDocs(collection(db, "teams"));
+      const updatePromises = [];
+
+      for (const teamDoc of teamsSnapshot.docs) {
+        const teamData = teamDoc.data();
+        const teamId = teamDoc.id;
+
+        // Check if user is in members array
+        if (teamData.members && teamData.members.includes(userId)) {
+          updatePromises.push(
+            updateDoc(doc(db, "teams", teamId), {
+              members: arrayRemove(userId),
+            })
+          );
+        }
+      }
+
+      // Wait for all team updates to complete
+      await Promise.all(updatePromises);
+
+      // Delete user document from Firestore
+      await deleteDoc(doc(db, "users", userId));
+
+      // Delete the Firebase Auth account
+      await deleteUser(auth.currentUser);
+
+      // Clear local state
+      setUser(null);
+    } catch (error: any) {
+      throw new Error(error.message);
+    }
+  };
+
   const value: AuthContextType = {
     user,
     loading,
@@ -212,6 +268,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     signUp,
     signOut,
     changePassword,
+    deleteAccount,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -284,6 +284,7 @@ export interface AuthContextType {
   ) => Promise<void>;
   signOut: () => Promise<void>;
   changePassword: (newPassword: string) => Promise<void>;
+  deleteAccount: () => Promise<void>;
 }
 
 export interface AppContextType {
@@ -302,6 +303,10 @@ export interface AppContextType {
     user: { uid: string; isMasterAdmin?: boolean } | null | undefined,
     teams: Team[]
   ) => Team[];
+  isUserSoleAdminInAnyTeam: (
+    user: { uid: string; isMasterAdmin?: boolean } | null | undefined,
+    teams: Team[]
+  ) => boolean;
 }
 
 // Team creation request types

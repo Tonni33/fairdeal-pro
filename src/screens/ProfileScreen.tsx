@@ -28,8 +28,8 @@ type ProfileScreenNavigationProp = StackNavigationProp<
 
 const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<ProfileScreenNavigationProp>();
-  const { user, signOut, changePassword } = useAuth();
-  const { players, teams, refreshData } = useApp();
+  const { user, signOut, changePassword, deleteAccount } = useAuth();
+  const { players, teams, refreshData, isUserSoleAdminInAnyTeam } = useApp();
 
   // Password change state
   const [isPasswordModalVisible, setIsPasswordModalVisible] = useState(false);
@@ -100,6 +100,53 @@ const ProfileScreen: React.FC = () => {
     } catch (error) {
       console.error("Sign out error:", error);
     }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!user) {
+      Alert.alert("Virhe", "Käyttäjätietoja ei löytynyt");
+      return;
+    }
+
+    // Tarkista onko käyttäjä ainoa admin jossain joukkueessa
+    const isSoleAdmin = isUserSoleAdminInAnyTeam(user, teams);
+
+    if (isSoleAdmin) {
+      Alert.alert(
+        "Tilin poisto estetty",
+        "Et voi poistaa tiliäsi, koska olet ainoa admin ainakin yhdessä joukkueessa. Lisää ensin toinen admin joukkueeseen tai siirry joukkueen hallinta oikeudet toiselle käyttäjälle.",
+        [{ text: "Ymmärrän", style: "default" }]
+      );
+      return;
+    }
+
+    // Vahvistus dialogi
+    Alert.alert(
+      "Poista tili",
+      "Haluatko varmasti poistaa tilisi? Tämä toiminto on peruuttamaton ja kaikki tietosi poistetaan pysyvästi.",
+      [
+        {
+          text: "Peruuta",
+          style: "cancel",
+        },
+        {
+          text: "Poista tili",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteAccount();
+              Alert.alert(
+                "Tili poistettu",
+                "Tilisi on poistettu onnistuneesti."
+              );
+            } catch (error: any) {
+              console.error("Account deletion error:", error);
+              Alert.alert("Virhe", error.message || "Tilin poisto epäonnistui");
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handlePasswordChange = async () => {
@@ -297,6 +344,19 @@ const ProfileScreen: React.FC = () => {
 
         <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
           <Text style={styles.signOutText}>Kirjaudu ulos</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.deleteAccountButton}
+          onPress={handleDeleteAccount}
+        >
+          <Ionicons
+            name="trash-outline"
+            size={20}
+            color="white"
+            style={styles.buttonIcon}
+          />
+          <Text style={styles.deleteAccountText}>Poista tili</Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -680,6 +740,20 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   submitRequestText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  deleteAccountButton: {
+    backgroundColor: "#d32f2f",
+    borderRadius: 8,
+    padding: 16,
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    marginTop: 12,
+  },
+  deleteAccountText: {
     color: "white",
     fontSize: 16,
     fontWeight: "bold",
