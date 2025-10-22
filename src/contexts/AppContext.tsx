@@ -220,7 +220,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 data.email ||
                 "",
               email: data.email,
-              phone: data.phone || "",
+              phone: (data.phone && data.phone.trim()) || undefined,
               category: data.category || "Intermediate",
               multiplier: data.multiplier || 1,
               position: normalizedPosition,

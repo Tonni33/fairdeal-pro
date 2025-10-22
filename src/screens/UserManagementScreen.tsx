@@ -110,6 +110,9 @@ const UserManagementScreen: React.FC = () => {
         inTeamByMembers,
         name: player.name,
         nameIsEmpty: !player.name || !player.name.trim(),
+        phone: player.phone,
+        phoneType: typeof player.phone,
+        phoneEmpty: !player.phone || !player.phone.trim(),
       });
 
       return inTeamByTeamIds || inTeamByMembers;
@@ -800,7 +803,23 @@ const UserManagementScreen: React.FC = () => {
                         </Text>
                         <Text style={styles.playerContact}>
                           {player.email}
-                          {player.phone && ` • ${player.phone}`}
+                          {(() => {
+                            console.log("Render phone check:", {
+                              email: player.email,
+                              phone: player.phone,
+                              phoneType: typeof player.phone,
+                              phoneTruthy: !!player.phone,
+                              phoneTrim: player.phone && player.phone.trim(),
+                              phoneTrimTruthy: !!(
+                                player.phone && player.phone.trim()
+                              ),
+                            });
+                            return (
+                              player.phone &&
+                              player.phone.trim() &&
+                              ` • ${player.phone}`
+                            );
+                          })()}
                         </Text>
                       </View>
                       <Ionicons name="chevron-forward" size={20} color="#666" />
