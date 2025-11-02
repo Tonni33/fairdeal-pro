@@ -56,7 +56,7 @@ interface UserWithoutPassword {
 const SettingsScreen: React.FC = () => {
   const navigation = useNavigation();
   const { user } = useAuth();
-  const { teams } = useApp();
+  const { teams, refreshData } = useApp();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   // Tavallinen admin aloittaa team-tabista, MasterAdmin global-tabista
@@ -706,8 +706,8 @@ const SettingsScreen: React.FC = () => {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>WhatsApp-ryhmä</Text>
             <Text style={styles.sectionDescription}>
-              Tallenna joukkueen WhatsApp-ryhmän tiedot, jotta ne voidaan käyttää
-              automaattisesti joukkuejakojen lähettämisessä
+              Tallenna joukkueen WhatsApp-ryhmän tiedot, jotta ne voidaan
+              käyttää automaattisesti joukkuejakojen lähettämisessä
             </Text>
 
             <View style={styles.settingItem}>
@@ -715,24 +715,31 @@ const SettingsScreen: React.FC = () => {
               <TextInput
                 style={styles.textInput}
                 value={getCurrentTeamData()?.whatsappGroupName || ""}
-                onChangeText={(text) => handleTeamDataChange("whatsappGroupName", text)}
+                onChangeText={(text) =>
+                  handleTeamDataChange("whatsappGroupName", text)
+                }
                 placeholder="Esim. HC KeLo WhatsApp"
               />
             </View>
 
             <View style={styles.settingItem}>
-              <Text style={styles.settingLabel}>WhatsApp-ryhmän kutsu-linkki</Text>
+              <Text style={styles.settingLabel}>
+                WhatsApp-ryhmän kutsu-linkki
+              </Text>
               <TextInput
                 style={styles.textInput}
                 value={getCurrentTeamData()?.whatsappGroupInviteLink || ""}
-                onChangeText={(text) => handleTeamDataChange("whatsappGroupInviteLink", text)}
+                onChangeText={(text) =>
+                  handleTeamDataChange("whatsappGroupInviteLink", text)
+                }
                 placeholder="https://chat.whatsapp.com/..."
                 autoCapitalize="none"
                 autoCorrect={false}
               />
               <Text style={styles.settingDescription}>
-                Voit kopioida kutsu-linkin WhatsApp-ryhmästä ja liittää sen tähän.
-                Tämä mahdollistaa joukkuejakojen lähettämisen suoraan ryhmään.
+                Voit kopioida kutsu-linkin WhatsApp-ryhmästä ja liittää sen
+                tähän. Tämä mahdollistaa joukkuejakojen lähettämisen suoraan
+                ryhmään.
               </Text>
             </View>
           </View>
