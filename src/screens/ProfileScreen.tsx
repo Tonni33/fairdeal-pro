@@ -141,7 +141,23 @@ const ProfileScreen: React.FC = () => {
               );
             } catch (error: any) {
               console.error("Account deletion error:", error);
-              Alert.alert("Virhe", error.message || "Tilin poisto epäonnistui");
+
+              // Show user-friendly error message with guidance
+              if (error.message.includes("kirjautua uudelleen")) {
+                Alert.alert("Uudelleenkirjautuminen vaaditaan", error.message, [
+                  { text: "OK", style: "default" },
+                  {
+                    text: "Kirjaudu ulos",
+                    style: "default",
+                    onPress: () => handleSignOut(),
+                  },
+                ]);
+              } else {
+                Alert.alert(
+                  "Virhe",
+                  error.message || "Tilin poisto epäonnistui"
+                );
+              }
             }
           },
         },

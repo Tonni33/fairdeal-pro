@@ -287,7 +287,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       const userId = auth.currentUser.uid;
+      const currentUser = auth.currentUser; // Store reference before deletion
 
+      // Delete the Firebase Auth account FIRST
+      // This is the most likely to fail and should be done before any data cleanup
+      await deleteUser(currentUser);
+
+      // After successful Auth deletion, clean up Firestore data
       // Remove user from all teams' member lists
       const teamsSnapshot = await getDocs(collection(db, "teams"));
       const updatePromises = [];
@@ -323,13 +329,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Delete user document from Firestore
       await deleteDoc(doc(db, "users", userId));
 
-      // Delete the Firebase Auth account
-      await deleteUser(auth.currentUser);
+      // Clear local storage and authentication data
+      await SecureStorage.clearCredentials();
+      await AsyncStorage.removeItem("biometric_enabled");
+      await AsyncStorage.removeItem("pin_enabled");
+      await AsyncStorage.removeItem("was_logged_in");
 
       // Clear local state
       setUser(null);
     } catch (error: any) {
-      throw new Error(error.message);
+      console.error("Account deletion error:", error);
+
+      // Provide more specific error messages
+      if (error.code === "auth/requires-recent-login") {
+        throw new Error(
+          "Turvallisuussyistä sinun täytyy kirjautua uudelleen sisään ennen tilin poistoa. Kirjaudu ulos ja takaisin sisään, sitten yritä uudelleen."
+        );
+      } else if (error.code === "auth/network-request-failed") {
+        throw new Error(
+          "Verkkoyhteysvirhe. Tarkista internetyhteys ja yritä uudelleen."
+        );
+      } else {
+        throw new Error(error.message || "Tilin poisto epäonnistui");
+      }
     }
   };
 
