@@ -385,6 +385,12 @@ const PlayersScreen: React.FC = () => {
               <View style={styles.contactRow}>
                 <Ionicons name="call-outline" size={16} color="#666" />
                 <Text style={styles.contactText}>{item.phone}</Text>
+                <TouchableOpacity
+                  style={styles.whatsappQuickButton}
+                  onPress={() => handleWhatsApp(item.phone || "", item.name)}
+                >
+                  <Ionicons name="logo-whatsapp" size={18} color="#25D366" />
+                </TouchableOpacity>
               </View>
             )}
           </View>
@@ -407,6 +413,49 @@ const PlayersScreen: React.FC = () => {
     Linking.openURL(url).catch((err) =>
       Alert.alert("Virhe", "Sähköpostin avaaminen ei onnistunut")
     );
+  };
+
+  const handleWhatsApp = (phone: string, playerName: string) => {
+    if (!phone) {
+      Alert.alert("Virhe", "Pelaajalla ei ole puhelinnumeroa");
+      return;
+    }
+
+    // Poista kaikki muut merkit paitsi numerot ja + merkki
+    const cleanPhone = phone.replace(/[^\d+]/g, "");
+
+    // Jos numero alkaa 0:lla, korvaa se +358:lla (Suomen maakoodi)
+    let formattedPhone = cleanPhone;
+    if (cleanPhone.startsWith("0")) {
+      formattedPhone = "+358" + cleanPhone.substring(1);
+    } else if (cleanPhone.startsWith("358")) {
+      formattedPhone = "+" + cleanPhone;
+    } else if (!cleanPhone.startsWith("+")) {
+      formattedPhone = "+" + cleanPhone;
+    }
+
+    // Oletus viesti
+    const message = `Hei ${playerName}! 👋 Terveisiä FairDealPro-appista.`;
+
+    const url = `whatsapp://send?phone=${formattedPhone}&text=${encodeURIComponent(
+      message
+    )}`;
+
+    Linking.canOpenURL(url)
+      .then((supported) => {
+        if (supported) {
+          return Linking.openURL(url);
+        } else {
+          Alert.alert(
+            "WhatsApp ei ole asennettu",
+            "Asenna WhatsApp-sovellus lähettääksesi viestejä."
+          );
+        }
+      })
+      .catch((err) => {
+        console.error("WhatsApp error:", err);
+        Alert.alert("Virhe", "WhatsApp-viestin lähettäminen ei onnistunut");
+      });
   };
 
   if (loading) {
@@ -610,13 +659,33 @@ const PlayersScreen: React.FC = () => {
                     </TouchableOpacity>
                   )}
                   {selectedPlayer.phone && (
-                    <TouchableOpacity
-                      style={[styles.contactButton, styles.callButton]}
-                      onPress={() => handleCall(selectedPlayer.phone || "")}
-                    >
-                      <Ionicons name="call" size={20} color="white" />
-                      <Text style={styles.contactButtonText}>Soita</Text>
-                    </TouchableOpacity>
+                    <>
+                      <TouchableOpacity
+                        style={[styles.contactButton, styles.callButton]}
+                        onPress={() => handleCall(selectedPlayer.phone || "")}
+                      >
+                        <Ionicons name="call" size={20} color="white" />
+                        <Text style={styles.contactButtonText}>Soita</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.contactButton, styles.whatsappButton]}
+                        onPress={() =>
+                          handleWhatsApp(
+                            selectedPlayer.phone || "",
+                            selectedPlayer.name
+                          )
+                        }
+                      >
+                        <Ionicons
+                          name="logo-whatsapp"
+                          size={20}
+                          color="white"
+                        />
+                        <Text style={styles.contactButtonText}>
+                          Lähetä WhatsApp-viesti
+                        </Text>
+                      </TouchableOpacity>
+                    </>
                   )}
                 </View>
               </>
@@ -704,12 +773,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 4,
+    justifyContent: "space-between",
   },
   contactText: {
     fontSize: 14,
     color: "#666",
     marginLeft: 8,
     flex: 1,
+  },
+  whatsappQuickButton: {
+    padding: 4,
+    borderRadius: 12,
+    backgroundColor: "rgba(37, 211, 102, 0.1)",
+    marginLeft: 8,
   },
   emptyState: {
     flex: 1,
@@ -892,6 +968,9 @@ const styles = StyleSheet.create({
   },
   callButton: {
     backgroundColor: "#4CAF50",
+  },
+  whatsappButton: {
+    backgroundColor: "#25D366", // WhatsApp:n virallinen vihreä
   },
   contactButtonText: {
     color: "white",
