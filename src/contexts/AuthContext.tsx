@@ -287,13 +287,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       const userId = auth.currentUser.uid;
-      const currentUser = auth.currentUser; // Store reference before deletion
+      const currentUser = auth.currentUser; // Store reference
 
-      // Delete the Firebase Auth account FIRST
-      // This is the most likely to fail and should be done before any data cleanup
-      await deleteUser(currentUser);
-
-      // After successful Auth deletion, clean up Firestore data
+      // First, clean up Firestore data while user is still authenticated
       // Remove user from all teams' member lists
       const teamsSnapshot = await getDocs(collection(db, "teams"));
       const updatePromises = [];
@@ -328,6 +324,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Delete user document from Firestore
       await deleteDoc(doc(db, "users", userId));
+
+      // LAST: Delete the Firebase Auth account
+      // This must be done after Firestore cleanup since it removes authentication
+      await deleteUser(currentUser);
 
       // Clear local storage and authentication data
       await SecureStorage.clearCredentials();
