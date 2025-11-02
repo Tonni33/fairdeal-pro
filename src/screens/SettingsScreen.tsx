@@ -96,26 +96,61 @@ const SettingsScreen: React.FC = () => {
 
   // Get teams where user is admin
   const adminTeams = useMemo(() => {
-    const availableTeams = isMasterAdmin() ? teams : getUserTeams(user, teams);
-    return availableTeams.filter(
-      (team) => team.adminId === user?.email || isMasterAdmin()
+    if (!user?.uid) {
+      console.log("SettingsScreen: No user UID");
+      return [];
+    }
+
+    // MasterAdmin sees all teams
+    if (isMasterAdmin()) {
+      console.log("SettingsScreen: User is MasterAdmin, showing all teams");
+      return teams;
+    }
+
+    // Regular admin: filter teams where user is admin
+    const userAdminTeams = teams.filter((team) => {
+      const isAdmin =
+        team.adminIds?.includes(user.uid) ||
+        team.adminId === user.uid ||
+        team.adminId === user.email;
+
+      if (isAdmin) {
+        console.log(`SettingsScreen: User is admin of team ${team.name}`);
+      }
+
+      return isAdmin;
+    });
+
+    console.log(
+      `SettingsScreen: User is admin of ${userAdminTeams.length} teams:`,
+      userAdminTeams.map((t) => t.name)
     );
+
+    return userAdminTeams;
   }, [user, teams]);
+
   useEffect(() => {
+    console.log("SettingsScreen: Initial load");
     loadSettings();
     loadUsersWithoutPassword();
   }, []);
 
   // Auto-select first admin team when adminTeams loads
   useEffect(() => {
+    console.log(
+      `SettingsScreen: Auto-select check - adminTeams.length: ${adminTeams.length}, selectedTeamId: ${selectedTeamId}, activeTab: ${activeTab}`
+    );
     if (adminTeams.length > 0 && !selectedTeamId && activeTab === "team") {
-      console.log("Auto-selecting first admin team:", adminTeams[0].id);
+      console.log(
+        `SettingsScreen: Auto-selecting first admin team: ${adminTeams[0].name} (${adminTeams[0].id})`
+      );
       setSelectedTeamId(adminTeams[0].id);
     }
-  }, [adminTeams]);
+  }, [adminTeams, activeTab]);
 
   // Reload users when selected team changes
   useEffect(() => {
+    console.log(`SettingsScreen: selectedTeamId changed to: ${selectedTeamId}`);
     if (selectedTeamId) {
       loadUsersWithoutPassword();
     }
@@ -236,12 +271,20 @@ const SettingsScreen: React.FC = () => {
     field: keyof EventDefaults,
     value: string | number | boolean
   ) => {
+    console.log(
+      `SettingsScreen: handleInputChange - field: ${field}, value: ${value}, activeTab: ${activeTab}, selectedTeamId: ${selectedTeamId}`
+    );
+
     if (activeTab === "global") {
+      console.log("SettingsScreen: Updating global settings");
       setGlobalSettings((prev) => ({
         ...prev,
         [field]: value,
       }));
     } else if (selectedTeamId) {
+      console.log(
+        `SettingsScreen: Updating team settings for team ${selectedTeamId}`
+      );
       setTeamSettings((prev) => ({
         ...prev,
         [selectedTeamId]: {
@@ -249,15 +292,28 @@ const SettingsScreen: React.FC = () => {
           [field]: value,
         },
       }));
+    } else {
+      console.log(
+        "SettingsScreen: WARNING - Cannot update settings, no team selected!"
+      );
     }
   };
 
   const getCurrentSettings = (): EventDefaults => {
     if (activeTab === "global") {
+      console.log(
+        "SettingsScreen: getCurrentSettings - returning globalSettings"
+      );
       return globalSettings;
     } else if (selectedTeamId && teamSettings[selectedTeamId]) {
+      console.log(
+        `SettingsScreen: getCurrentSettings - returning team settings for ${selectedTeamId}`
+      );
       return teamSettings[selectedTeamId];
     }
+    console.log(
+      "SettingsScreen: getCurrentSettings - WARNING: No team selected, returning globalSettings as fallback"
+    );
     return globalSettings;
   };
 

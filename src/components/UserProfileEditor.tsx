@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -24,7 +24,8 @@ import {
   arrayUnion,
   arrayRemove,
 } from "firebase/firestore";
-import { db } from "../services/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db, storage } from "../services/firebase";
 
 interface UserProfileEditorProps {
   player: Player;
@@ -37,6 +38,14 @@ const UserProfileEditor: React.FC<UserProfileEditorProps> = ({
   teams,
   onSave,
 }) => {
+  console.log("UserProfileEditor: Initializing with player:", {
+    id: player.id,
+    name: player.name,
+    email: player.email,
+    image: player.image,
+    imageLength: player.image?.length || 0,
+  });
+
   const [name, setName] = useState(player.name || "");
   const [email, setEmail] = useState(player.email || "");
   const [phone, setPhone] = useState(player.phone || "");
@@ -45,6 +54,24 @@ const UserProfileEditor: React.FC<UserProfileEditorProps> = ({
   const [joinModalVisible, setJoinModalVisible] = useState(false);
   const [teamCode, setTeamCode] = useState("");
   const [joiningTeam, setJoiningTeam] = useState(false);
+
+  // Update local state only when player changes AND we don't have unsaved image changes
+  useEffect(() => {
+    console.log("UserProfileEditor: useEffect - player changed");
+    // Only update if we don't have a local image that differs from player.image
+    // This prevents overwriting user's selected image before they save
+    if (!image || image === player.image) {
+      console.log("UserProfileEditor: Updating state from player props");
+      setName(player.name || "");
+      setEmail(player.email || "");
+      setPhone(player.phone || "");
+      setImage(player.image || "");
+    } else {
+      console.log(
+        "UserProfileEditor: Skipping state update - user has unsaved image changes"
+      );
+    }
+  }, [player.id]); // Only re-run if player ID changes, not on every render
 
   // Hae kaikki joukkueet joissa käyttäjä on mukana (sekä teamIds että team.members kautta)
   const userTeams = teams.filter((team) => {
@@ -82,14 +109,17 @@ const UserProfileEditor: React.FC<UserProfileEditorProps> = ({
 
   const handlePickImage = async () => {
     try {
+      console.log("UserProfileEditor: Requesting media library permissions...");
       const permissionResult =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (permissionResult.granted === false) {
+        console.log("UserProfileEditor: Permission denied");
         Alert.alert("Lupa vaaditaan", "Kuvien käyttöön tarvitaan lupa");
         return;
       }
 
+      console.log("UserProfileEditor: Launching image picker...");
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
@@ -98,9 +128,47 @@ const UserProfileEditor: React.FC<UserProfileEditorProps> = ({
       });
 
       if (!result.canceled && result.assets[0]) {
-        setImage(result.assets[0].uri);
+        const imageUri = result.assets[0].uri;
+        console.log("UserProfileEditor: Image selected:", imageUri);
+
+        // Upload to Firebase Storage immediately
+        try {
+          console.log(
+            "UserProfileEditor: Uploading image to Firebase Storage..."
+          );
+          setSaving(true);
+
+          // Fetch the image as a blob
+          const response = await fetch(imageUri);
+          const blob = await response.blob();
+
+          // Create a unique filename
+          const filename = `profile-images/${player.id}_${Date.now()}.jpg`;
+          const storageRef = ref(storage, filename);
+
+          console.log("UserProfileEditor: Uploading to:", filename);
+          await uploadBytes(storageRef, blob);
+
+          // Get the download URL
+          const downloadURL = await getDownloadURL(storageRef);
+          console.log("UserProfileEditor: Upload complete! URL:", downloadURL);
+
+          setImage(downloadURL);
+          Alert.alert(
+            "Valmis",
+            "Kuva ladattu onnistuneesti! Muista tallentaa profiili."
+          );
+        } catch (uploadError) {
+          console.error("UserProfileEditor: Upload error:", uploadError);
+          Alert.alert("Virhe", "Kuvan lataus epäonnistui");
+        } finally {
+          setSaving(false);
+        }
+      } else {
+        console.log("UserProfileEditor: Image selection cancelled");
       }
     } catch (error) {
+      console.error("UserProfileEditor: Image picker error:", error);
       Alert.alert("Virhe", "Kuvan valinta epäonnistui");
     }
   };
@@ -256,21 +324,31 @@ const UserProfileEditor: React.FC<UserProfileEditorProps> = ({
   const handleSave = async () => {
     setSaving(true);
     try {
+      console.log("UserProfileEditor: Saving profile...");
+      console.log("  - Player ID:", player.id);
+      console.log("  - Name:", name.trim());
+      console.log("  - Phone:", phone.trim());
+      console.log("  - Image:", image.trim());
+
       const playerRef = doc(db, "users", player.id);
-      await updateDoc(playerRef, {
+      const updateData = {
         name: name.trim(),
         phone: phone.trim(),
         image: image.trim(),
-      });
+      };
+
+      console.log("  - Update data:", updateData);
+      await updateDoc(playerRef, updateData);
+
+      console.log("UserProfileEditor: Profile saved successfully!");
       Alert.alert("Tallennettu", "Profiilitiedot päivitetty");
       if (onSave) onSave();
     } catch (e) {
+      console.error("UserProfileEditor: Save error:", e);
       Alert.alert("Virhe", "Tietojen tallennus epäonnistui");
     }
     setSaving(false);
   };
-
-  // TODO: Add image picker integration
 
   return (
     <View style={styles.container}>

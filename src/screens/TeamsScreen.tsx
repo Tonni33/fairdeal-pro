@@ -9,6 +9,7 @@ import {
   Modal,
   ScrollView,
   Alert,
+  Clipboard,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -178,6 +179,53 @@ const TeamsScreen: React.FC = () => {
         },
       ]
     );
+  };
+
+  const copyTeamsToClipboard = async () => {
+    if (
+      !selectedEvent ||
+      !selectedEvent.generatedTeams ||
+      !selectedEvent.generatedTeams.teams
+    )
+      return;
+
+    try {
+      const teams = selectedEvent.generatedTeams.teams;
+      let textToCopy = `${selectedEvent.title}\n`;
+      textToCopy += `${formatFullDateTime(selectedEvent.date)}\n\n`;
+
+      teams.forEach((team, index) => {
+        textToCopy += `${team.name}:\n`;
+
+        const shuffledPlayers = getShuffledPlayersForDisplay(
+          team,
+          selectedEvent.id
+        );
+
+        shuffledPlayers.forEach((playerId: string) => {
+          const player = getPlayerById(playerId);
+          if (player) {
+            const isGoalkeeper = player.position === "MV";
+            textToCopy += `- ${player.name}`;
+            if (isGoalkeeper) {
+              textToCopy += " 🥅";
+            }
+            textToCopy += "\n";
+          }
+        });
+
+        // Add empty line between teams (except after last team)
+        if (index < teams.length - 1) {
+          textToCopy += "\n";
+        }
+      });
+
+      Clipboard.setString(textToCopy);
+      Alert.alert("Kopioitu!", "Joukkueet kopioitu leikepöydälle");
+    } catch (error) {
+      console.error("Error copying teams to clipboard:", error);
+      Alert.alert("Virhe", "Kopiointi epäonnistui");
+    }
   };
 
   // Filter user teams
@@ -416,6 +464,12 @@ const TeamsScreen: React.FC = () => {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Luodut joukkueet</Text>
               <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.copyButton}
+                  onPress={copyTeamsToClipboard}
+                >
+                  <Ionicons name="copy-outline" size={20} color="#2196F3" />
+                </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.reshuffleButton}
                   onPress={reshuffleAllTeams}
@@ -836,6 +890,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+  },
+  copyButton: {
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: "#e3f2fd",
   },
   reshuffleButton: {
     padding: 8,
