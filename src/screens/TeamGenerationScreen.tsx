@@ -317,8 +317,8 @@ const TeamGenerationScreen: React.FC = () => {
           name: team.name, // Use the name from TeamBalancer (already has custom names)
           players: team.players,
           totalPoints: team.totalPoints,
-          goalkeepers: team.goalkeepers,
-          fieldPlayers: team.fieldPlayers,
+          goalkeepers: team.goalkeepers || [],
+          fieldPlayers: team.fieldPlayers || [],
           color: index === 0 ? "#1976d2" : "#f44336", // Blue vs Red
         })
       );

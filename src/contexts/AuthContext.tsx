@@ -65,18 +65,75 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             console.log("isAdmin field value:", userData.isAdmin);
             console.log("isMasterAdmin field value:", userData.isMasterAdmin);
             console.log("role field value:", userData.role);
-            setUser({
+
+            // Check if user is admin of any team
+            let isTeamAdmin = false;
+            try {
+              console.log(
+                "Checking team admin status for user:",
+                firebaseUser.uid,
+                firebaseUser.email
+              );
+              const teamsSnapshot = await getDocs(collection(db, "teams"));
+              const teams = teamsSnapshot.docs.map((doc) => ({
+                id: doc.id,
+                ...doc.data(),
+              })) as any[];
+
+              console.log(`Found ${teams.length} teams, checking adminIds...`);
+
+              teams.forEach((team) => {
+                console.log(`Team ${team.name}:`, {
+                  adminIds: team.adminIds,
+                  adminId: team.adminId,
+                  containsUid: team.adminIds?.includes(firebaseUser.uid),
+                  adminIdMatchesUid: team.adminId === firebaseUser.uid,
+                  adminIdMatchesEmail: team.adminId === firebaseUser.email,
+                });
+              });
+
+              isTeamAdmin = teams.some(
+                (team) =>
+                  team.adminIds?.includes(firebaseUser.uid) ||
+                  team.adminId === firebaseUser.uid ||
+                  team.adminId === firebaseUser.email
+              );
+
+              console.log("User is admin of at least one team:", isTeamAdmin);
+            } catch (error) {
+              console.error("Error checking team admin status:", error);
+            }
+
+            // User is admin if they have isAdmin field OR are admin of any team
+            const userIsAdmin = userData.isAdmin || isTeamAdmin || false;
+
+            console.log("Final admin status decision:", {
+              userDataIsAdmin: userData.isAdmin,
+              isTeamAdmin: isTeamAdmin,
+              finalUserIsAdmin: userIsAdmin,
+            });
+
+            const finalUser: User = {
               id: firebaseUser.uid,
               uid: firebaseUser.uid, // Add uid field
               email: firebaseUser.email!,
               name: userData.name || firebaseUser.displayName,
               displayName: firebaseUser.displayName || userData.displayName,
-              role: userData.isAdmin ? "admin" : "user", // Check isAdmin field
-              isAdmin: userData.isAdmin || false, // Add isAdmin field for compatibility
+              role: (userIsAdmin ? "admin" : "user") as "user" | "admin",
+              isAdmin: userIsAdmin,
               isMasterAdmin: userData.isMasterAdmin || false, // Add isMasterAdmin field
               playerId: userData.playerId,
               createdAt: userData.createdAt?.toDate?.() || new Date(),
+            };
+
+            console.log("🔐 Setting user object:", {
+              email: finalUser.email,
+              isAdmin: finalUser.isAdmin,
+              isMasterAdmin: finalUser.isMasterAdmin,
+              role: finalUser.role,
             });
+
+            setUser(finalUser);
           } else {
             console.log("Creating new user document in Firestore");
             // Create user document if it doesn't exist
@@ -239,13 +296,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const teamData = teamDoc.data();
         const teamId = teamDoc.id;
 
-        // Check if user is in members array
-        if (teamData.members && teamData.members.includes(userId)) {
-          updatePromises.push(
-            updateDoc(doc(db, "teams", teamId), {
-              members: arrayRemove(userId),
-            })
-          );
+        // Check if user is in members array or adminIds array
+        const isInMembers =
+          teamData.members && teamData.members.includes(userId);
+        const isInAdminIds =
+          teamData.adminIds && teamData.adminIds.includes(userId);
+
+        if (isInMembers || isInAdminIds) {
+          const updateData: any = {};
+
+          if (isInMembers) {
+            updateData.members = arrayRemove(userId);
+          }
+
+          if (isInAdminIds) {
+            updateData.adminIds = arrayRemove(userId);
+          }
+
+          updatePromises.push(updateDoc(doc(db, "teams", teamId), updateData));
         }
       }
 

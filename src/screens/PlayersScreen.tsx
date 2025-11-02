@@ -37,6 +37,9 @@ const PlayersScreen: React.FC = () => {
   const [enrichedPlayers, setEnrichedPlayers] = useState<Player[]>([]);
   const { selectedTeamId, setSelectedTeamId } = useApp();
 
+  // Välimuisti Firebase Auth -kyselyille
+  const [playerCache] = useState(new Map<string, Player>());
+
   // Helper function to check if user is admin of selected team
   const isSelectedTeamAdmin = (): boolean => {
     if (!selectedTeamId || !user?.uid) return false;
@@ -51,14 +54,13 @@ const PlayersScreen: React.FC = () => {
 
   // Helper function to find player by any ID and enrich with Firebase Auth data
   const findPlayerByAnyId = async (playerId: string) => {
-    console.log(
-      "DEBUG - PlayersScreen findPlayerByAnyId called with:",
-      playerId
-    );
+    // Tarkista ensin välimuistista
+    if (playerCache.has(playerId)) {
+      return playerCache.get(playerId)!;
+    }
 
     // First try to find in players array
     let player = players.find((p) => p.id === playerId);
-    console.log("DEBUG - PlayersScreen found in players array:", player);
 
     // Always try to enrich with Firebase Auth data, even if found in players array
     try {
@@ -67,15 +69,6 @@ const PlayersScreen: React.FC = () => {
 
       if (userSnap.exists()) {
         const userData = userSnap.data();
-        console.log(
-          "DEBUG - PlayersScreen found Firebase Auth user:",
-          userData
-        );
-        console.log(
-          "DEBUG - PlayersScreen userData.displayName:",
-          userData.displayName
-        );
-        console.log("DEBUG - PlayersScreen player?.name:", player?.name);
 
         // Create enriched player object - prioritize legacy player name, then Firebase Auth displayName
         const enrichedPlayer = {
@@ -88,6 +81,7 @@ const PlayersScreen: React.FC = () => {
             userData.email?.split("@")[0] ||
             "Nimeä ei löydy",
           email: userData.email || player?.email || "",
+          phone: userData.phone || player?.phone || undefined, // Prioritize userData.phone
           // Ensure required fields have defaults
           position: player?.position || "H",
           skillLevel: player?.skillLevel || 5,
@@ -104,20 +98,25 @@ const PlayersScreen: React.FC = () => {
           createdAt: player?.createdAt || new Date(),
         };
 
-        console.log("DEBUG - PlayersScreen enriched player:", enrichedPlayer);
+        // Tallenna välimuistiin
+        playerCache.set(playerId, enrichedPlayer);
         return enrichedPlayer;
       }
-    } catch (error) {
-      console.error("DEBUG - PlayersScreen error fetching user:", error);
+    } catch (error: any) {
+      // Ignore "Missing or insufficient permissions" errors for deleted users
+      if (error?.code !== "permission-denied") {
+        console.error("DEBUG - PlayersScreen error fetching user:", error);
+      }
     }
 
     if (player) {
-      // If found in players but no Firebase Auth data, return player as-is
+      // If found in players but no Firebase Auth data, cache and return player as-is
+      playerCache.set(playerId, player);
       return player;
     }
 
     // Return basic object with ID if nothing found
-    return {
+    const basicPlayer = {
       id: playerId,
       name: `ID: ${playerId}`,
       email: "",
@@ -141,6 +140,9 @@ const PlayersScreen: React.FC = () => {
       updatedAt: new Date(),
       createdBy: "",
     } as Player;
+
+    playerCache.set(playerId, basicPlayer);
+    return basicPlayer;
   };
 
   // Enrich players with Firebase Auth data when players data changes
@@ -151,18 +153,11 @@ const PlayersScreen: React.FC = () => {
         return;
       }
 
-      console.log("DEBUG - PlayersScreen enriching players:", players.length);
-      const enriched = [];
-
-      for (const player of players) {
-        const enrichedPlayer = await findPlayerByAnyId(player.id);
-        enriched.push(enrichedPlayer);
-      }
-
-      console.log(
-        "DEBUG - PlayersScreen enriched players count:",
-        enriched.length
+      // Lataa kaikki pelaajat rinnakkain Promise.all:lla - PALJON nopeampaa!
+      const enriched = await Promise.all(
+        players.map((player) => findPlayerByAnyId(player.id))
       );
+
       setEnrichedPlayers(enriched);
     };
 
@@ -172,11 +167,30 @@ const PlayersScreen: React.FC = () => {
   // Filtteröi joukkueet joissa nykyinen käyttäjä on mukana (sähköpostilla)
   const userTeams = useMemo(() => {
     try {
-      console.log("PlayersScreen: user =", user);
-      console.log("PlayersScreen: teams count =", teams.length);
-      console.log("PlayersScreen: players count =", players.length);
+      console.log("PlayersScreen DEBUG - Current user:", {
+        email: user?.email,
+        uid: user?.uid,
+      });
+      console.log(
+        "PlayersScreen DEBUG - Players array length:",
+        players.length
+      );
+      const userPlayer = players.find((p) => p.email === user?.email);
+      console.log("PlayersScreen DEBUG - Found user in players:", {
+        found: !!userPlayer,
+        playerData: userPlayer
+          ? {
+              id: userPlayer.id,
+              email: userPlayer.email,
+              teamIds: userPlayer.teamIds,
+            }
+          : null,
+      });
       const result = getUserTeams(user, teams, players);
-      console.log("PlayersScreen: userTeams =", result);
+      console.log(
+        "PlayersScreen DEBUG - User teams:",
+        result.map((t) => t.name)
+      );
       return result;
     } catch (error) {
       console.error("PlayersScreen: Error in getUserTeams:", error);
@@ -193,16 +207,7 @@ const PlayersScreen: React.FC = () => {
   // Filtteröi pelaajat valitun joukkueen mukaan
   const filteredPlayers = useMemo(() => {
     try {
-      console.log("PlayersScreen: Filtering players...");
-      console.log(
-        "PlayersScreen: enrichedPlayers count =",
-        enrichedPlayers.length
-      );
-      console.log("PlayersScreen: selectedTeamId =", selectedTeamId);
-      console.log("PlayersScreen: userTeams count =", userTeams.length);
-
       if (!enrichedPlayers || !Array.isArray(enrichedPlayers)) {
-        console.log("PlayersScreen: Invalid enrichedPlayers array");
         return [];
       }
 
@@ -215,7 +220,10 @@ const PlayersScreen: React.FC = () => {
         // Käytetään sekä teamIds että members-kenttää varmuuden vuoksi
         playersToFilter = enrichedPlayers.filter((player) => {
           const inTeamByTeamIds = player.teamIds?.includes(selectedTeamId);
-          const inTeamByMembers = selectedTeam.members?.includes(player.id);
+          const inTeamByMembers =
+            selectedTeam.members?.includes(player.id) ||
+            selectedTeam.members?.includes(player.playerId) ||
+            selectedTeam.members?.includes(player.email);
           return inTeamByTeamIds || inTeamByMembers;
         });
       } else {
@@ -225,9 +233,29 @@ const PlayersScreen: React.FC = () => {
           // Pelaaja kuuluu johonkin käyttäjän joukkueeseen
           return (
             player.teamIds?.some((teamId) => userTeamIds.includes(teamId)) ||
-            userTeams.some((team) => team.members?.includes(player.id))
+            userTeams.some(
+              (team) =>
+                team.members?.includes(player.id) ||
+                team.members?.includes(player.playerId) ||
+                team.members?.includes(player.email)
+            )
           );
         });
+      }
+
+      // Varmista että kirjautunut käyttäjä näkyy aina listassa jos kuuluu johonkin joukkueeseen
+      const currentUserInList = playersToFilter.some(
+        (p) => p.id === user?.uid || p.email === user?.email
+      );
+
+      if (!currentUserInList && user && userTeams.length > 0) {
+        // Käyttäjä kuuluu joukkueeseen mutta ei ole listassa - lisätään
+        const currentUserPlayer = enrichedPlayers.find(
+          (p) => p.id === user.uid || p.email === user.email
+        );
+        if (currentUserPlayer) {
+          playersToFilter.push(currentUserPlayer);
+        }
       }
 
       // Lajittele pelaajat aakkosjärjestykseen sukunimen perusteella
@@ -239,7 +267,6 @@ const PlayersScreen: React.FC = () => {
         return aLastName.localeCompare(bLastName, "fi");
       });
 
-      console.log("PlayersScreen: Filtered players count =", sorted.length);
       return sorted;
     } catch (error) {
       console.error("PlayersScreen: Error in filteredPlayers:", error);
@@ -275,6 +302,8 @@ const PlayersScreen: React.FC = () => {
 
   const onRefresh = async () => {
     setRefreshing(true);
+    // Tyhjennä välimuisti kun data päivitetään
+    playerCache.clear();
     await refreshData();
     setRefreshing(false);
   };
@@ -296,10 +325,13 @@ const PlayersScreen: React.FC = () => {
     );
   };
   const renderPlayer = ({ item }: { item: Player }) => {
-    // Hae pelaajan joukkueet
+    // Hae pelaajan joukkueet - tarkista kaikki ID-muodot
     const playerTeams = teams.filter(
       (team) =>
-        item.teamIds?.includes(team.id) || team.members.includes(item.id)
+        item.teamIds?.includes(team.id) ||
+        team.members?.includes(item.id) ||
+        team.members?.includes(item.playerId) ||
+        team.members?.includes(item.email)
     );
 
     return (

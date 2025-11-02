@@ -102,18 +102,10 @@ const UserManagementScreen: React.FC = () => {
     // Käytetään sekä teamIds että members-kenttää varmuuden vuoksi
     const filtered = allPlayers.filter((player) => {
       const inTeamByTeamIds = player.teamIds?.includes(selectedTeam);
-      const inTeamByMembers = selectedTeamData.members.includes(player.id);
-
-      console.log(`UserManagement: Player ${player.name || player.email}:`, {
-        teamIds: player.teamIds,
-        inTeamByTeamIds,
-        inTeamByMembers,
-        name: player.name,
-        nameIsEmpty: !player.name || !player.name.trim(),
-        phone: player.phone,
-        phoneType: typeof player.phone,
-        phoneEmpty: !player.phone || !player.phone.trim(),
-      });
+      const inTeamByMembers =
+        selectedTeamData.members?.includes(player.id) ||
+        selectedTeamData.members?.includes(player.playerId) ||
+        selectedTeamData.members?.includes(player.email);
 
       return inTeamByTeamIds || inTeamByMembers;
     });
@@ -192,8 +184,22 @@ const UserManagementScreen: React.FC = () => {
       return localSkills;
     }
 
-    // Löydä pelaaja ja hae teamSkills suoraan player objektista
-    const player = allPlayers.find((p) => p.id === playerId);
+    // Löydä pelaaja - tarkista sekä id, playerId että email
+    const player = allPlayers.find(
+      (p) =>
+        p.id === playerId || p.playerId === playerId || p.email === playerId
+    );
+
+    if (!player) {
+      console.log(`Player not found for ID: ${playerId}`);
+      return null;
+    }
+
+    console.log(
+      `Found player for ${playerId}: ${player.name} (id: ${player.id}, playerId: ${player.playerId}, email: ${player.email})`
+    );
+    console.log(`Player teamSkills:`, player.teamSkills);
+
     if (player?.teamSkills?.[teamId]) {
       console.log(
         `Using Firestore skills for ${playerId}-${teamId}:`,
@@ -220,16 +226,6 @@ const UserManagementScreen: React.FC = () => {
 
   // Avaa pelaajan muokkausmodaali
   const openPlayerModal = (player: Player) => {
-    console.log("UserManagement: Opening player modal for:", player.name);
-    console.log("UserManagement: Player data:", {
-      teams: player.teams,
-      teamIds: player.teamIds,
-      category: player.category,
-      multiplier: player.multiplier,
-      role: (player as any).role,
-      isAdmin: player.isAdmin,
-    });
-
     setSelectedPlayer(player);
     setEditName(player.name);
     setEditEmail(player.email);
@@ -336,20 +332,36 @@ const UserManagementScreen: React.FC = () => {
         console.log(`Team ${team.name}:`, team.members);
       });
 
+      // Luo kopio teamSkills datasta muokkauksia varten
+      const currentTeamSkillsData = { ...selectedPlayer.teamSkills };
+
       // Poista pelaaja poistetuista joukkueista
       for (const removedTeamId of removedTeams) {
         // Poista pelaaja joukkueen members-listasta
         const teamToUpdate = teams.find((team) => team.id === removedTeamId);
-        if (teamToUpdate && teamToUpdate.members.includes(selectedPlayer.id)) {
-          console.log("Removing player from team members:", removedTeamId);
-          const updatedMembers = teamToUpdate.members.filter(
-            (memberId) => memberId !== selectedPlayer.id
-          );
-          const teamRef = doc(db, "teams", removedTeamId);
-          await updateDoc(teamRef, {
-            members: updatedMembers,
-            updatedAt: new Date(),
-          });
+        if (teamToUpdate) {
+          // Tarkista kaikki mahdolliset ID:t
+          const hasPlayer =
+            teamToUpdate.members?.includes(selectedPlayer.id) ||
+            teamToUpdate.members?.includes(selectedPlayer.playerId) ||
+            teamToUpdate.members?.includes(selectedPlayer.email);
+
+          if (hasPlayer) {
+            console.log("Removing player from team members:", removedTeamId);
+            // Poista kaikki mahdolliset ID:t
+            const updatedMembers = teamToUpdate.members.filter(
+              (memberId) =>
+                memberId !== selectedPlayer.id &&
+                memberId !== selectedPlayer.playerId &&
+                memberId !== selectedPlayer.email
+            );
+            const teamRef = doc(db, "teams", removedTeamId);
+            await updateDoc(teamRef, {
+              members: updatedMembers,
+              updatedAt: new Date(),
+            });
+            console.log("✅ Player removed from team successfully");
+          }
         }
       }
 
@@ -364,6 +376,20 @@ const UserManagementScreen: React.FC = () => {
             members: updatedMembers,
             updatedAt: new Date(),
           });
+
+          // Luo teamSkills data uudelle joukkueelle jos ei ole olemassa
+          if (!currentTeamSkillsData[addedTeamId]) {
+            console.log(
+              "Creating default team skills for new team:",
+              addedTeamId
+            );
+            currentTeamSkillsData[addedTeamId] = {
+              category: selectedPlayer.category || 2,
+              multiplier: selectedPlayer.multiplier || 2.0,
+              position: selectedPlayer.position || "H",
+              updatedAt: new Date(),
+            };
+          }
         }
       }
 
@@ -371,7 +397,6 @@ const UserManagementScreen: React.FC = () => {
       const playerRef = doc(db, "users", selectedPlayer.id);
 
       // Jos joukkueita on poistettu, poista myös niiden joukkuekohtaiset taidot
-      const currentTeamSkillsData = { ...selectedPlayer.teamSkills };
       for (const removedTeamId of removedTeams) {
         if (currentTeamSkillsData[removedTeamId]) {
           delete currentTeamSkillsData[removedTeamId];
@@ -477,9 +502,10 @@ const UserManagementScreen: React.FC = () => {
         updateData.role = editRole;
       }
 
-      // Jos joukkueita poistettiin, päivitä teamSkills
-      if (removedTeams.length > 0) {
+      // Päivitä teamSkills jos joukkueita lisättiin tai poistettiin
+      if (removedTeams.length > 0 || addedTeams.length > 0) {
         updateData.teamSkills = currentTeamSkillsData;
+        console.log("Saving updated teamSkills:", currentTeamSkillsData);
       }
 
       // Päivitä perustaidot vain jos ei ole joukkuetta valittu
@@ -714,11 +740,12 @@ const UserManagementScreen: React.FC = () => {
                     (team) => team.id === selectedTeam
                   );
 
-                  // Get team-specific skills
-                  const teamSkills = getTeamSkillsWithLocal(
-                    player.id,
-                    selectedTeam
-                  );
+                  // Get team-specific skills - try all possible IDs
+                  let teamSkills =
+                    getTeamSkillsWithLocal(player.id, selectedTeam) ||
+                    getTeamSkillsWithLocal(player.playerId, selectedTeam) ||
+                    getTeamSkillsWithLocal(player.email, selectedTeam);
+
                   const displayCategory =
                     teamSkills?.category || player.category;
                   const displayMultiplier =
@@ -803,23 +830,7 @@ const UserManagementScreen: React.FC = () => {
                         </Text>
                         <Text style={styles.playerContact}>
                           {player.email}
-                          {(() => {
-                            console.log("Render phone check:", {
-                              email: player.email,
-                              phone: player.phone,
-                              phoneType: typeof player.phone,
-                              phoneTruthy: !!player.phone,
-                              phoneTrim: player.phone && player.phone.trim(),
-                              phoneTrimTruthy: !!(
-                                player.phone && player.phone.trim()
-                              ),
-                            });
-                            return (
-                              player.phone &&
-                              player.phone.trim() &&
-                              ` • ${player.phone}`
-                            );
-                          })()}
+                          {player.phone && ` • ${player.phone}`}
                         </Text>
                       </View>
                       <Ionicons name="chevron-forward" size={20} color="#666" />

@@ -254,6 +254,45 @@ const CreateEventScreen: React.FC = () => {
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
+    // Check license status before creating event
+    const selectedTeam = teams.find((t) => t.id === selectedTeamId);
+    if (!selectedTeam) {
+      Alert.alert("Virhe", "Valittua joukkuetta ei löytynyt");
+      return;
+    }
+
+    // Check if license is active and valid
+    if (selectedTeam.licenseStatus !== "active") {
+      Alert.alert(
+        "Lisenssi vanhentunut",
+        "Joukkueen lisenssi on vanhentunut tai ei ole aktiivinen. Pyydä admin uusimaan lisenssi ennen tapahtuman luomista.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
+
+    // Check if license has expired
+    if (selectedTeam.licenseExpiresAt) {
+      const expiryDate =
+        typeof selectedTeam.licenseExpiresAt === "object" &&
+        "seconds" in selectedTeam.licenseExpiresAt
+          ? new Date((selectedTeam.licenseExpiresAt as any).seconds * 1000)
+          : selectedTeam.licenseExpiresAt instanceof Date
+          ? selectedTeam.licenseExpiresAt
+          : new Date(selectedTeam.licenseExpiresAt);
+
+      if (expiryDate < new Date()) {
+        Alert.alert(
+          "Lisenssi vanhentunut",
+          `Joukkueen lisenssi vanheni ${expiryDate.toLocaleDateString(
+            "fi-FI"
+          )}. Pyydä admin uusimaan lisenssi ennen tapahtuman luomista.`,
+          [{ text: "OK" }]
+        );
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       // Combine date and time
@@ -614,37 +653,63 @@ const CreateEventScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            {userTeams.map((team) => (
-              <TouchableOpacity
-                key={team.id}
-                style={[
-                  styles.teamOption,
-                  selectedTeamId === team.id && styles.selectedTeamOption,
-                ]}
-                onPress={() => handleTeamSelection(team.id)}
-              >
-                <View style={styles.teamOptionLeft}>
-                  <View
-                    style={[
-                      styles.teamColorIndicator,
-                      { backgroundColor: team.color || "#1976d2" },
-                    ]}
-                  />
-                  <Text
-                    style={[
-                      styles.teamOptionText,
-                      selectedTeamId === team.id &&
-                        styles.selectedTeamOptionText,
-                    ]}
-                  >
-                    {team.name}
-                  </Text>
-                </View>
-                {selectedTeamId === team.id && (
-                  <Ionicons name="checkmark" size={20} color="#007AFF" />
-                )}
-              </TouchableOpacity>
-            ))}
+            {userTeams.map((team) => {
+              // Check if license is expired or inactive
+              const isLicenseInactive = team.licenseStatus !== "active";
+              let isExpired = false;
+              if (team.licenseExpiresAt) {
+                const expiryDate =
+                  typeof team.licenseExpiresAt === "object" &&
+                  "seconds" in team.licenseExpiresAt
+                    ? new Date((team.licenseExpiresAt as any).seconds * 1000)
+                    : team.licenseExpiresAt instanceof Date
+                    ? team.licenseExpiresAt
+                    : new Date(team.licenseExpiresAt);
+                isExpired = expiryDate < new Date();
+              }
+              const hasValidLicense = !isLicenseInactive && !isExpired;
+
+              return (
+                <TouchableOpacity
+                  key={team.id}
+                  style={[
+                    styles.teamOption,
+                    selectedTeamId === team.id && styles.selectedTeamOption,
+                    !hasValidLicense && styles.disabledTeamOption,
+                  ]}
+                  onPress={() => handleTeamSelection(team.id)}
+                >
+                  <View style={styles.teamOptionLeft}>
+                    <View
+                      style={[
+                        styles.teamColorIndicator,
+                        { backgroundColor: team.color || "#1976d2" },
+                      ]}
+                    />
+                    <View style={styles.teamNameContainer}>
+                      <Text
+                        style={[
+                          styles.teamOptionText,
+                          selectedTeamId === team.id &&
+                            styles.selectedTeamOptionText,
+                          !hasValidLicense && styles.disabledTeamText,
+                        ]}
+                      >
+                        {team.name}
+                      </Text>
+                      {!hasValidLicense && (
+                        <Text style={styles.licenseWarningText}>
+                          ⚠️ Lisenssi vanhentunut
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                  {selectedTeamId === team.id && (
+                    <Ionicons name="checkmark" size={20} color="#007AFF" />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
       </Modal>
@@ -779,6 +844,20 @@ const styles = StyleSheet.create({
   selectedTeamOptionText: {
     color: "#007AFF",
     fontWeight: "500",
+  },
+  disabledTeamOption: {
+    opacity: 0.5,
+  },
+  teamNameContainer: {
+    flex: 1,
+  },
+  disabledTeamText: {
+    color: "#999",
+  },
+  licenseWarningText: {
+    fontSize: 12,
+    color: "#ff6b6b",
+    marginTop: 2,
   },
   // DateTimePicker Modal styles
   datePickerModalOverlay: {

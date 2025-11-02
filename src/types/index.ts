@@ -70,6 +70,9 @@ export interface Team {
   licenseExpiresAt?: Date; // When the license expires
   licenseActivatedAt?: Date; // When the license was activated
   licenseDuration?: number; // License duration in days
+  licenseId?: string; // Reference to the license document in licenses collection
+  licenseType?: "trial" | "half-season" | "season"; // Type of license
+  seasonEndDate?: Date; // Season end date for easier tracking
   // Team generation names
   teamAName?: string; // Custom name for Team A in random team generation
   teamBName?: string; // Custom name for Team B in random team generation
@@ -77,21 +80,24 @@ export interface Team {
   // Legacy fields for compatibility - required to avoid undefined errors
   players: Player[]; // Populated players array (derived from members)
   totalPoints: number;
-  goalkeepers: Player[];
-  fieldPlayers: Player[];
+  goalkeepers?: Player[]; // Optional - only used in team generation
+  fieldPlayers?: Player[]; // Optional - only used in team generation
 }
 
 // License types
 export interface License {
   id: string;
   code: string; // License code (e.g., "FD2024-ABC123")
-  type: "trial" | "monthly" | "yearly"; // License type
-  duration: number; // Duration in days (7, 30, 365)
+  type: "trial" | "half-season" | "season"; // License type: trial (60 days), half-season (183 days), season (365 days)
+  duration: number; // Duration in days (60, 183, 365)
+  price?: number; // Price in euros (0 for trial, 69 for half-season, 99 for season)
   isUsed: boolean; // Whether the license has been used
   usedByTeamId?: string; // Which team used this license
   createdAt: Date;
+  createdBy?: string; // Who created the license
   usedAt?: Date;
   expiresAt?: Date; // When the license itself expires (for unused licenses)
+  updatedAt?: Date;
 }
 
 // Team Club/Organization types
@@ -195,6 +201,7 @@ export interface User {
   email: string;
   name?: string; // User's full name
   displayName?: string;
+  phoneNumber?: string; // User's phone number
   role: "admin" | "user";
   isAdmin?: boolean; // Legacy admin field for compatibility
   isMasterAdmin?: boolean; // Master admin field for license management
@@ -235,6 +242,7 @@ export type RootStackParamList = {
   Migration: undefined;
   TeamManagement: undefined;
   AdminMenu: undefined;
+  MasterAdmin: undefined;
 };
 
 export type BottomTabParamList = {
@@ -321,10 +329,33 @@ export interface TeamCreationRequest {
   estimatedPlayerCount?: number; // Estimated number of players
   contactInfo?: string; // Additional contact information
   businessInfo?: string; // Business/organization information if applicable
+  licenseType?: "trial" | "season" | "half-season"; // License type: trial (2 months), season (99€), or half-season (69€)
   status: "pending" | "approved" | "rejected"; // Request status
   createdAt: Date;
   reviewedAt?: Date; // When master admin reviewed the request
   reviewedBy?: string; // Master admin who reviewed
   rejectionReason?: string; // Reason for rejection if applicable
   approvedTeamId?: string; // Team ID if request was approved
+}
+
+// License request types
+export interface LicenseRequest {
+  id: string;
+  teamId: string; // ID of team requesting license
+  teamName: string; // Name of team requesting license
+  requestedBy: string; // User ID who requested the license
+  requestType: "new" | "renewal"; // New license or renewal
+  requestedAt: Date;
+  status: "pending" | "approved" | "rejected"; // Request status
+  reviewedAt?: Date; // When master admin reviewed the request
+  reviewedBy?: string; // Master admin who reviewed
+  rejectionReason?: string; // Reason for rejection if applicable
+  approvedLicenseId?: string; // License ID if request was approved
+  // Additional team info for new license requests
+  teamDescription?: string;
+  estimatedPlayerCount?: number;
+  adminName?: string;
+  adminEmail?: string;
+  adminPhone?: string; // Admin phone number
+  requestedLicenseType?: "trial" | "half-season" | "season"; // Type of license requested
 }

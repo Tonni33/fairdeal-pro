@@ -20,6 +20,7 @@ import {
   query,
   where,
   getDocs,
+  getDoc,
   arrayUnion,
   arrayRemove,
 } from "firebase/firestore";
@@ -206,13 +207,35 @@ const UserProfileEditor: React.FC<UserProfileEditorProps> = ({
               const playerRef = doc(db, "users", player.id);
               const teamRef = doc(db, "teams", teamId);
 
+              // Poista teamId pelaajan teamIds-listasta
               await updateDoc(playerRef, {
                 teamIds: arrayRemove(teamId),
               });
 
-              await updateDoc(teamRef, {
-                members: arrayRemove(player.id),
-              });
+              // Hae joukkueen tiedot ja poista kaikki pelaajan mahdolliset ID:t members-listasta
+              const teamDoc = await getDoc(teamRef);
+              if (teamDoc.exists()) {
+                const teamData = teamDoc.data();
+                const currentMembers = teamData.members || [];
+
+                // Poista kaikki pelaajan ID:t (player.id, player.playerId, player.email)
+                const updatedMembers = currentMembers.filter(
+                  (memberId: string) =>
+                    memberId !== player.id &&
+                    memberId !== player.playerId &&
+                    memberId !== player.email
+                );
+
+                await updateDoc(teamRef, {
+                  members: updatedMembers,
+                });
+
+                console.log("Removed player from team:", {
+                  teamId,
+                  originalMembersCount: currentMembers.length,
+                  newMembersCount: updatedMembers.length,
+                });
+              }
 
               Alert.alert("Onnistui", `Poistuit joukkueesta: ${teamName}`);
 

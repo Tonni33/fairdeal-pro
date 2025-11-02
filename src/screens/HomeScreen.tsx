@@ -892,7 +892,11 @@ const HomeScreen: React.FC = () => {
               nextEvent.generatedTeams.teams.length > 0 && (
                 <TouchableOpacity
                   style={styles.generatedTeamsBanner}
-                  onPress={() => (navigation as any).navigate("Teams")}
+                  onPress={() => {
+                    // Navigate to Teams tab - since we're already in a tab navigator,
+                    // we can navigate directly to the Teams tab
+                    (navigation as any).navigate("Teams");
+                  }}
                 >
                   <View style={styles.participantsBannerContent}>
                     <View style={styles.participantsBannerLeft}>

@@ -23,27 +23,57 @@ const AdminMenuScreen: React.FC = () => {
   const { user } = useAuth();
   const { teams, selectedTeamId } = useApp();
 
-  // Check if user has admin privileges for the selected team
+  // Check if user has admin privileges for the selected team OR any team
   const isUserAdmin = (): boolean => {
-    if (!user?.uid) return false;
+    if (!user?.uid) {
+      console.log("AdminMenuScreen: No user UID");
+      return false;
+    }
 
     // Check if user is master admin
-    if (user.isMasterAdmin) return true;
+    if (user.isMasterAdmin) {
+      console.log("AdminMenuScreen: User is MasterAdmin");
+      return true;
+    }
 
-    // If no team is selected, don't show admin functions
-    if (!selectedTeamId) return false;
+    // Check if user.isAdmin is set (from AuthContext team admin check)
+    if (user.isAdmin === true) {
+      console.log("AdminMenuScreen: User has isAdmin flag set to true");
+      return true;
+    }
 
-    // Check if user is admin of the selected team
-    const selectedTeam = teams.find((team) => team.id === selectedTeamId);
-    if (!selectedTeam) return false;
+    // If a team is selected, check admin status for that specific team
+    if (selectedTeamId) {
+      const selectedTeam = teams.find((team) => team.id === selectedTeamId);
+      if (selectedTeam) {
+        const isAdminOfSelectedTeam =
+          selectedTeam.adminIds?.includes(user.uid) ||
+          selectedTeam.adminId === user.uid;
+        console.log(
+          `AdminMenuScreen: Selected team ${selectedTeam.name}, isAdmin: ${isAdminOfSelectedTeam}`
+        );
+        return isAdminOfSelectedTeam;
+      }
+    }
 
-    return (
-      selectedTeam.adminIds?.includes(user.uid) ||
-      selectedTeam.adminId === user.uid
+    // If no team is selected, check if user is admin of ANY team
+    const isAdminOfAnyTeam = teams.some(
+      (team) => team.adminIds?.includes(user.uid) || team.adminId === user.uid
     );
+    console.log(
+      `AdminMenuScreen: No team selected, checking all teams. isAdminOfAnyTeam: ${isAdminOfAnyTeam}`
+    );
+    return isAdminOfAnyTeam;
   };
 
   const menuItems = [
+    {
+      title: "Master Admin",
+      icon: "shield-checkmark",
+      screen: "MasterAdmin",
+      description: "Lisenssinhallinta ja lisenssipyynnöt",
+      masterAdminOnly: true,
+    },
     {
       title: "Tiimien luonti",
       icon: "people-outline",
@@ -115,7 +145,25 @@ const AdminMenuScreen: React.FC = () => {
 
         <View style={styles.menuItems}>
           {menuItems
-            .filter((item) => !item.adminOnly || isUserAdmin())
+            .filter((item) => {
+              // Filter by master admin status
+              if (item.masterAdminOnly && !user?.isMasterAdmin) {
+                console.log(
+                  `AdminMenuScreen: Hiding ${item.title} - requires MasterAdmin`
+                );
+                return false;
+              }
+              // Filter by regular admin status
+              const userIsAdmin = isUserAdmin();
+              if (item.adminOnly && !userIsAdmin) {
+                console.log(
+                  `AdminMenuScreen: Hiding ${item.title} - requires admin, userIsAdmin: ${userIsAdmin}`
+                );
+                return false;
+              }
+              console.log(`AdminMenuScreen: Showing ${item.title}`);
+              return true;
+            })
             .map((item, index) => (
               <TouchableOpacity
                 key={index}

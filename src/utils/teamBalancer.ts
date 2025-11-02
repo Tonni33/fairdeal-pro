@@ -284,6 +284,7 @@ export class TeamBalancer {
    */
   private static addPlayerToTeam(team: Team, player: Player): void {
     team.players.push(player);
+    if (!team.fieldPlayers) team.fieldPlayers = [];
     team.fieldPlayers.push(player);
     team.members.push(player.id);
   }
@@ -312,6 +313,8 @@ export class TeamBalancer {
       const teamB_avg = this.getTeamAverage(teams[1]);
 
       // Count current goalkeepers in each team
+      if (!teams[0].goalkeepers) teams[0].goalkeepers = [];
+      if (!teams[1].goalkeepers) teams[1].goalkeepers = [];
       const teamA_goalkeepers = teams[0].goalkeepers.length;
       const teamB_goalkeepers = teams[1].goalkeepers.length;
 
@@ -341,6 +344,7 @@ export class TeamBalancer {
       }
 
       targetTeam.players.push(goalkeeper);
+      if (!targetTeam.goalkeepers) targetTeam.goalkeepers = [];
       targetTeam.goalkeepers.push(goalkeeper);
       targetTeam.members.push(goalkeeper.id);
     }
@@ -441,7 +445,7 @@ export class TeamBalancer {
     }
 
     // Check goalkeeper distribution
-    const goalkeeperCounts = teams.map((team) => team.goalkeepers.length);
+    const goalkeeperCounts = teams.map((team) => team.goalkeepers?.length || 0);
     const minGoalkeepers = Math.min(...goalkeeperCounts);
     const maxGoalkeepers = Math.max(...goalkeeperCounts);
 

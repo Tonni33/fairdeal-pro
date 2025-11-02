@@ -25,6 +25,7 @@ import SettingsScreen from "../screens/SettingsScreen";
 import MigrationScreen from "../screens/MigrationScreen";
 import TeamManagementScreen from "../screens/TeamManagementScreen";
 import AdminMenuScreen from "../screens/AdminMenuScreen";
+import MasterAdminScreen from "../screens/MasterAdminScreen";
 
 const Stack = createStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<BottomTabParamList>();
@@ -199,6 +200,13 @@ const AppNavigator = () => {
                 headerShown: true,
                 title: "Admin-valikko",
                 headerBackTitle: "Takaisin",
+              }}
+            />
+            <Stack.Screen
+              name="MasterAdmin"
+              component={MasterAdminScreen}
+              options={{
+                headerShown: false,
               }}
             />
           </>

@@ -212,6 +212,20 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
               const pos = data.position.trim().toUpperCase();
               normalizedPosition = validPositions.includes(pos) ? pos : "H";
             }
+            // Debug phone processing for specific problematic users
+            if (
+              data.email === "enckell69@gmail.com" ||
+              data.email === "hannu@gmail.com"
+            ) {
+              console.log(`DEBUG PHONE for ${data.email}:`, {
+                rawPhone: data.phone,
+                phoneType: typeof data.phone,
+                phoneLength: data.phone?.length,
+                phoneValue: JSON.stringify(data.phone),
+                afterOrLogic: data.phone || undefined,
+              });
+            }
+
             playersData.push({
               id: doc.id,
               name:
@@ -220,7 +234,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 data.email ||
                 "",
               email: data.email,
-              phone: (data.phone && data.phone.trim()) || undefined,
+              phone: data.phone || undefined,
               category: data.category || "Intermediate",
               multiplier: data.multiplier || 1,
               position: normalizedPosition,
@@ -277,6 +291,14 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
               adminIds: data.adminIds || (data.adminId ? [data.adminId] : []), // Support multiple admins with legacy fallback
               members: data.members || [],
               licenceCode: data.licenceCode || "",
+              // License fields
+              licenseStatus: data.licenseStatus,
+              licenseExpiresAt: data.licenseExpiresAt,
+              licenseActivatedAt: data.licenseActivatedAt,
+              licenseDuration: data.licenseDuration,
+              licenseId: data.licenseId,
+              licenseType: data.licenseType,
+              seasonEndDate: data.seasonEndDate,
               createdAt: data.createdAt?.toDate
                 ? data.createdAt.toDate()
                 : new Date(data.createdAt || Date.now()),
@@ -295,6 +317,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
               id: t.id,
               name: t.name,
               adminId: t.adminId,
+              adminIds: t.adminIds,
               members: t.members,
             }))
           );

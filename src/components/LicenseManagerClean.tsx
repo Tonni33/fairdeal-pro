@@ -56,8 +56,8 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
 
   // Create license states
   const [licenseType, setLicenseType] = useState<
-    "trial" | "monthly" | "yearly"
-  >("monthly");
+    "trial" | "half-season" | "season"
+  >("season");
   const [licenseCount, setLicenseCount] = useState("1");
 
   // Activate license states
@@ -379,16 +379,18 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
     return `${prefix}-${suffix}${code}`;
   };
 
-  const getDurationDays = (type: "trial" | "monthly" | "yearly"): number => {
+  const getDurationDays = (
+    type: "trial" | "half-season" | "season"
+  ): number => {
     switch (type) {
       case "trial":
-        return 7;
-      case "monthly":
-        return 30;
-      case "yearly":
-        return 365;
+        return 60; // 2 months for trial
+      case "half-season":
+        return 183; // ~6 months
+      case "season":
+        return 365; // 1 year
       default:
-        return 30;
+        return 365;
     }
   };
 
@@ -526,11 +528,11 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
   const getLicenseTypeText = (type: string): string => {
     switch (type) {
       case "trial":
-        return "Kokeilu (7pv)";
-      case "monthly":
-        return "Kuukausi (30pv)";
-      case "yearly":
-        return "Vuosi (365pv)";
+        return "Kokeilu (60pv)";
+      case "half-season":
+        return "Puolikausi (183pv)";
+      case "season":
+        return "Kausi (365pv)";
       default:
         return type;
     }
@@ -571,25 +573,27 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
 
                   <Text style={styles.formLabel}>Lisenssin tyyppi</Text>
                   <View style={styles.licenseTypeRow}>
-                    {(["trial", "monthly", "yearly"] as const).map((type) => (
-                      <TouchableOpacity
-                        key={type}
-                        style={[
-                          styles.licenseTypeButton,
-                          licenseType === type && styles.selectedType,
-                        ]}
-                        onPress={() => setLicenseType(type)}
-                      >
-                        <Text
+                    {(["trial", "half-season", "season"] as const).map(
+                      (type) => (
+                        <TouchableOpacity
+                          key={type}
                           style={[
-                            styles.licenseTypeText,
-                            licenseType === type && styles.selectedTypeText,
+                            styles.licenseTypeButton,
+                            licenseType === type && styles.selectedType,
                           ]}
+                          onPress={() => setLicenseType(type)}
                         >
-                          {getLicenseTypeText(type)}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
+                          <Text
+                            style={[
+                              styles.licenseTypeText,
+                              licenseType === type && styles.selectedTypeText,
+                            ]}
+                          >
+                            {getLicenseTypeText(type)}
+                          </Text>
+                        </TouchableOpacity>
+                      )
+                    )}
                   </View>
 
                   <Text style={styles.formLabel}>Määrä</Text>

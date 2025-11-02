@@ -58,7 +58,10 @@ const SettingsScreen: React.FC = () => {
   const { teams } = useApp();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<"global" | "team">("global");
+  // Tavallinen admin aloittaa team-tabista, MasterAdmin global-tabista
+  const [activeTab, setActiveTab] = useState<"global" | "team">(
+    user?.isMasterAdmin ? "global" : "team"
+  );
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
 
   // User management states
@@ -103,6 +106,14 @@ const SettingsScreen: React.FC = () => {
     loadUsersWithoutPassword();
   }, []);
 
+  // Auto-select first admin team when adminTeams loads
+  useEffect(() => {
+    if (adminTeams.length > 0 && !selectedTeamId && activeTab === "team") {
+      console.log("Auto-selecting first admin team:", adminTeams[0].id);
+      setSelectedTeamId(adminTeams[0].id);
+    }
+  }, [adminTeams]);
+
   // Reload users when selected team changes
   useEffect(() => {
     if (selectedTeamId) {
@@ -130,11 +141,6 @@ const SettingsScreen: React.FC = () => {
         }
       }
       setTeamSettings(teamSettingsMap);
-
-      // Set first admin team as selected if exists
-      if (adminTeams.length > 0 && !selectedTeamId) {
-        setSelectedTeamId(adminTeams[0].id);
-      }
     } catch (error) {
       console.error("Error loading settings:", error);
       Alert.alert("Virhe", "Asetusten lataaminen epäonnistui");
@@ -155,23 +161,35 @@ const SettingsScreen: React.FC = () => {
       // Find users who need password change or don't have Firebase Auth account
       const usersWithoutAuth: UserWithoutPassword[] = [];
 
-      for (const user of usersData) {
+      for (const userData of usersData) {
         // Check if user needs password change (meaning they don't have a proper password yet)
-        if (user.email && user.needsPasswordChange === true) {
-          // If we're in team mode and have a selected team, filter by team membership
-          if (activeTab === "team" && selectedTeamId) {
+        if (userData.email && userData.needsPasswordChange === true) {
+          // Jos valittu joukkue, suodata joukkueen mukaan
+          if (selectedTeamId) {
             // Check if user belongs to the selected team
-            const belongsToTeam = user.teamIds?.includes(selectedTeamId);
+            const belongsToTeam = userData.teamIds?.includes(selectedTeamId);
 
             if (!belongsToTeam) {
               continue; // Skip users not in the selected team
             }
+          } else if (activeTab === "team") {
+            // Jos team-tabissa mutta ei joukkuetta valittu, älä näytä käyttäjiä
+            continue;
+          } else if (!isMasterAdmin()) {
+            // Tavallinen admin global-tabissa - näytä vain oman joukkueen käyttäjät
+            const userBelongsToAdminTeam = adminTeams.some((team) =>
+              userData.teamIds?.includes(team.id)
+            );
+            if (!userBelongsToAdminTeam) {
+              continue;
+            }
           }
+          // MasterAdmin global-tabissa näkee kaikki
 
           usersWithoutAuth.push({
-            id: user.id,
-            email: user.email,
-            displayName: user.displayName || user.name,
+            id: userData.id,
+            email: userData.email,
+            displayName: userData.displayName || userData.name,
             hasPassword: false,
             selected: false,
           });
@@ -414,21 +432,23 @@ const SettingsScreen: React.FC = () => {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Tab selector */}
+        {/* Tab selector - vain MasterAdminille näytetään molemmat tabit */}
         <View style={styles.tabContainer}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === "global" && styles.activeTab]}
-            onPress={() => setActiveTab("global")}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === "global" && styles.activeTabText,
-              ]}
+          {isMasterAdmin() && (
+            <TouchableOpacity
+              style={[styles.tab, activeTab === "global" && styles.activeTab]}
+              onPress={() => setActiveTab("global")}
             >
-              Yleiset oletusarvot
-            </Text>
-          </TouchableOpacity>
+              <Text
+                style={[
+                  styles.tabText,
+                  activeTab === "global" && styles.activeTabText,
+                ]}
+              >
+                Yleiset oletusarvot
+              </Text>
+            </TouchableOpacity>
+          )}
           {adminTeams.length > 0 && (
             <TouchableOpacity
               style={[styles.tab, activeTab === "team" && styles.activeTab]}
