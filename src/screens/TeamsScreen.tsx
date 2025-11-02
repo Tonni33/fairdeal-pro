@@ -238,11 +238,11 @@ const TeamsScreen: React.FC = () => {
       return;
 
     try {
-      const teams = selectedEvent.generatedTeams.teams;
+      const generatedTeams = selectedEvent.generatedTeams.teams;
       let message = `🏒 ${selectedEvent.title}\n`;
       message += `📅 ${formatFullDateTime(selectedEvent.date)}\n\n`;
 
-      teams.forEach((team, index) => {
+      generatedTeams.forEach((team, index) => {
         message += `⭐ ${team.name}:\n`;
 
         const shuffledPlayers = getShuffledPlayersForDisplay(
@@ -263,7 +263,7 @@ const TeamsScreen: React.FC = () => {
         });
 
         // Add empty line between teams (except after last team)
-        if (index < teams.length - 1) {
+        if (index < generatedTeams.length - 1) {
           message += "\n";
         }
       });
@@ -271,8 +271,40 @@ const TeamsScreen: React.FC = () => {
       // Add footer
       message += "\n📱 Lähetetty FairDealPro-appista";
 
-      const url = `whatsapp://send?text=${encodeURIComponent(message)}`;
+      // Find team data from teams context using selectedEvent.teamId
+      const selectedTeamData = selectedEvent.teamId 
+        ? teams.find((t) => t.id === selectedEvent.teamId)
+        : null;
+
+      let url: string;
       
+      if (selectedTeamData?.whatsappGroupInviteLink) {
+        // Use specific group chat if invite link is saved
+        if (selectedTeamData.whatsappGroupInviteLink.includes('chat.whatsapp.com')) {
+          // First open the group
+          Linking.openURL(selectedTeamData.whatsappGroupInviteLink)
+            .then(() => {
+              // Small delay to allow WhatsApp to open, then send message
+              setTimeout(() => {
+                const sendUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
+                Linking.openURL(sendUrl).catch((err) => {
+                  console.error('Error opening WhatsApp to send message:', err);
+                });
+              }, 1000);
+            })
+            .catch((err) => {
+              console.error('Error opening WhatsApp group:', err);
+              // Fallback to general WhatsApp sharing
+              const fallbackUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
+              Linking.openURL(fallbackUrl);
+            });
+          return;
+        }
+      }
+      
+      // Default behavior - open WhatsApp for general sharing
+      url = `whatsapp://send?text=${encodeURIComponent(message)}`;
+
       Linking.canOpenURL(url)
         .then((supported) => {
           if (supported) {

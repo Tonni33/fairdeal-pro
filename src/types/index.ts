@@ -76,6 +76,9 @@ export interface Team {
   // Team generation names
   teamAName?: string; // Custom name for Team A in random team generation
   teamBName?: string; // Custom name for Team B in random team generation
+  // WhatsApp group information
+  whatsappGroupName?: string; // WhatsApp group name
+  whatsappGroupInviteLink?: string; // WhatsApp group invite link
   createdAt: Date;
   // Legacy fields for compatibility - required to avoid undefined errors
   players: Player[]; // Populated players array (derived from members)

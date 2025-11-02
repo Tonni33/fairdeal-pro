@@ -21,6 +21,7 @@ import {
   getDocs,
   query,
   where,
+  updateDoc,
 } from "firebase/firestore";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "../services/firebase";
@@ -315,6 +316,33 @@ const SettingsScreen: React.FC = () => {
       "SettingsScreen: getCurrentSettings - WARNING: No team selected, returning globalSettings as fallback"
     );
     return globalSettings;
+  };
+
+  const getCurrentTeamData = () => {
+    if (selectedTeamId) {
+      return teams.find((team) => team.id === selectedTeamId);
+    }
+    return null;
+  };
+
+  const handleTeamDataChange = async (field: string, value: string) => {
+    if (!selectedTeamId || !user) return;
+
+    try {
+      const teamRef = doc(db, "teams", selectedTeamId);
+      await updateDoc(teamRef, {
+        [field]: value,
+        updatedBy: user.email,
+        updatedAt: new Date(),
+      });
+
+      // Refresh data to get updated team information
+      await refreshData();
+      Alert.alert("Onnistui", "Joukkueen tiedot päivitetty");
+    } catch (error) {
+      console.error("Error updating team data:", error);
+      Alert.alert("Virhe", "Joukkueen tietojen päivitys epäonnistui");
+    }
   };
 
   const toggleUserSelection = (userId: string) => {
@@ -672,6 +700,43 @@ const SettingsScreen: React.FC = () => {
             />
           </View>
         </View>
+
+        {/* WhatsApp group settings - only for team-specific settings */}
+        {activeTab === "team" && selectedTeamId && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>WhatsApp-ryhmä</Text>
+            <Text style={styles.sectionDescription}>
+              Tallenna joukkueen WhatsApp-ryhmän tiedot, jotta ne voidaan käyttää
+              automaattisesti joukkuejakojen lähettämisessä
+            </Text>
+
+            <View style={styles.settingItem}>
+              <Text style={styles.settingLabel}>WhatsApp-ryhmän nimi</Text>
+              <TextInput
+                style={styles.textInput}
+                value={getCurrentTeamData()?.whatsappGroupName || ""}
+                onChangeText={(text) => handleTeamDataChange("whatsappGroupName", text)}
+                placeholder="Esim. HC KeLo WhatsApp"
+              />
+            </View>
+
+            <View style={styles.settingItem}>
+              <Text style={styles.settingLabel}>WhatsApp-ryhmän kutsu-linkki</Text>
+              <TextInput
+                style={styles.textInput}
+                value={getCurrentTeamData()?.whatsappGroupInviteLink || ""}
+                onChangeText={(text) => handleTeamDataChange("whatsappGroupInviteLink", text)}
+                placeholder="https://chat.whatsapp.com/..."
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <Text style={styles.settingDescription}>
+                Voit kopioida kutsu-linkin WhatsApp-ryhmästä ja liittää sen tähän.
+                Tämä mahdollistaa joukkuejakojen lähettämisen suoraan ryhmään.
+              </Text>
+            </View>
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Satunnaisjoukkueet</Text>
