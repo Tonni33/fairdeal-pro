@@ -10,6 +10,7 @@ import {
   ScrollView,
   Alert,
   Clipboard,
+  Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -225,6 +226,71 @@ const TeamsScreen: React.FC = () => {
     } catch (error) {
       console.error("Error copying teams to clipboard:", error);
       Alert.alert("Virhe", "Kopiointi epäonnistui");
+    }
+  };
+
+  const sendTeamsToWhatsAppGroup = async () => {
+    if (
+      !selectedEvent ||
+      !selectedEvent.generatedTeams ||
+      !selectedEvent.generatedTeams.teams
+    )
+      return;
+
+    try {
+      const teams = selectedEvent.generatedTeams.teams;
+      let message = `🏒 ${selectedEvent.title}\n`;
+      message += `📅 ${formatFullDateTime(selectedEvent.date)}\n\n`;
+
+      teams.forEach((team, index) => {
+        message += `⭐ ${team.name}:\n`;
+
+        const shuffledPlayers = getShuffledPlayersForDisplay(
+          team,
+          selectedEvent.id
+        );
+
+        shuffledPlayers.forEach((playerId: string) => {
+          const player = getPlayerById(playerId);
+          if (player) {
+            const isGoalkeeper = player.position === "MV";
+            message += `• ${player.name}`;
+            if (isGoalkeeper) {
+              message += " 🥅";
+            }
+            message += "\n";
+          }
+        });
+
+        // Add empty line between teams (except after last team)
+        if (index < teams.length - 1) {
+          message += "\n";
+        }
+      });
+
+      // Add footer
+      message += "\n📱 Lähetetty FairDealPro-appista";
+
+      const url = `whatsapp://send?text=${encodeURIComponent(message)}`;
+      
+      Linking.canOpenURL(url)
+        .then((supported) => {
+          if (supported) {
+            return Linking.openURL(url);
+          } else {
+            Alert.alert(
+              "WhatsApp ei ole asennettu",
+              "Asenna WhatsApp-sovellus lähettääksesi viestejä ryhmään."
+            );
+          }
+        })
+        .catch((err) => {
+          console.error("WhatsApp error:", err);
+          Alert.alert("Virhe", "WhatsApp-viestin lähettäminen ei onnistunut");
+        });
+    } catch (error) {
+      console.error("Error sending teams to WhatsApp:", error);
+      Alert.alert("Virhe", "Viestin lähettäminen epäonnistui");
     }
   };
 
@@ -469,6 +535,12 @@ const TeamsScreen: React.FC = () => {
                   onPress={copyTeamsToClipboard}
                 >
                   <Ionicons name="copy-outline" size={20} color="#2196F3" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.whatsappButton}
+                  onPress={sendTeamsToWhatsAppGroup}
+                >
+                  <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.reshuffleButton}
@@ -895,6 +967,11 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 6,
     backgroundColor: "#e3f2fd",
+  },
+  whatsappButton: {
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: "rgba(37, 211, 102, 0.1)",
   },
   reshuffleButton: {
     padding: 8,
