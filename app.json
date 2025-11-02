@@ -33,7 +33,8 @@
         "NSCameraUsageDescription": "This app uses camera to take photos for player profiles",
         "NSPhotoLibraryUsageDescription": "This app accesses photo library to select photos for player profiles",
         "NSFaceIDUsageDescription": "Use Face ID for quick and secure authentication",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "LSApplicationQueriesSchemes": ["whatsapp", "tel", "mailto"]
       }
     },
     "android": {
@@ -50,6 +51,17 @@
         "WRITE_EXTERNAL_STORAGE",
         "USE_FINGERPRINT",
         "USE_BIOMETRIC"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "whatsapp"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
       ]
     },
     "web": {
