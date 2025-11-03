@@ -291,6 +291,9 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
               adminIds: data.adminIds || (data.adminId ? [data.adminId] : []), // Support multiple admins with legacy fallback
               members: data.members || [],
               licenceCode: data.licenceCode || "",
+              // WhatsApp group fields
+              whatsappGroupName: data.whatsappGroupName,
+              whatsappGroupInviteLink: data.whatsappGroupInviteLink,
               // License fields
               licenseStatus: data.licenseStatus,
               licenseExpiresAt: data.licenseExpiresAt,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -59,6 +59,7 @@ const SettingsScreen: React.FC = () => {
   const { teams, refreshData } = useApp();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const justSavedRef = useRef(false); // Track if we just saved to prevent field clearing
   // Tavallinen admin aloittaa team-tabista, MasterAdmin global-tabista
   const [activeTab, setActiveTab] = useState<"global" | "team">(
     user?.isMasterAdmin ? "global" : "team"
@@ -154,29 +155,39 @@ const SettingsScreen: React.FC = () => {
     }
   }, [adminTeams, activeTab]);
 
-  // Reload users when selected team changes
+  // Reload users and WhatsApp data when selected team changes or teams data updates
   useEffect(() => {
-    console.log(`SettingsScreen: selectedTeamId changed to: ${selectedTeamId}`);
+    console.log(
+      `SettingsScreen: selectedTeamId or teams changed, selectedTeamId: ${selectedTeamId}, justSaved: ${justSavedRef.current}`
+    );
     if (selectedTeamId) {
       loadUsersWithoutPassword();
 
       // Load WhatsApp group settings from team data
-      const teamData = teams.find((team) => team.id === selectedTeamId);
-      console.log(
-        `SettingsScreen: Loading WhatsApp data for team ${selectedTeamId}:`,
-        {
-          whatsappGroupName: teamData?.whatsappGroupName,
-          whatsappGroupInviteLink: teamData?.whatsappGroupInviteLink,
-        }
-      );
-      setWhatsappGroupName(teamData?.whatsappGroupName || "");
-      setWhatsappGroupInviteLink(teamData?.whatsappGroupInviteLink || "");
+      // Skip if we just saved to prevent clearing user's unsaved edits
+      if (!justSavedRef.current) {
+        const teamData = teams.find((team) => team.id === selectedTeamId);
+        console.log(
+          `SettingsScreen: Loading WhatsApp data for team ${selectedTeamId}:`,
+          {
+            whatsappGroupName: teamData?.whatsappGroupName,
+            whatsappGroupInviteLink: teamData?.whatsappGroupInviteLink,
+          }
+        );
+        setWhatsappGroupName(teamData?.whatsappGroupName || "");
+        setWhatsappGroupInviteLink(teamData?.whatsappGroupInviteLink || "");
+      } else {
+        console.log(
+          `SettingsScreen: Skipping WhatsApp data reload - just saved`
+        );
+        justSavedRef.current = false; // Reset flag after skipping once
+      }
     } else {
       // Clear WhatsApp settings when no team is selected
       setWhatsappGroupName("");
       setWhatsappGroupInviteLink("");
     }
-  }, [selectedTeamId]);
+  }, [selectedTeamId, teams]);
 
   const loadSettings = async () => {
     try {
@@ -266,6 +277,7 @@ const SettingsScreen: React.FC = () => {
       `SettingsScreen: Starting save operation, activeTab: ${activeTab}, selectedTeamId: ${selectedTeamId}`
     );
     setSaving(true);
+    justSavedRef.current = true; // Mark that we're saving to prevent field clearing
     try {
       if (activeTab === "global") {
         // Save global settings
@@ -290,6 +302,10 @@ const SettingsScreen: React.FC = () => {
         // Also save WhatsApp group data to team document
         console.log("SettingsScreen: Saving WhatsApp group data");
         await saveTeamWhatsAppData();
+
+        // Refresh data after save to update teams state with new WhatsApp data
+        console.log("SettingsScreen: Refreshing data after save");
+        await refreshData();
       }
       console.log("SettingsScreen: Save completed successfully");
       Alert.alert("Onnistui", "Asetukset tallennettu");
