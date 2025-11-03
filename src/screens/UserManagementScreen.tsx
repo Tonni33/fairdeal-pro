@@ -814,24 +814,6 @@ const UserManagementScreen: React.FC = () => {
                             "Tuntematon"}
                           {isGoalkeeper && " 🥅"}
                         </Text>
-                        <Text style={styles.playerDetails}>
-                          {displayPosition} • Kat. {displayCategory} •{" "}
-                          {displayMultiplier.toFixed(1)}
-                          {playerRole !== "Jäsen" && (
-                            <Text
-                              style={[
-                                styles.roleIndicator,
-                                playerRole === "Admin" && styles.adminRole,
-                              ]}
-                            >
-                              {" • " + playerRole}
-                            </Text>
-                          )}
-                        </Text>
-                        <Text style={styles.playerContact}>
-                          {player.email}
-                          {player.phone && ` • ${player.phone}`}
-                        </Text>
                       </View>
                       <Ionicons name="chevron-forward" size={20} color="#666" />
                     </TouchableOpacity>
