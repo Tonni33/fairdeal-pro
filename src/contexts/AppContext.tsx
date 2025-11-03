@@ -45,16 +45,6 @@ export function getUserTeams(
     (team) =>
       // Check if user is admin by email
       team.adminId === email ||
-      // Check if user is member by email (legacy support)
-      (Array.isArray(team.members) && team.members.includes(email)) ||
-      // Check if user is member by user ID (current format)
-      (userId &&
-        Array.isArray(team.members) &&
-        team.members.includes(userId)) ||
-      // Check if user is member by playerId (for backwards compatibility)
-      (userPlayer?.playerId &&
-        Array.isArray(team.members) &&
-        team.members.includes(userPlayer.playerId)) ||
       // Check if user's player record has this team ID
       playerTeamIds.includes(team.id)
   );

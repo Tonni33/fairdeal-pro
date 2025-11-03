@@ -55,20 +55,9 @@ const RankingScreen: React.FC = () => {
       return { goalkeepers: [], fieldPlayers: [] };
     }
 
-    // Filter players by team membership
-    // Primary method: Check player's teamIds array (modern approach)
-    // Fallback: Check team's members array (legacy compatibility)
+    // Filter players by team membership using teamIds
     const teamPlayers = players.filter((p) => {
-      // Primary: Check if player's teamIds includes this team
-      if (p.teamIds?.includes(selectedTeamId)) {
-        return true;
-      }
-      // Legacy fallback: Check if team.members includes player (by id, playerId, or email)
-      return (
-        team.members?.includes(p.id) ||
-        team.members?.includes(p.playerId) ||
-        team.members?.includes(p.email || "")
-      );
+      return p.teamIds?.includes(selectedTeamId);
     });
 
     // Get team-specific multipliers from teamSkills

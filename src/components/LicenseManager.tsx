@@ -26,6 +26,7 @@ import {
   getDoc,
 } from "firebase/firestore";
 import { db } from "../services/firebase";
+import { useApp } from "../contexts/AppContext";
 
 interface LicenseManagerProps {
   visible: boolean;
@@ -50,6 +51,7 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
   currentUser,
   currentUserPhone,
 }) => {
+  const { players } = useApp();
   const [licenses, setLicenses] = useState<License[]>([]);
   const [licenseRequests, setLicenseRequests] = useState<any[]>([]);
   const [teams, setTeams] = useState<{ [key: string]: string }>({});
@@ -124,8 +126,9 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
     }
 
     // Fallback: tarkista haetusta teamAdmins listasta
-    if (team.members && currentUserId) {
-      const isTeamMember = team.members.includes(currentUserId);
+    if (currentUserId) {
+      const user = players.find((p) => p.id === currentUserId);
+      const isTeamMember = user?.teamIds?.includes(team.id);
       console.log("🔍 isTeamAdmin: Is team member:", isTeamMember);
 
       if (isTeamMember) {
@@ -227,54 +230,33 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
           "⚠️ fetchTeamAdmins: No adminIds found, checking team members with admin roles"
         );
 
-        // Fallback: hae kaikki joukkueen jäsenet ja tarkista heidän roolinsa
-        if (team.members && Array.isArray(team.members)) {
-          console.log(
-            "🔍 LicenseManager: Fetching team members count:",
-            team.members.length
-          );
+        // Fallback: hae kaikki joukkueen jäsenet playersista ja tarkista heidän roolinsa
+        const teamMembers = players.filter((p) => p.teamIds?.includes(team.id));
+        console.log(
+          "🔍 LicenseManager: Fetching team members count:",
+          teamMembers.length
+        );
 
-          for (const memberId of team.members) {
+        for (const member of teamMembers) {
+          console.log("🔍 fetchTeamAdmins: Checking member:", member.email);
+
+          // Tarkista onko admin roolissa
+          const globalRole = (member as any).role;
+          const isLegacyAdmin = (member as any).isAdmin;
+
+          if (globalRole === "admin" || isLegacyAdmin) {
             console.log(
-              "🔍 fetchTeamAdmins: Fetching member with ID:",
-              memberId
+              "✅ LicenseManager: Admin found from role:",
+              member.email
             );
-            const userDoc = await getDoc(doc(db, "users", memberId));
-            if (userDoc.exists()) {
-              const userData = { id: userDoc.id, ...userDoc.data() } as User;
-              console.log(
-                "🔍 LicenseManager: Member found:",
-                userData.email,
-                "role:",
-                (userData as any).role,
-                "isAdmin:",
-                (userData as any).isAdmin
-              );
-
-              // Tarkista onko admin roolissa
-              const globalRole = (userData as any).role;
-              const isLegacyAdmin = (userData as any).isAdmin;
-
-              if (globalRole === "admin" || isLegacyAdmin) {
-                console.log(
-                  "✅ LicenseManager: Admin found from role:",
-                  userData.email
-                );
-                admins.push(userData);
-              }
-            } else {
-              console.log(
-                "❌ LicenseManager: No member found with ID:",
-                memberId
-              );
-            }
+            admins.push(member as unknown as User);
           }
-          console.log(
-            "🔍 fetchTeamAdmins: Found",
-            admins.length,
-            "admins from team members with admin roles"
-          );
         }
+        console.log(
+          "🔍 fetchTeamAdmins: Found",
+          admins.length,
+          "admins from team members with admin roles"
+        );
       }
 
       // Viimeinen fallback: legacy adminId kenttä
@@ -936,13 +918,6 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
 
       console.log("🔍 Found user to add as admin:", newAdminData);
 
-      // Tarkista onko käyttäjä jo joukkueen jäsen
-      let currentMembers = team.members || [];
-      if (!currentMembers.includes(newAdminId)) {
-        // Lisää käyttäjä joukkueen jäseneksi
-        currentMembers.push(newAdminId);
-      }
-
       // Tarkista onko käyttäjä jo adminIds listassa
       let currentAdminIds = team.adminIds || [];
       if (currentAdminIds.includes(newAdminId)) {
@@ -954,10 +929,19 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
       // Lisää käyttäjä adminIds listaan
       currentAdminIds.push(newAdminId);
 
+      // Lisää joukkue käyttäjän teamIds listaan (jos ei ole jo siellä)
+      const userPlayer = players.find((p) => p.id === newAdminId);
+      if (!userPlayer?.teamIds?.includes(team.id)) {
+        const userRef = doc(db, "users", newAdminId);
+        await updateDoc(userRef, {
+          teamIds: [...(userPlayer?.teamIds || []), team.id],
+          updatedAt: new Date(),
+        });
+      }
+
       // Päivitä joukkueen tiedot
       const teamRef = doc(db, "teams", team.id);
       await updateDoc(teamRef, {
-        members: currentMembers,
         adminIds: currentAdminIds,
         updatedAt: new Date(),
       });

@@ -73,33 +73,8 @@ const UserProfileEditor: React.FC<UserProfileEditorProps> = ({
     }
   }, [player.id]); // Only re-run if player ID changes, not on every render
 
-  // Hae kaikki joukkueet joissa käyttäjä on mukana (sekä teamIds että team.members kautta)
-  const userTeams = teams.filter((team) => {
-    // Tarkista teamIds-kenttä
-    const inTeamByTeamIds = player.teamIds?.includes(team.id);
-    // Tarkista team.members-lista (Firebase Auth ID, email, tai playerId)
-    const inTeamByMembers =
-      team.members?.includes(player.id) ||
-      team.members?.includes(player.email) ||
-      team.members?.includes(player.playerId);
-
-    console.log(`UserProfileEditor: Team ${team.name}:`);
-    console.log(
-      `  - inTeamByTeamIds: ${inTeamByTeamIds} (player.teamIds: ${JSON.stringify(
-        player.teamIds
-      )})`
-    );
-    console.log(
-      `  - inTeamByMembers: ${inTeamByMembers} (team.members: ${JSON.stringify(
-        team.members
-      )})`
-    );
-    console.log(
-      `  - player.id: ${player.id}, player.email: ${player.email}, player.playerId: ${player.playerId}`
-    );
-
-    return inTeamByTeamIds || inTeamByMembers;
-  });
+  // Hae kaikki joukkueet joissa käyttäjä on mukana teamIds-kentän kautta
+  const userTeams = teams.filter((team) => player.teamIds?.includes(team.id));
 
   console.log(
     `UserProfileEditor: Löytyi ${userTeams.length} joukkuetta pelaajalle ${
@@ -219,12 +194,8 @@ const UserProfileEditor: React.FC<UserProfileEditorProps> = ({
       const teamDoc = querySnapshot.docs[0];
       const team = { id: teamDoc.id, ...teamDoc.data() } as Team;
 
-      // Tarkista onko pelaaja jo joukkueessa (sekä teamIds että team.members kautta)
-      const alreadyInTeam =
-        player.teamIds?.includes(team.id) ||
-        team.members?.includes(player.id) ||
-        team.members?.includes(player.email) ||
-        team.members?.includes(player.playerId);
+      // Tarkista onko pelaaja jo joukkueessa teamIds-kentän kautta
+      const alreadyInTeam = player.teamIds?.includes(team.id);
 
       if (alreadyInTeam) {
         Alert.alert("Tiedoksi", "Olet jo tässä joukkueessa");
@@ -236,14 +207,9 @@ const UserProfileEditor: React.FC<UserProfileEditorProps> = ({
 
       // Lisää pelaaja joukkueeseen
       const playerRef = doc(db, "users", player.id);
-      const teamRef = doc(db, "teams", team.id);
 
       await updateDoc(playerRef, {
         teamIds: arrayUnion(team.id),
-      });
-
-      await updateDoc(teamRef, {
-        members: arrayUnion(player.id),
       });
 
       Alert.alert("Onnistui!", `Liityit joukkueeseen: ${team.name}`);

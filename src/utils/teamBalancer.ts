@@ -286,7 +286,7 @@ export class TeamBalancer {
     team.players.push(player);
     if (!team.fieldPlayers) team.fieldPlayers = [];
     team.fieldPlayers.push(player);
-    team.members.push(player.id);
+    // Note: team.members is no longer used - player.teamIds is the source of truth
   }
 
   /**
@@ -346,7 +346,7 @@ export class TeamBalancer {
       targetTeam.players.push(goalkeeper);
       if (!targetTeam.goalkeepers) targetTeam.goalkeepers = [];
       targetTeam.goalkeepers.push(goalkeeper);
-      targetTeam.members.push(goalkeeper.id);
+      // Note: team.members is no longer used - player.teamIds is the source of truth
     }
 
     if (goalkeepers.length > 2) {

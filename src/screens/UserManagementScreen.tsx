@@ -101,13 +101,7 @@ const UserManagementScreen: React.FC = () => {
 
     // Käytetään sekä teamIds että members-kenttää varmuuden vuoksi
     const filtered = allPlayers.filter((player) => {
-      const inTeamByTeamIds = player.teamIds?.includes(selectedTeam);
-      const inTeamByMembers =
-        selectedTeamData.members?.includes(player.id) ||
-        selectedTeamData.members?.includes(player.playerId) ||
-        selectedTeamData.members?.includes(player.email);
-
-      return inTeamByTeamIds || inTeamByMembers;
+      return player.teamIds?.includes(selectedTeam);
     });
 
     console.log("UserManagement: Filtered players count:", filtered.length);
@@ -327,69 +321,22 @@ const UserManagementScreen: React.FC = () => {
         added: addedTeams,
       });
 
-      console.log("Current teams data before update:");
-      teams.forEach((team) => {
-        console.log(`Team ${team.name}:`, team.members);
-      });
-
       // Luo kopio teamSkills datasta muokkauksia varten
       const currentTeamSkillsData = { ...selectedPlayer.teamSkills };
 
-      // Poista pelaaja poistetuista joukkueista
-      for (const removedTeamId of removedTeams) {
-        // Poista pelaaja joukkueen members-listasta
-        const teamToUpdate = teams.find((team) => team.id === removedTeamId);
-        if (teamToUpdate) {
-          // Tarkista kaikki mahdolliset ID:t
-          const hasPlayer =
-            teamToUpdate.members?.includes(selectedPlayer.id) ||
-            teamToUpdate.members?.includes(selectedPlayer.playerId) ||
-            teamToUpdate.members?.includes(selectedPlayer.email);
-
-          if (hasPlayer) {
-            console.log("Removing player from team members:", removedTeamId);
-            // Poista kaikki mahdolliset ID:t
-            const updatedMembers = teamToUpdate.members.filter(
-              (memberId) =>
-                memberId !== selectedPlayer.id &&
-                memberId !== selectedPlayer.playerId &&
-                memberId !== selectedPlayer.email
-            );
-            const teamRef = doc(db, "teams", removedTeamId);
-            await updateDoc(teamRef, {
-              members: updatedMembers,
-              updatedAt: new Date(),
-            });
-            console.log("✅ Player removed from team successfully");
-          }
-        }
-      }
-
-      // Lisää pelaaja uusien joukkueiden members-listoihin
+      // Luo teamSkills data uusille joukkueille
       for (const addedTeamId of addedTeams) {
-        const teamToUpdate = teams.find((team) => team.id === addedTeamId);
-        if (teamToUpdate && !teamToUpdate.members.includes(selectedPlayer.id)) {
-          console.log("Adding player to team members:", addedTeamId);
-          const updatedMembers = [...teamToUpdate.members, selectedPlayer.id];
-          const teamRef = doc(db, "teams", addedTeamId);
-          await updateDoc(teamRef, {
-            members: updatedMembers,
+        if (!currentTeamSkillsData[addedTeamId]) {
+          console.log(
+            "Creating default team skills for new team:",
+            addedTeamId
+          );
+          currentTeamSkillsData[addedTeamId] = {
+            category: selectedPlayer.category || 2,
+            multiplier: selectedPlayer.multiplier || 2.0,
+            position: selectedPlayer.position || "H",
             updatedAt: new Date(),
-          });
-
-          // Luo teamSkills data uudelle joukkueelle jos ei ole olemassa
-          if (!currentTeamSkillsData[addedTeamId]) {
-            console.log(
-              "Creating default team skills for new team:",
-              addedTeamId
-            );
-            currentTeamSkillsData[addedTeamId] = {
-              category: selectedPlayer.category || 2,
-              multiplier: selectedPlayer.multiplier || 2.0,
-              position: selectedPlayer.position || "H",
-              updatedAt: new Date(),
-            };
-          }
+          };
         }
       }
 
@@ -584,11 +531,6 @@ const UserManagementScreen: React.FC = () => {
 
       // Lisää vielä lyhyt viive
       await new Promise((resolve) => setTimeout(resolve, 500));
-
-      console.log("Teams data after update and refresh:");
-      teams.forEach((team) => {
-        console.log(`Team ${team.name}:`, team.members);
-      });
 
       console.log(
         `Player ${selectedPlayer.name} teamIds after update:`,

@@ -250,7 +250,8 @@ const TeamManagementScreen: React.FC = () => {
               </View>
             )}
             <Text style={styles.memberCount}>
-              Jäseniä: {team.members?.length || 0}
+              Jäseniä:{" "}
+              {players.filter((p) => p.teamIds?.includes(team.id)).length}
             </Text>
           </View>
         </View>

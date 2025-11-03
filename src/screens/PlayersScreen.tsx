@@ -217,29 +217,16 @@ const PlayersScreen: React.FC = () => {
         const selectedTeam = teams.find((team) => team.id === selectedTeamId);
         if (!selectedTeam) return [];
 
-        // Käytetään sekä teamIds että members-kenttää varmuuden vuoksi
+        // Use teamIds for filtering
         playersToFilter = enrichedPlayers.filter((player) => {
-          const inTeamByTeamIds = player.teamIds?.includes(selectedTeamId);
-          const inTeamByMembers =
-            selectedTeam.members?.includes(player.id) ||
-            selectedTeam.members?.includes(player.playerId) ||
-            selectedTeam.members?.includes(player.email);
-          return inTeamByTeamIds || inTeamByMembers;
+          return player.teamIds?.includes(selectedTeamId);
         });
       } else {
         // Jos "Kaikki joukkueet" valittu, näytä vain käyttäjän joukkueiden pelaajat
         const userTeamIds = userTeams.map((team) => team.id).filter(Boolean);
         playersToFilter = enrichedPlayers.filter((player) => {
           // Pelaaja kuuluu johonkin käyttäjän joukkueeseen
-          return (
-            player.teamIds?.some((teamId) => userTeamIds.includes(teamId)) ||
-            userTeams.some(
-              (team) =>
-                team.members?.includes(player.id) ||
-                team.members?.includes(player.playerId) ||
-                team.members?.includes(player.email)
-            )
-          );
+          return player.teamIds?.some((teamId) => userTeamIds.includes(teamId));
         });
       }
 
@@ -326,13 +313,7 @@ const PlayersScreen: React.FC = () => {
   };
   const renderPlayer = ({ item }: { item: Player }) => {
     // Hae pelaajan joukkueet - tarkista kaikki ID-muodot
-    const playerTeams = teams.filter(
-      (team) =>
-        item.teamIds?.includes(team.id) ||
-        team.members?.includes(item.id) ||
-        team.members?.includes(item.playerId) ||
-        team.members?.includes(item.email)
-    );
+    const playerTeams = teams.filter((team) => item.teamIds?.includes(team.id));
 
     return (
       <TouchableOpacity
