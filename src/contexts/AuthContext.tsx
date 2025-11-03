@@ -235,6 +235,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           position: "H", // Hyökkääjä
           teamIds: [], // Ei joukkueita aluksi
           teams: [], // Ei joukkueita aluksi
+          phone: "", // Tyhjä puhelinnumero
+          image: "", // Ei profiilikuvaa
+          isAdmin: false, // Ei admin-oikeuksia
+          playerId: result.user.uid, // Legacy ID (sama kuin uid)
           createdAt: new Date(),
         });
       } catch (error) {

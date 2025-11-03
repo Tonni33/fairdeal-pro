@@ -488,6 +488,8 @@ const SettingsScreen: React.FC = () => {
           await setDoc(doc(db, "users", userCredential.user.uid), {
             email: userToCreate.email,
             displayName: userToCreate.displayName,
+            name: userToCreate.displayName,
+            uid: userCredential.user.uid,
             isAdmin: false,
             playerId: userToCreate.id,
             // Oletusarvot uudelle pelaajalle
@@ -496,6 +498,9 @@ const SettingsScreen: React.FC = () => {
             position: "H", // Hyökkääjä
             teamIds: [], // Ei joukkueita aluksi
             teams: [], // Ei joukkueita aluksi
+            phone: "", // Tyhjä puhelinnumero
+            image: "", // Ei profiilikuvaa
+            role: "user", // Peruskäyttäjä
             createdAt: new Date(),
             needsPasswordChange: false, // Password has been created, so no change needed
             createdBy: user?.email || "unknown",
