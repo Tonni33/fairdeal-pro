@@ -299,40 +299,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const userId = auth.currentUser.uid;
       const currentUser = auth.currentUser; // Store reference
 
-      // First, clean up Firestore data while user is still authenticated
-      // Remove user from all teams' member lists
-      const teamsSnapshot = await getDocs(collection(db, "teams"));
-      const updatePromises = [];
-
-      for (const teamDoc of teamsSnapshot.docs) {
-        const teamData = teamDoc.data();
-        const teamId = teamDoc.id;
-
-        // Check if user is in members array or adminIds array
-        const isInMembers =
-          teamData.members && teamData.members.includes(userId);
-        const isInAdminIds =
-          teamData.adminIds && teamData.adminIds.includes(userId);
-
-        if (isInMembers || isInAdminIds) {
-          const updateData: any = {};
-
-          if (isInMembers) {
-            updateData.members = arrayRemove(userId);
-          }
-
-          if (isInAdminIds) {
-            updateData.adminIds = arrayRemove(userId);
-          }
-
-          updatePromises.push(updateDoc(doc(db, "teams", teamId), updateData));
-        }
-      }
-
-      // Wait for all team updates to complete
-      await Promise.all(updatePromises);
+      // Note: We used to clean up teams.members[] here, but that field has been removed.
+      // Team membership is now tracked via player.teamIds, so deleting the user document
+      // automatically removes them from all teams.
 
       // Delete user document from Firestore
+      // This automatically removes the user from team memberships (player.teamIds model)
       await deleteDoc(doc(db, "users", userId));
 
       // LAST: Delete the Firebase Auth account
