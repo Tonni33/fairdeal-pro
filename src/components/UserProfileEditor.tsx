@@ -210,6 +210,7 @@ const UserProfileEditor: React.FC<UserProfileEditorProps> = ({
 
       await updateDoc(playerRef, {
         teamIds: arrayUnion(team.id),
+        teams: arrayUnion(team.name), // Lisää myös joukkueen nimi teams-kenttään
       });
 
       Alert.alert("Onnistui!", `Liityit joukkueeseen: ${team.name}`);
@@ -239,37 +240,17 @@ const UserProfileEditor: React.FC<UserProfileEditorProps> = ({
           onPress: async () => {
             try {
               const playerRef = doc(db, "users", player.id);
-              const teamRef = doc(db, "teams", teamId);
 
-              // Poista teamId pelaajan teamIds-listasta
+              // Poista teamId ja team nimi pelaajan tiedoista
               await updateDoc(playerRef, {
                 teamIds: arrayRemove(teamId),
+                teams: arrayRemove(teamName),
               });
 
-              // Hae joukkueen tiedot ja poista kaikki pelaajan mahdolliset ID:t members-listasta
-              const teamDoc = await getDoc(teamRef);
-              if (teamDoc.exists()) {
-                const teamData = teamDoc.data();
-                const currentMembers = teamData.members || [];
-
-                // Poista kaikki pelaajan ID:t (player.id, player.playerId, player.email)
-                const updatedMembers = currentMembers.filter(
-                  (memberId: string) =>
-                    memberId !== player.id &&
-                    memberId !== player.playerId &&
-                    memberId !== player.email
-                );
-
-                await updateDoc(teamRef, {
-                  members: updatedMembers,
-                });
-
-                console.log("Removed player from team:", {
-                  teamId,
-                  originalMembersCount: currentMembers.length,
-                  newMembersCount: updatedMembers.length,
-                });
-              }
+              console.log("Removed player from team:", {
+                teamId,
+                teamName,
+              });
 
               Alert.alert("Onnistui", `Poistuit joukkueesta: ${teamName}`);
 

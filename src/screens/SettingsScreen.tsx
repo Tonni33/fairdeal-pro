@@ -490,6 +490,12 @@ const SettingsScreen: React.FC = () => {
             displayName: userToCreate.displayName,
             isAdmin: false,
             playerId: userToCreate.id,
+            // Oletusarvot uudelle pelaajalle
+            category: 2, // Keskitaso
+            multiplier: 2.0, // Keskitason kerroin
+            position: "H", // Hyökkääjä
+            teamIds: [], // Ei joukkueita aluksi
+            teams: [], // Ei joukkueita aluksi
             createdAt: new Date(),
             needsPasswordChange: false, // Password has been created, so no change needed
             createdBy: user?.email || "unknown",

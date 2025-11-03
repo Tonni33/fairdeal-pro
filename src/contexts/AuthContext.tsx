@@ -229,6 +229,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       try {
         await setDoc(doc(db, "users", result.user.uid), {
           ...newUser,
+          // Oletusarvot uudelle pelaajalle
+          category: 2, // Keskitaso
+          multiplier: 2.0, // Keskitason kerroin
+          position: "H", // Hyökkääjä
+          teamIds: [], // Ei joukkueita aluksi
+          teams: [], // Ei joukkueita aluksi
           createdAt: new Date(),
         });
       } catch (error) {
