@@ -283,27 +283,43 @@ const TeamsScreen: React.FC = () => {
         if (
           selectedTeamData.whatsappGroupInviteLink.includes("chat.whatsapp.com")
         ) {
-          // First open the group
-          Linking.openURL(selectedTeamData.whatsappGroupInviteLink)
-            .then(() => {
-              // Small delay to allow WhatsApp to open, then send message
-              setTimeout(() => {
-                const sendUrl = `whatsapp://send?text=${encodeURIComponent(
-                  message
-                )}`;
-                Linking.openURL(sendUrl).catch((err) => {
-                  console.error("Error opening WhatsApp to send message:", err);
-                });
-              }, 1000);
-            })
-            .catch((err) => {
-              console.error("Error opening WhatsApp group:", err);
-              // Fallback to general WhatsApp sharing
-              const fallbackUrl = `whatsapp://send?text=${encodeURIComponent(
-                message
-              )}`;
-              Linking.openURL(fallbackUrl);
-            });
+          // Check if WhatsApp can be opened first
+          const canOpen = await Linking.canOpenURL("whatsapp://send");
+          if (!canOpen) {
+            Alert.alert(
+              "WhatsApp ei ole asennettu",
+              "Asenna WhatsApp-sovellus lähettääksesi viestejä ryhmään."
+            );
+            return;
+          }
+
+          // Copy message to clipboard
+          Clipboard.setString(message);
+
+          // Show alert and then open WhatsApp group
+          Alert.alert(
+            "Viesti kopioitu! 📋",
+            `Joukkuejako on kopioitu leikepöydälle.\n\nWhatsApp avautuu ja voit liittää viestin ryhmään pitkällä painalluksella.`,
+            [
+              {
+                text: "OK",
+                onPress: () => {
+                  // Open the WhatsApp group
+                  if (selectedTeamData.whatsappGroupInviteLink) {
+                    Linking.openURL(
+                      selectedTeamData.whatsappGroupInviteLink
+                    ).catch((err) => {
+                      console.error("Error opening WhatsApp group:", err);
+                      Alert.alert(
+                        "Virhe",
+                        "WhatsApp-ryhmän avaaminen ei onnistunut. Tarkista kutsulinkin oikeellisuus."
+                      );
+                    });
+                  }
+                },
+              },
+            ]
+          );
           return;
         }
       }
