@@ -429,12 +429,17 @@ const UserManagementScreen: React.FC = () => {
       }
 
       // Päivitä pelaajan perustiedot
+      // Muunna team ID:t nimiksi teams-kenttään
+      const teamNames = editSelectedTeams
+        .map((teamId) => teams.find((t) => t.id === teamId)?.name)
+        .filter(Boolean);
+
       const updateData: any = {
         name: editName.trim(),
         email: editEmail.trim().toLowerCase(),
         phone: editPhone.trim(),
-        teams: editSelectedTeams,
-        teamIds: editSelectedTeams,
+        teams: teamNames, // Joukkueiden nimet
+        teamIds: editSelectedTeams, // Joukkueiden ID:t
         updatedAt: new Date(),
       };
 
