@@ -160,19 +160,23 @@ const SettingsScreen: React.FC = () => {
     if (selectedTeamId) {
       loadUsersWithoutPassword();
 
-      // Update WhatsApp group settings from team data only if not currently saving
-      // This prevents clearing fields during save operation
-      if (!saving) {
-        const teamData = teams.find((team) => team.id === selectedTeamId);
-        setWhatsappGroupName(teamData?.whatsappGroupName || "");
-        setWhatsappGroupInviteLink(teamData?.whatsappGroupInviteLink || "");
-      }
+      // Load WhatsApp group settings from team data
+      const teamData = teams.find((team) => team.id === selectedTeamId);
+      console.log(
+        `SettingsScreen: Loading WhatsApp data for team ${selectedTeamId}:`,
+        {
+          whatsappGroupName: teamData?.whatsappGroupName,
+          whatsappGroupInviteLink: teamData?.whatsappGroupInviteLink,
+        }
+      );
+      setWhatsappGroupName(teamData?.whatsappGroupName || "");
+      setWhatsappGroupInviteLink(teamData?.whatsappGroupInviteLink || "");
     } else {
       // Clear WhatsApp settings when no team is selected
       setWhatsappGroupName("");
       setWhatsappGroupInviteLink("");
     }
-  }, [selectedTeamId, teams, saving]);
+  }, [selectedTeamId]);
 
   const loadSettings = async () => {
     try {
@@ -388,10 +392,9 @@ const SettingsScreen: React.FC = () => {
         `SettingsScreen: WhatsApp data saved successfully for team ${selectedTeamId}`
       );
 
-      // Refresh data to get updated team information
-      await refreshData();
-
-      console.log(`SettingsScreen: Data refreshed after WhatsApp save`);
+      // Note: Don't refresh data here as it would trigger useEffect and clear fields
+      // The data will be available for other components that need it
+      console.log(`SettingsScreen: WhatsApp data saved to Firestore`);
       // Don't show alert here since it's called from saveSettings which shows its own alert
     } catch (error) {
       console.error("Error updating WhatsApp team data:", error);
