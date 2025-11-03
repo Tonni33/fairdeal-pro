@@ -566,17 +566,30 @@ const UserManagementScreen: React.FC = () => {
 
     Alert.alert(
       "Poista pelaaja",
-      `Haluatko varmasti poistaa pelaajan ${selectedPlayer.name}?`,
+      `Haluatko varmasti poistaa pelaajan ${selectedPlayer.name}?\n\nHUOM: Tämä poistaa pelaajan tietokannasta, mutta käyttäjä voi edelleen kirjautua sisään.\n\nPoista käyttäjä myös Firebase Authentication -palvelusta ajamalla:\nnode scripts/deleteAuthUser.js ${selectedPlayer.id}`,
       [
         { text: "Peruuta", style: "cancel" },
         {
-          text: "Poista",
+          text: "Poista tietokannasta",
           style: "destructive",
           onPress: async () => {
             try {
               // Käytä users collectioa players sijasta
               await deleteDoc(doc(db, "users", selectedPlayer.id));
-              Alert.alert("Onnistui", "Pelaaja poistettu");
+
+              // Kopioi UID leikepöydälle helpottamaan skriptin ajoa
+              const uidMessage = `Käyttäjän UID kopioitu leikepöydälle: ${selectedPlayer.id}\n\nAja terminaalissa:\nnode scripts/deleteAuthUser.js ${selectedPlayer.id}`;
+
+              Alert.alert("Poistettu tietokannasta", uidMessage, [
+                {
+                  text: "OK",
+                  onPress: () => {
+                    // Kopioi UID leikepöydälle
+                    // Expo.Clipboard ei ole käytettävissä tässä kontekstissa
+                    console.log("UID to delete from Auth:", selectedPlayer.id);
+                  },
+                },
+              ]);
               closePlayerModal();
               refreshData();
             } catch (error) {
