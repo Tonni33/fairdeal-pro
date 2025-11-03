@@ -90,6 +90,11 @@ const SettingsScreen: React.FC = () => {
     Record<string, EventDefaults>
   >({});
 
+  // Local state for WhatsApp group settings
+  const [whatsappGroupName, setWhatsappGroupName] = useState<string>("");
+  const [whatsappGroupInviteLink, setWhatsappGroupInviteLink] =
+    useState<string>("");
+
   // Helper function to check if user is master admin
   const isMasterAdmin = (): boolean => {
     return Boolean(user && user.isMasterAdmin === true);
@@ -154,8 +159,20 @@ const SettingsScreen: React.FC = () => {
     console.log(`SettingsScreen: selectedTeamId changed to: ${selectedTeamId}`);
     if (selectedTeamId) {
       loadUsersWithoutPassword();
+
+      // Update WhatsApp group settings from team data only if not currently saving
+      // This prevents clearing fields during save operation
+      if (!saving) {
+        const teamData = teams.find((team) => team.id === selectedTeamId);
+        setWhatsappGroupName(teamData?.whatsappGroupName || "");
+        setWhatsappGroupInviteLink(teamData?.whatsappGroupInviteLink || "");
+      }
+    } else {
+      // Clear WhatsApp settings when no team is selected
+      setWhatsappGroupName("");
+      setWhatsappGroupInviteLink("");
     }
-  }, [selectedTeamId]);
+  }, [selectedTeamId, teams, saving]);
 
   const loadSettings = async () => {
     try {
@@ -241,10 +258,14 @@ const SettingsScreen: React.FC = () => {
   const saveSettings = async () => {
     if (!user) return;
 
+    console.log(
+      `SettingsScreen: Starting save operation, activeTab: ${activeTab}, selectedTeamId: ${selectedTeamId}`
+    );
     setSaving(true);
     try {
       if (activeTab === "global") {
         // Save global settings
+        console.log("SettingsScreen: Saving global settings");
         await setDoc(doc(db, "settings", "eventDefaults"), {
           ...globalSettings,
           updatedBy: user.email,
@@ -252,19 +273,28 @@ const SettingsScreen: React.FC = () => {
         });
       } else if (selectedTeamId && teamSettings[selectedTeamId]) {
         // Save team-specific settings
+        console.log(
+          `SettingsScreen: Saving team settings for ${selectedTeamId}`
+        );
         await setDoc(doc(db, "settings", `team-${selectedTeamId}`), {
           ...teamSettings[selectedTeamId],
           teamId: selectedTeamId,
           updatedBy: user.email,
           updatedAt: new Date(),
         });
+
+        // Also save WhatsApp group data to team document
+        console.log("SettingsScreen: Saving WhatsApp group data");
+        await saveTeamWhatsAppData();
       }
+      console.log("SettingsScreen: Save completed successfully");
       Alert.alert("Onnistui", "Asetukset tallennettu");
     } catch (error) {
       console.error("Error saving settings:", error);
       Alert.alert("Virhe", "Asetusten tallentaminen epäonnistui");
     } finally {
       setSaving(false);
+      console.log("SettingsScreen: Save operation finished");
     }
   };
 
@@ -325,26 +355,49 @@ const SettingsScreen: React.FC = () => {
     return null;
   };
 
-  const handleTeamDataChange = async (field: string, value: string) => {
+  const handleTeamDataChange = (field: string, value: string) => {
+    // Update local state only - don't save to database immediately
+    if (field === "whatsappGroupName") {
+      setWhatsappGroupName(value);
+    } else if (field === "whatsappGroupInviteLink") {
+      setWhatsappGroupInviteLink(value);
+    }
+  };
+
+  const saveTeamWhatsAppData = async () => {
     if (!selectedTeamId || !user) return;
 
     try {
+      console.log(
+        `SettingsScreen: Saving WhatsApp data for team ${selectedTeamId}:`,
+        {
+          whatsappGroupName,
+          whatsappGroupInviteLink,
+        }
+      );
+
       const teamRef = doc(db, "teams", selectedTeamId);
       await updateDoc(teamRef, {
-        [field]: value,
+        whatsappGroupName: whatsappGroupName,
+        whatsappGroupInviteLink: whatsappGroupInviteLink,
         updatedBy: user.email,
         updatedAt: new Date(),
       });
 
+      console.log(
+        `SettingsScreen: WhatsApp data saved successfully for team ${selectedTeamId}`
+      );
+
       // Refresh data to get updated team information
       await refreshData();
-      Alert.alert("Onnistui", "Joukkueen tiedot päivitetty");
+
+      console.log(`SettingsScreen: Data refreshed after WhatsApp save`);
+      // Don't show alert here since it's called from saveSettings which shows its own alert
     } catch (error) {
-      console.error("Error updating team data:", error);
-      Alert.alert("Virhe", "Joukkueen tietojen päivitys epäonnistui");
+      console.error("Error updating WhatsApp team data:", error);
+      throw error; // Re-throw so saveSettings can handle the error
     }
   };
-
   const toggleUserSelection = (userId: string) => {
     setUsersWithoutPassword((prev) =>
       prev.map((user) =>
@@ -714,7 +767,7 @@ const SettingsScreen: React.FC = () => {
               <Text style={styles.settingLabel}>WhatsApp-ryhmän nimi</Text>
               <TextInput
                 style={styles.textInput}
-                value={getCurrentTeamData()?.whatsappGroupName || ""}
+                value={whatsappGroupName}
                 onChangeText={(text) =>
                   handleTeamDataChange("whatsappGroupName", text)
                 }
@@ -728,7 +781,7 @@ const SettingsScreen: React.FC = () => {
               </Text>
               <TextInput
                 style={styles.textInput}
-                value={getCurrentTeamData()?.whatsappGroupInviteLink || ""}
+                value={whatsappGroupInviteLink}
                 onChangeText={(text) =>
                   handleTeamDataChange("whatsappGroupInviteLink", text)
                 }
