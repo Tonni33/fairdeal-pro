@@ -110,6 +110,13 @@ const AdminMenuScreen: React.FC = () => {
       adminOnly: true,
     },
     {
+      title: "Ranking",
+      icon: "podium-outline",
+      screen: "Ranking",
+      description: "Pelaajien ranking ja kerrointen muokkaus",
+      adminOnly: true,
+    },
+    {
       title: "Joukkuehallinta",
       icon: "people-outline",
       screen: "TeamManagement",

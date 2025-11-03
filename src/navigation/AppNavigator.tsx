@@ -26,6 +26,7 @@ import MigrationScreen from "../screens/MigrationScreen";
 import TeamManagementScreen from "../screens/TeamManagementScreen";
 import AdminMenuScreen from "../screens/AdminMenuScreen";
 import MasterAdminScreen from "../screens/MasterAdminScreen";
+import RankingScreen from "../screens/RankingScreen";
 
 const Stack = createStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<BottomTabParamList>();
@@ -207,6 +208,15 @@ const AppNavigator = () => {
               component={MasterAdminScreen}
               options={{
                 headerShown: false,
+              }}
+            />
+            <Stack.Screen
+              name="Ranking"
+              component={RankingScreen}
+              options={{
+                headerShown: true,
+                title: "Ranking",
+                headerBackTitle: "Takaisin",
               }}
             />
           </>

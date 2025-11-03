@@ -246,6 +246,7 @@ export type RootStackParamList = {
   TeamManagement: undefined;
   AdminMenu: undefined;
   MasterAdmin: undefined;
+  Ranking: undefined;
 };
 
 export type BottomTabParamList = {
