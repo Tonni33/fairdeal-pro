@@ -279,7 +279,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
               color: data.color || "#000000",
               adminId: data.adminId,
               adminIds: data.adminIds || (data.adminId ? [data.adminId] : []), // Support multiple admins with legacy fallback
-              members: data.members || [],
               licenceCode: data.licenceCode || "",
               // WhatsApp group fields
               whatsappGroupName: data.whatsappGroupName,
@@ -311,7 +310,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
               name: t.name,
               adminId: t.adminId,
               adminIds: t.adminIds,
-              members: t.members,
             }))
           );
         },

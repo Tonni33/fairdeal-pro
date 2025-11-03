@@ -92,12 +92,7 @@ const UserManagementScreen: React.FC = () => {
       return [];
     }
 
-    console.log(
-      "UserManagement: Selected team data:",
-      selectedTeamData.name,
-      "members:",
-      selectedTeamData.members
-    );
+    console.log("UserManagement: Selected team data:", selectedTeamData.name);
 
     // Käytetään sekä teamIds että members-kenttää varmuuden vuoksi
     const filtered = allPlayers.filter((player) => {

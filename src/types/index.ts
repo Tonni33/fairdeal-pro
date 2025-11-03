@@ -61,7 +61,7 @@ export interface Team {
   color?: string;
   code?: string; // Team join code
   adminIds: string[]; // Array of admin user IDs
-  members: string[]; // Array of player/user IDs
+  // Note: team.members field removed - player.teamIds is now the source of truth for team membership
   // Backward compatibility
   adminId?: string; // Legacy field for compatibility
   // License fields
