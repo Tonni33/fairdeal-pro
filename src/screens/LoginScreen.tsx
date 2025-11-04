@@ -57,9 +57,16 @@ const LoginScreen: React.FC = () => {
       // 2. Not already showing email login
       // 3. Not in register mode
       // 4. User is not already signed in
-      if (quickAuthAvailable && !showEmailLogin && !isRegister && !auth.currentUser) {
-        const biometricEnabled = await AsyncStorage.getItem("biometric_enabled");
-        
+      if (
+        quickAuthAvailable &&
+        !showEmailLogin &&
+        !isRegister &&
+        !auth.currentUser
+      ) {
+        const biometricEnabled = await AsyncStorage.getItem(
+          "biometric_enabled"
+        );
+
         if (biometricEnabled === "true") {
           console.log("Auto-triggering biometric authentication...");
           // Small delay to ensure UI is ready
@@ -99,13 +106,24 @@ const LoginScreen: React.FC = () => {
 
       // If user is already signed in with Firebase, we might not need quick auth UI
       if (auth.currentUser && isAvailable) {
-        console.log("User already signed in with Firebase and quick auth available");
+        console.log(
+          "User already signed in with Firebase and quick auth available"
+        );
       }
 
       setQuickAuthAvailable(isAvailable);
+
+      // If quick auth is NOT available, show email login directly
+      // to avoid the extra "Kirjaudu sähköpostilla" screen
+      if (!isAvailable) {
+        console.log("Quick auth not available, showing email login directly");
+        setShowEmailLogin(true);
+      }
     } catch (error) {
       console.error("Error checking quick auth availability:", error);
       setQuickAuthAvailable(false);
+      // Show email login on error as well
+      setShowEmailLogin(true);
     }
   };
 
@@ -135,16 +153,18 @@ const LoginScreen: React.FC = () => {
         await SecureStorage.setWasLoggedIn(true);
 
         // Store credentials for quick auth if user has biometric/PIN enabled
-        const biometricEnabled = await AsyncStorage.getItem("biometric_enabled");
+        const biometricEnabled = await AsyncStorage.getItem(
+          "biometric_enabled"
+        );
         const pinEnabled = await AsyncStorage.getItem("pin_enabled");
 
         if (biometricEnabled === "true" || pinEnabled === "true") {
           console.log("Storing credentials for quick auth...");
-          
+
           // Store credentials securely
           await SecureStorage.storeCredentials(email, password);
           await SecureStorage.storeTempPassword(email, password);
-          
+
           console.log("Credentials stored for automatic re-authentication");
         }
       }
@@ -165,28 +185,34 @@ const LoginScreen: React.FC = () => {
 
     // Check if user is still signed in with Firebase
     const currentUser = auth.currentUser;
-    console.log("Current Firebase user:", currentUser ? currentUser.email : "none");
+    console.log(
+      "Current Firebase user:",
+      currentUser ? currentUser.email : "none"
+    );
 
     if (currentUser) {
-      console.log("✅ User is already signed in with Firebase, authentication complete!");
+      console.log(
+        "✅ User is already signed in with Firebase, authentication complete!"
+      );
       // User is already signed in, Firebase persistence worked
       // The AuthContext will handle navigation automatically
       return;
     } else {
-      console.log("⚠️ User not signed in with Firebase, but quick auth passed...");
+      console.log(
+        "⚠️ User not signed in with Firebase, but quick auth passed..."
+      );
 
       // Check if we have stored credentials for auto re-authentication
       const storedCredentials = await SecureStorage.getStoredCredentials();
 
       if (storedCredentials) {
         console.log("Found stored credentials, attempting auto re-login...");
-        
+
         try {
           await signIn(storedCredentials.email, storedCredentials.password);
           console.log("✅ Auto re-login successful!");
           // Mark successful login
           await SecureStorage.setWasLoggedIn(true);
-          
         } catch (error) {
           console.error("Auto re-login failed:", error);
           // Fall back to manual login
@@ -222,7 +248,7 @@ const LoginScreen: React.FC = () => {
   const handleAutoBiometricAuth = async () => {
     try {
       console.log("Auto-triggering biometric authentication...");
-      
+
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: "Kirjaudu sisään",
         fallbackLabel: "Käytä salasanaa",
@@ -239,7 +265,9 @@ const LoginScreen: React.FC = () => {
         console.log("User chose fallback option");
         setShowEmailLogin(true);
       } else if (result.error === "user_cancel") {
-        console.log("User cancelled biometric auth, showing alternative options");
+        console.log(
+          "User cancelled biometric auth, showing alternative options"
+        );
         // Don't force email login, let user choose
       } else {
         console.log("Auto biometric auth failed:", result.error);
@@ -287,21 +315,6 @@ const LoginScreen: React.FC = () => {
             onSuccess={handleQuickAuthSuccess}
             onFallback={() => setShowEmailLogin(true)}
           />
-        )}
-
-        {/* Show email login button if no quick auth available */}
-        {!isRegister && !showEmailLogin && !quickAuthAvailable && (
-          <View style={styles.noQuickAuthContainer}>
-            <Text style={styles.noQuickAuthText}>Kirjaudu sähköpostilla</Text>
-            <TouchableOpacity
-              style={styles.emailLoginButton}
-              onPress={() => setShowEmailLogin(true)}
-            >
-              <Text style={styles.emailLoginButtonText}>
-                Jatka sähköpostilla
-              </Text>
-            </TouchableOpacity>
-          </View>
         )}
 
         {/* Email/Password Form */}
@@ -509,36 +522,6 @@ const styles = StyleSheet.create({
     color: "#666",
     fontSize: 14,
     textDecorationLine: "underline",
-  },
-  noQuickAuthContainer: {
-    padding: 20,
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    margin: 20,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  noQuickAuthText: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 15,
-    textAlign: "center",
-  },
-  emailLoginButton: {
-    backgroundColor: "#1976d2",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  emailLoginButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
   },
 });
 
