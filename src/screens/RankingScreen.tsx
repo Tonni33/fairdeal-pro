@@ -143,7 +143,8 @@ const RankingScreen: React.FC = () => {
     const handleSaveAndLock = () => {
       // Validate and save both fields
       const catValue = parseInt(editingCategory);
-      const multValue = parseFloat(editingMultiplier);
+      // Replace comma with dot for Finnish keyboard
+      const multValue = parseFloat(editingMultiplier.replace(",", "."));
 
       let hasError = false;
 
@@ -153,9 +154,9 @@ const RankingScreen: React.FC = () => {
         hasError = true;
       }
 
-      if (isNaN(multValue) || multValue < 0.1 || multValue > 3.0) {
+      if (isNaN(multValue) || multValue < 1.1 || multValue > 3.9) {
         setEditingMultiplier(multiplier.toFixed(1));
-        Alert.alert("Virhe", "Kerroin pitää olla välillä 0.1-3.0");
+        Alert.alert("Virhe", "Kerroin pitää olla välillä 1.1-3.9");
         hasError = true;
       }
 
@@ -167,8 +168,18 @@ const RankingScreen: React.FC = () => {
     };
 
     return (
-      <View style={styles.playerRow}>
-        <View style={styles.playerMainInfo}>
+      <View style={[styles.playerRow, !isLocked && styles.playerRowUnlocked]}>
+        <TouchableOpacity
+          style={styles.playerMainInfo}
+          onPress={() => {
+            if (isLocked) {
+              setIsLocked(false);
+            } else {
+              handleSaveAndLock();
+            }
+          }}
+          activeOpacity={0.7}
+        >
           <Text
             style={[
               styles.playerName,
@@ -178,7 +189,7 @@ const RankingScreen: React.FC = () => {
             {item.name || item.email || "Tuntematon"}
             {isGoalkeeper && " 🥅"}
           </Text>
-        </View>
+        </TouchableOpacity>
         <View style={styles.playerStats}>
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>Kategoria</Text>
@@ -196,29 +207,15 @@ const RankingScreen: React.FC = () => {
             <TextInput
               style={[styles.statInput, isLocked && styles.statInputLocked]}
               value={editingMultiplier}
-              onChangeText={setEditingMultiplier}
+              onChangeText={(text) =>
+                setEditingMultiplier(text.replace(",", "."))
+              }
               editable={!isLocked}
               keyboardType="decimal-pad"
               maxLength={3}
             />
           </View>
         </View>
-        <TouchableOpacity
-          style={styles.lockButton}
-          onPress={() => {
-            if (isLocked) {
-              setIsLocked(false);
-            } else {
-              handleSaveAndLock();
-            }
-          }}
-        >
-          <Ionicons
-            name={isLocked ? "lock-closed" : "checkmark"}
-            size={20}
-            color={isLocked ? "#999" : "#4CAF50"}
-          />
-        </TouchableOpacity>
       </View>
     );
   };
@@ -400,6 +397,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e0e0e0",
   },
+  playerRowUnlocked: {
+    backgroundColor: "#e8f5e9",
+    borderColor: "#4CAF50",
+    borderWidth: 2,
+  },
   playerMainInfo: {
     flex: 1,
   },
@@ -442,12 +444,6 @@ const styles = StyleSheet.create({
   statInputLocked: {
     backgroundColor: "#f8f8f8",
     color: "#666",
-  },
-  lockButton: {
-    padding: 8,
-    marginLeft: 8,
-    justifyContent: "center",
-    alignItems: "center",
   },
   emptyContainer: {
     alignItems: "center",

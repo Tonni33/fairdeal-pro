@@ -480,6 +480,14 @@ const EventManagementScreen: React.FC = () => {
       const removedPlayer = players.find((p) => p.id === playerId);
       const isRemovedPlayerGoalkeeper = removedPlayer?.position === "MV";
 
+      // Calculate hours until event for priority queue logic
+      const team = teams.find((t) => t.id === selectedEvent.teamId);
+      const guestRegistrationHours = team?.guestRegistrationHours || 24;
+      const eventDate = new Date(selectedEvent.date);
+      const now = new Date();
+      const hoursUntilEvent =
+        (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
       // Remove player from registered players
       await updateDoc(eventRef, {
         registeredPlayers: arrayRemove(playerId),
@@ -491,14 +499,36 @@ const EventManagementScreen: React.FC = () => {
       const reservePlayers = eventData?.reservePlayers || [];
 
       if (reservePlayers.length > 0) {
-        // Find a suitable reserve player to promote (same position type)
-        const suitableReserve = reservePlayers.find((reserveId: string) => {
-          const reservePlayer = players.find((p) => p.id === reserveId);
-          return (
-            reservePlayer &&
-            (reservePlayer.position === "MV") === isRemovedPlayerGoalkeeper
-          );
-        });
+        const teamId = selectedEvent.teamId || "";
+        let suitableReserve: string | undefined;
+
+        // Priority queue logic for promotion
+        if (hoursUntilEvent > guestRegistrationHours) {
+          // Before threshold: Skip guests, only promote team members
+          for (const reserveId of reservePlayers) {
+            const reservePlayer = players.find((p) => p.id === reserveId);
+            if (!reservePlayer) continue;
+
+            const isReserveTeamMember =
+              teamId && reservePlayer.teamMember?.[teamId] === true;
+            const positionMatches =
+              (reservePlayer.position === "MV") === isRemovedPlayerGoalkeeper;
+
+            if (isReserveTeamMember && positionMatches) {
+              suitableReserve = reserveId;
+              break;
+            }
+          }
+        } else {
+          // After threshold: Pure FIFO - promote first player with matching position
+          suitableReserve = reservePlayers.find((reserveId: string) => {
+            const reservePlayer = players.find((p) => p.id === reserveId);
+            return (
+              reservePlayer &&
+              (reservePlayer.position === "MV") === isRemovedPlayerGoalkeeper
+            );
+          });
+        }
 
         if (suitableReserve) {
           // Promote reserve player

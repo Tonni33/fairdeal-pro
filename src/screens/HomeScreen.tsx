@@ -1077,27 +1077,25 @@ const HomeScreen: React.FC = () => {
                     </Text>
                   </View>
                   <View style={styles.reservePlayersList}>
-                    {sortPlayersByPosition(reservePlayers).map(
-                      (player, index) => {
-                        const isGoalkeeper = player?.position === "MV";
-                        return (
-                          <View
-                            key={player.id}
-                            style={styles.reservePlayersListItem}
-                          >
-                            <View style={styles.reservePlayerNumber}>
-                              <Text style={styles.reservePlayerNumberText}>
-                                {index + 1}
-                              </Text>
-                            </View>
-                            <Text style={styles.reservePlayersListName}>
-                              {player.name}
-                              {isGoalkeeper && " 🥅"}
+                    {reservePlayers.map((player, index) => {
+                      const isGoalkeeper = player?.position === "MV";
+                      return (
+                        <View
+                          key={player.id}
+                          style={styles.reservePlayersListItem}
+                        >
+                          <View style={styles.reservePlayerNumber}>
+                            <Text style={styles.reservePlayerNumberText}>
+                              {index + 1}
                             </Text>
                           </View>
-                        );
-                      }
-                    )}
+                          <Text style={styles.reservePlayersListName}>
+                            {player.name}
+                            {isGoalkeeper && " 🥅"}
+                          </Text>
+                        </View>
+                      );
+                    })}
                   </View>
                 </View>
               )}
@@ -1418,57 +1416,55 @@ const HomeScreen: React.FC = () => {
                     </Text>
 
                     <View style={styles.modalPlayersList}>
-                      {sortPlayersByPosition(reservePlayers).map(
-                        (player, index) => {
-                          const isGoalkeeper = player?.position === "MV";
-                          return (
+                      {reservePlayers.map((player, index) => {
+                        const isGoalkeeper = player?.position === "MV";
+                        return (
+                          <View
+                            key={player.id}
+                            style={[
+                              styles.modalPlayerItem,
+                              styles.modalReserveItem,
+                              isGoalkeeper && styles.modalGoalkeeperItem,
+                            ]}
+                          >
                             <View
-                              key={player.id}
                               style={[
-                                styles.modalPlayerItem,
-                                styles.modalReserveItem,
-                                isGoalkeeper && styles.modalGoalkeeperItem,
+                                styles.modalPlayerIcon,
+                                styles.modalReserveIcon,
+                                isGoalkeeper && styles.modalGoalkeeperIcon,
                               ]}
                             >
-                              <View
+                              <Ionicons
+                                name="time-outline"
+                                size={16}
+                                color={isGoalkeeper ? "#fff" : "#ff9800"}
+                              />
+                            </View>
+                            <View style={styles.modalPlayerInfo}>
+                              <Text
                                 style={[
-                                  styles.modalPlayerIcon,
-                                  styles.modalReserveIcon,
-                                  isGoalkeeper && styles.modalGoalkeeperIcon,
+                                  styles.modalPlayerName,
+                                  styles.modalReserveName,
+                                  isGoalkeeper && styles.modalGoalkeeperName,
                                 ]}
                               >
-                                <Ionicons
-                                  name="time-outline"
-                                  size={16}
-                                  color={isGoalkeeper ? "#fff" : "#ff9800"}
-                                />
-                              </View>
-                              <View style={styles.modalPlayerInfo}>
+                                {player.name}
+                                {isGoalkeeper && " 🥅"}
+                              </Text>
+                              {player.email && (
                                 <Text
                                   style={[
-                                    styles.modalPlayerName,
-                                    styles.modalReserveName,
-                                    isGoalkeeper && styles.modalGoalkeeperName,
+                                    styles.modalPlayerEmail,
+                                    styles.modalReserveEmail,
                                   ]}
                                 >
-                                  {player.name}
-                                  {isGoalkeeper && " 🥅"}
+                                  {player.email}
                                 </Text>
-                                {player.email && (
-                                  <Text
-                                    style={[
-                                      styles.modalPlayerEmail,
-                                      styles.modalReserveEmail,
-                                    ]}
-                                  >
-                                    {player.email}
-                                  </Text>
-                                )}
-                              </View>
+                              )}
                             </View>
-                          );
-                        }
-                      )}
+                          </View>
+                        );
+                      })}
                     </View>
                   </View>
                 )}

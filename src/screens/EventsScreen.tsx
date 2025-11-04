@@ -1058,31 +1058,27 @@ const EventsScreen: React.FC = () => {
                         </View>
 
                         <View style={styles.reservePlayersList}>
-                          {sortPlayersByPosition(reservePlayers).map(
-                            (player, index) => {
-                              const isGoalkeeper = player?.position === "MV";
-                              return (
-                                <View
-                                  key={player.id}
-                                  style={styles.reservePlayersListItem}
-                                >
-                                  <View style={styles.reservePlayerNumber}>
-                                    <Text
-                                      style={styles.reservePlayerNumberText}
-                                    >
-                                      {index + 1}
-                                    </Text>
-                                  </View>
-                                  <Text style={styles.reservePlayersListName}>
-                                    {player.name ||
-                                      player.email ||
-                                      `ID: ${player.id}`}
-                                    {isGoalkeeper && " 🥅"}
+                          {reservePlayers.map((player, index) => {
+                            const isGoalkeeper = player?.position === "MV";
+                            return (
+                              <View
+                                key={player.id}
+                                style={styles.reservePlayersListItem}
+                              >
+                                <View style={styles.reservePlayerNumber}>
+                                  <Text style={styles.reservePlayerNumberText}>
+                                    {index + 1}
                                   </Text>
                                 </View>
-                              );
-                            }
-                          )}
+                                <Text style={styles.reservePlayersListName}>
+                                  {player.name ||
+                                    player.email ||
+                                    `ID: ${player.id}`}
+                                  {isGoalkeeper && " 🥅"}
+                                </Text>
+                              </View>
+                            );
+                          })}
                         </View>
                       </View>
                     )}
