@@ -83,6 +83,8 @@ export interface Team {
   // WhatsApp group information
   whatsappGroupName?: string; // WhatsApp group name
   whatsappGroupInviteLink?: string; // WhatsApp group invite link
+  // Guest registration settings
+  guestRegistrationHours?: number; // Hours before event when guests (teamMember: false) can register
   createdAt: Date;
   // Legacy fields for compatibility - required to avoid undefined errors
   players: Player[]; // Populated players array (derived from members)

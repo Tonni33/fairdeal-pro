@@ -95,6 +95,8 @@ const SettingsScreen: React.FC = () => {
   const [whatsappGroupName, setWhatsappGroupName] = useState<string>("");
   const [whatsappGroupInviteLink, setWhatsappGroupInviteLink] =
     useState<string>("");
+  const [guestRegistrationHours, setGuestRegistrationHours] =
+    useState<number>(24);
 
   // Helper function to check if user is master admin
   const isMasterAdmin = (): boolean => {
@@ -168,24 +170,25 @@ const SettingsScreen: React.FC = () => {
       if (!justSavedRef.current) {
         const teamData = teams.find((team) => team.id === selectedTeamId);
         console.log(
-          `SettingsScreen: Loading WhatsApp data for team ${selectedTeamId}:`,
+          `SettingsScreen: Loading team data for team ${selectedTeamId}:`,
           {
             whatsappGroupName: teamData?.whatsappGroupName,
             whatsappGroupInviteLink: teamData?.whatsappGroupInviteLink,
+            guestRegistrationHours: teamData?.guestRegistrationHours,
           }
         );
         setWhatsappGroupName(teamData?.whatsappGroupName || "");
         setWhatsappGroupInviteLink(teamData?.whatsappGroupInviteLink || "");
+        setGuestRegistrationHours(teamData?.guestRegistrationHours || 24);
       } else {
-        console.log(
-          `SettingsScreen: Skipping WhatsApp data reload - just saved`
-        );
+        console.log(`SettingsScreen: Skipping team data reload - just saved`);
         justSavedRef.current = false; // Reset flag after skipping once
       }
     } else {
-      // Clear WhatsApp settings when no team is selected
+      // Clear settings when no team is selected
       setWhatsappGroupName("");
       setWhatsappGroupInviteLink("");
+      setGuestRegistrationHours(24);
     }
   }, [selectedTeamId, teams]);
 
@@ -375,12 +378,14 @@ const SettingsScreen: React.FC = () => {
     return null;
   };
 
-  const handleTeamDataChange = (field: string, value: string) => {
+  const handleTeamDataChange = (field: string, value: string | number) => {
     // Update local state only - don't save to database immediately
     if (field === "whatsappGroupName") {
-      setWhatsappGroupName(value);
+      setWhatsappGroupName(value as string);
     } else if (field === "whatsappGroupInviteLink") {
-      setWhatsappGroupInviteLink(value);
+      setWhatsappGroupInviteLink(value as string);
+    } else if (field === "guestRegistrationHours") {
+      setGuestRegistrationHours(value as number);
     }
   };
 
@@ -400,6 +405,7 @@ const SettingsScreen: React.FC = () => {
       await updateDoc(teamRef, {
         whatsappGroupName: whatsappGroupName,
         whatsappGroupInviteLink: whatsappGroupInviteLink,
+        guestRegistrationHours: guestRegistrationHours,
         updatedBy: user.email,
         updatedAt: new Date(),
       });
@@ -823,6 +829,42 @@ const SettingsScreen: React.FC = () => {
                 Voit kopioida kutsu-linkin WhatsApp-ryhmästä ja liittää sen
                 tähän. Tämä mahdollistaa joukkuejakojen lähettämisen suoraan
                 ryhmään.
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Guest registration settings - only for team-specific settings */}
+        {activeTab === "team" && selectedTeamId && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              Satunnaisten pelaajien ilmoittautuminen
+            </Text>
+            <Text style={styles.sectionDescription}>
+              Määritä milloin pelaajat joilla teamMember-status on "Ei"
+              (satunnaiset/vieraat pelaajat) voivat ilmoittautua tapahtumaan.
+              Vakiokävijät (teamMember: "Kyllä") voivat ilmoittautua heti
+              tapahtuman luomisen jälkeen.
+            </Text>
+
+            <View style={styles.settingItem}>
+              <Text style={styles.settingLabel}>
+                Ilmoittautuminen aukee (tuntia ennen tapahtumaa)
+              </Text>
+              <TextInput
+                style={styles.numberInput}
+                value={guestRegistrationHours.toString()}
+                onChangeText={(text) => {
+                  const hours = parseInt(text) || 24;
+                  handleTeamDataChange("guestRegistrationHours", hours);
+                }}
+                keyboardType="numeric"
+                placeholder="24"
+              />
+              <Text style={styles.settingDescription}>
+                Esimerkiksi: Jos asetat 24 tuntia, satunnaiset pelaajat voivat
+                ilmoittautua tapahtumaan vasta 24 tuntia ennen tapahtuman alkua.
+                Vakiokävijät saavat etuoikeuden ilmoittautumiseen.
               </Text>
             </View>
           </View>

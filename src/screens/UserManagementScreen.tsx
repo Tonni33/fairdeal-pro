@@ -13,7 +13,13 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
-import { collection, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  updateDoc,
+  deleteDoc,
+  getDoc,
+} from "firebase/firestore";
 
 import { RootStackParamList, Team, Player } from "../types";
 import { db } from "../services/firebase";
@@ -215,27 +221,70 @@ const UserManagementScreen: React.FC = () => {
   };
 
   // Avaa pelaajan muokkausmodaali
-  const openPlayerModal = (player: Player) => {
-    setSelectedPlayer(player);
-    setEditName(player.name);
-    setEditEmail(player.email);
-    setEditPhone(player.phone || "");
+  const openPlayerModal = async (player: Player) => {
+    // Lue tuorein data Firestoresta ennen modalin avaamista
+    try {
+      const playerRef = doc(db, "users", player.id);
+      const freshPlayerDoc = await getDoc(playerRef);
+      const freshPlayerData = freshPlayerDoc.data();
 
-    // Jos joukkue on valittu, käytä joukkuekohtaisia taitoja
-    if (selectedTeam) {
-      const teamSkills = getTeamSkillsWithLocal(player.id, selectedTeam);
-      setEditPosition(teamSkills?.position || player.position);
-      setEditCategory(teamSkills?.category || player.category);
-      setEditMultiplier(teamSkills?.multiplier || player.multiplier);
-      // Aseta vakiokävijä-status valitulle joukkueelle
-      setEditTeamMember(player.teamMember?.[selectedTeam] ?? true);
-    } else {
-      // Käytä pelaajan perustaitoja
-      setEditPosition(player.position);
-      setEditCategory(player.category);
-      setEditMultiplier(player.multiplier);
-      // Kun ei ole joukkuetta valittu, aseta oletukseksi true
-      setEditTeamMember(true);
+      // Käytä tuoretta dataa jos saatavilla, muuten fallback parametrina saatuun
+      const freshPlayer = freshPlayerData
+        ? {
+            ...player,
+            teamSkills: freshPlayerData.teamSkills || player.teamSkills,
+            teamMember: freshPlayerData.teamMember || player.teamMember,
+          }
+        : player;
+
+      setSelectedPlayer(freshPlayer);
+      setEditName(freshPlayer.name);
+      setEditEmail(freshPlayer.email);
+      setEditPhone(freshPlayer.phone || "");
+
+      // Jos joukkue on valittu, käytä joukkuekohtaisia taitoja
+      if (selectedTeam) {
+        const teamSkills = getTeamSkillsWithLocal(freshPlayer.id, selectedTeam);
+        setEditPosition(teamSkills?.position || freshPlayer.position);
+        setEditCategory(teamSkills?.category || freshPlayer.category);
+        setEditMultiplier(teamSkills?.multiplier || freshPlayer.multiplier);
+        // Aseta vakiokävijä-status valitulle joukkueelle tuoreesta datasta
+        setEditTeamMember(freshPlayer.teamMember?.[selectedTeam] ?? true);
+
+        console.log("Opening modal with fresh teamMember data:", {
+          playerId: freshPlayer.id,
+          teamId: selectedTeam,
+          teamMember: freshPlayer.teamMember?.[selectedTeam],
+          allTeamMembers: freshPlayer.teamMember,
+        });
+      } else {
+        // Käytä pelaajan perustaitoja
+        setEditPosition(freshPlayer.position);
+        setEditCategory(freshPlayer.category);
+        setEditMultiplier(freshPlayer.multiplier);
+        // Kun ei ole joukkuetta valittu, aseta oletukseksi true
+        setEditTeamMember(true);
+      }
+    } catch (error) {
+      console.error("Error fetching fresh player data:", error);
+      // Jos virhe, käytä parametrina saatua dataa
+      setSelectedPlayer(player);
+      setEditName(player.name);
+      setEditEmail(player.email);
+      setEditPhone(player.phone || "");
+
+      if (selectedTeam) {
+        const teamSkills = getTeamSkillsWithLocal(player.id, selectedTeam);
+        setEditPosition(teamSkills?.position || player.position);
+        setEditCategory(teamSkills?.category || player.category);
+        setEditMultiplier(teamSkills?.multiplier || player.multiplier);
+        setEditTeamMember(player.teamMember?.[selectedTeam] ?? true);
+      } else {
+        setEditPosition(player.position);
+        setEditCategory(player.category);
+        setEditMultiplier(player.multiplier);
+        setEditTeamMember(true);
+      }
     }
 
     // Määritä rooli: jos joukkue on valittu, käytä joukkuekohtaista roolia
@@ -355,9 +404,10 @@ const UserManagementScreen: React.FC = () => {
       if (selectedTeam) {
         // Jos joukkue on valittu, tallenna myös joukkuekohtaiset taidot
         const currentTeamSkills = selectedPlayer.teamSkills?.[selectedTeam];
-        
+
         // Tarkista vakiokävijä-statusmuutos
-        const currentTeamMember = selectedPlayer.teamMember?.[selectedTeam] ?? true;
+        const currentTeamMember =
+          selectedPlayer.teamMember?.[selectedTeam] ?? true;
         const teamMemberChanged = editTeamMember !== currentTeamMember;
 
         // Tarkista onko taidot muuttuneet nykyisistä taidoista (joukkuekohtaisista tai perustaidoista)
@@ -421,23 +471,37 @@ const UserManagementScreen: React.FC = () => {
               updatedAt: new Date(),
             },
           };
-          
+
           // Päivitä myös teamMember-status
-          const currentTeamMember = selectedPlayer.teamMember || {};
+          // Lue ensin tuorein data Firestoresta varmistaaksemme ettei muiden joukkueiden dataa ylikirjoiteta
+          const freshPlayerDoc = await getDoc(playerRef);
+          const freshPlayerData = freshPlayerDoc.data();
+          const currentTeamMember = freshPlayerData?.teamMember || {};
           const updatedTeamMember = {
             ...currentTeamMember,
             [selectedTeam]: editTeamMember,
           };
 
-          console.log("Saving team skills and member status to user document:", {
-            playerId: selectedPlayer.id,
-            teamId: selectedTeam,
-            teamSkills: updatedTeamSkills[selectedTeam],
-            teamMember: updatedTeamMember[selectedTeam],
-          });
+          console.log(
+            "Saving team skills and member status to user document:",
+            {
+              playerId: selectedPlayer.id,
+              teamId: selectedTeam,
+              teamSkills: updatedTeamSkills[selectedTeam],
+              teamMember: updatedTeamMember[selectedTeam],
+              allTeamMembers: updatedTeamMember,
+            }
+          );
 
           // Päivitä pelaajan dokumentti teamSkills ja teamMember kentillä
           await updateDoc(playerRef, {
+            teamSkills: updatedTeamSkills,
+            teamMember: updatedTeamMember,
+          });
+
+          // Päivitä myös selectedPlayer state jotta modal näyttää oikean datan
+          setSelectedPlayer({
+            ...selectedPlayer,
             teamSkills: updatedTeamSkills,
             teamMember: updatedTeamMember,
           });
