@@ -897,7 +897,7 @@ const EventsScreen: React.FC = () => {
                         : isRegistered
                         ? "Peru ilmoittautuminen"
                         : isReserve
-                        ? "Peru varamies-ilmoittautuminen"
+                        ? "Peru ilmoittautuminen"
                         : "Ilmoittaudu"}
                     </Text>
                   </TouchableOpacity>
@@ -977,7 +977,7 @@ const EventsScreen: React.FC = () => {
                         <Text
                           style={[styles.registeredTitle, styles.reserveTitle]}
                         >
-                          Varamiehet ({reservePlayers.length})
+                          Varalla ({reservePlayers.length})
                         </Text>
 
                         <View style={styles.playersList}>
