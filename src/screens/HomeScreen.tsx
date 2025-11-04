@@ -987,7 +987,7 @@ const HomeScreen: React.FC = () => {
                   : isRegistered
                   ? "Peru ilmoittautuminen"
                   : isReserve
-                  ? "Peru varalla-ilmoittautuminen"
+                  ? "Peru ilmoittautuminen"
                   : "Ilmoittaudu"}
               </Text>
             </TouchableOpacity>
@@ -1060,7 +1060,7 @@ const HomeScreen: React.FC = () => {
                             nextEvent.reservePlayers.length > 0 && (
                               <Text style={styles.reserveCount}>
                                 {" • "}
-                                {nextEvent.reservePlayers.length} varamiestä
+                                {nextEvent.reservePlayers.length} varalla
                               </Text>
                             )}
                         </Text>
@@ -1304,7 +1304,7 @@ const HomeScreen: React.FC = () => {
                         styles.modalReserveTitle,
                       ]}
                     >
-                      Varamiehet ({reservePlayers.length})
+                      Varalla ({reservePlayers.length})
                     </Text>
 
                     <View style={styles.modalPlayersList}>
