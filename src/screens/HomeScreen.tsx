@@ -364,6 +364,21 @@ const HomeScreen: React.FC = () => {
     try {
       const eventRef = doc(db, "events", nextEvent.id);
 
+      // Get team data for guest registration rules
+      const team = teams.find((t) => t.id === nextEvent.teamId);
+      const guestRegistrationHours = team?.guestRegistrationHours || 24;
+
+      // Calculate hours until event
+      const now = new Date();
+      const eventDate = new Date(nextEvent.date);
+      const hoursUntilEvent =
+        (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+      // Check if current player is a team member
+      const teamId = nextEvent.teamId || "";
+      const isTeamMember =
+        teamId && currentPlayer.teamMember?.[teamId] === true;
+
       if (isRegistered) {
         // Unregister from main registration
         await updateDoc(eventRef, {
@@ -373,18 +388,41 @@ const HomeScreen: React.FC = () => {
         // Check if there are reserve players to promote
         const eventDoc = await getDoc(eventRef);
         const eventData = eventDoc.data();
-        const reservePlayers = eventData?.reservePlayers || [];
+        const reservePlayerIds = eventData?.reservePlayers || [];
 
-        if (reservePlayers.length > 0) {
+        if (reservePlayerIds.length > 0) {
           // Find a suitable reserve player to promote
           const isGoalkeeper = currentPlayer.position === "MV";
-          const suitableReserve = reservePlayers.find((reserveId: string) => {
-            const reservePlayer = players.find((p) => p.id === reserveId);
-            return (
-              reservePlayer &&
-              (reservePlayer.position === "MV") === isGoalkeeper
-            );
-          });
+
+          let suitableReserve: string | undefined;
+
+          // Priority queue logic for promotion
+          if (hoursUntilEvent > guestRegistrationHours) {
+            // Before threshold: Skip guests, only promote team members
+            for (const reserveId of reservePlayerIds) {
+              const reservePlayer = players.find((p) => p.id === reserveId);
+              if (!reservePlayer) continue;
+
+              const isReserveTeamMember =
+                teamId && reservePlayer.teamMember?.[teamId] === true;
+              const positionMatches =
+                (reservePlayer.position === "MV") === isGoalkeeper;
+
+              if (isReserveTeamMember && positionMatches) {
+                suitableReserve = reserveId;
+                break;
+              }
+            }
+          } else {
+            // After threshold: Pure FIFO - promote first player with matching position
+            suitableReserve = reservePlayerIds.find((reserveId: string) => {
+              const reservePlayer = players.find((p) => p.id === reserveId);
+              return (
+                reservePlayer &&
+                (reservePlayer.position === "MV") === isGoalkeeper
+              );
+            });
+          }
 
           if (suitableReserve) {
             // Promote reserve player
@@ -433,8 +471,43 @@ const HomeScreen: React.FC = () => {
             currentGoalkeepers.length >= nextEvent.maxGoalkeepers
           : currentFieldPlayers.length >= nextEvent.maxPlayers;
 
-        if (isEventFull) {
-          // Event is full, offer reserve position
+        // Check if guest is trying to register to main list before threshold
+        if (
+          !isEventFull &&
+          !isTeamMember &&
+          hoursUntilEvent > guestRegistrationHours
+        ) {
+          // Guest trying to register too early - redirect to waitlist
+          Alert.alert(
+            "Vakiokävijöillä etuoikeus",
+            `Vakiokävijöillä on etuoikeus seuraavat ${Math.round(
+              hoursUntilEvent
+            )} tuntia. Voit ilmoittautua varallistalle.`,
+            [
+              { text: "Peruuta", style: "cancel" },
+              {
+                text: "Varallistalle",
+                onPress: async () => {
+                  try {
+                    // Always append to end (guest before threshold)
+                    await updateDoc(eventRef, {
+                      reservePlayers: arrayUnion(playerIdToUse),
+                    });
+                    setIsReserve(true);
+                    Alert.alert("Onnistui", "Ilmoittautunut varallistalle");
+                  } catch (error) {
+                    console.error("Error registering as reserve:", error);
+                    Alert.alert(
+                      "Virhe",
+                      "Varalla-ilmoittautuminen epäonnistui"
+                    );
+                  }
+                },
+              },
+            ]
+          );
+        } else if (isEventFull) {
+          // Event is full, offer reserve position with priority queue logic
           Alert.alert(
             "Tapahtuma on täynnä",
             "Haluatko ilmoittautua varalla olevaksi? Saat paikan jos joku luopuu.",
@@ -444,9 +517,42 @@ const HomeScreen: React.FC = () => {
                 text: "Kyllä, ilmoittaudun varalla olijaksi",
                 onPress: async () => {
                   try {
-                    await updateDoc(eventRef, {
-                      reservePlayers: arrayUnion(playerIdToUse),
-                    });
+                    // Priority queue insertion logic
+                    if (
+                      hoursUntilEvent > guestRegistrationHours &&
+                      isTeamMember
+                    ) {
+                      // Team member before threshold - insert before first guest
+                      let insertPosition = currentReserves.length; // Default: append to end
+
+                      for (let i = 0; i < currentReserves.length; i++) {
+                        const reservePlayer = players.find(
+                          (p) => p.id === currentReserves[i]
+                        );
+                        const isReserveTeamMember =
+                          teamId &&
+                          reservePlayer?.teamMember?.[teamId] === true;
+
+                        if (!isReserveTeamMember) {
+                          insertPosition = i;
+                          break;
+                        }
+                      }
+
+                      // Create new array with player inserted at correct position
+                      const newReserves = [...currentReserves];
+                      newReserves.splice(insertPosition, 0, playerIdToUse);
+
+                      await updateDoc(eventRef, {
+                        reservePlayers: newReserves,
+                      });
+                    } else {
+                      // After threshold OR guest: append to end (pure FIFO)
+                      await updateDoc(eventRef, {
+                        reservePlayers: arrayUnion(playerIdToUse),
+                      });
+                    }
+
                     setIsReserve(true);
                     Alert.alert("Onnistui", "Ilmoittautunut varalla olijaksi");
                   } catch (error) {
@@ -461,7 +567,7 @@ const HomeScreen: React.FC = () => {
             ]
           );
         } else {
-          // Register normally
+          // Register normally (event not full and either team member or after threshold)
           await updateDoc(eventRef, {
             registeredPlayers: arrayUnion(playerIdToUse),
           });
