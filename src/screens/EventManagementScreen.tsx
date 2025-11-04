@@ -247,11 +247,11 @@ const EventManagementScreen: React.FC = () => {
           // Offer reserve position for goalkeepers
           Alert.alert(
             "Maalivahdin paikat täynnä",
-            "Haluatko lisätä pelaajan varamieheksi?",
+            "Haluatko lisätä pelaajan varalle?",
             [
               { text: "Ei", style: "cancel" },
               {
-                text: "Kyllä, varamieheksi",
+                text: "Kyllä, varalle",
                 onPress: async () => {
                   try {
                     await updateDoc(eventRef, {
@@ -260,10 +260,10 @@ const EventManagementScreen: React.FC = () => {
                         playerId,
                       ],
                     });
-                    Alert.alert("Onnistui", "Pelaaja lisätty varamieheksi");
+                    Alert.alert("Onnistui", "Pelaaja lisätty varalle");
                     await fetchEvents();
                   } catch (error) {
-                    Alert.alert("Virhe", "Varamies-lisääminen epäonnistui");
+                    Alert.alert("Virhe", "Varalle lisääminen epäonnistui");
                   }
                 },
               },
@@ -281,11 +281,11 @@ const EventManagementScreen: React.FC = () => {
           // Offer reserve position for field players
           Alert.alert(
             "Kenttäpelaajien paikat täynnä",
-            "Haluatko lisätä pelaajan varamieheksi?",
+            "Haluatko lisätä pelaajan varalle?",
             [
               { text: "Ei", style: "cancel" },
               {
-                text: "Kyllä, varamieheksi",
+                text: "Kyllä, varalle",
                 onPress: async () => {
                   try {
                     await updateDoc(eventRef, {
@@ -294,10 +294,10 @@ const EventManagementScreen: React.FC = () => {
                         playerId,
                       ],
                     });
-                    Alert.alert("Onnistui", "Pelaaja lisätty varamieheksi");
+                    Alert.alert("Onnistui", "Pelaaja lisätty varalle");
                     await fetchEvents();
                   } catch (error) {
-                    Alert.alert("Virhe", "Varamies-lisääminen epäonnistui");
+                    Alert.alert("Virhe", "Varalle lisääminen epäonnistui");
                   }
                 },
               },
@@ -363,48 +363,91 @@ const EventManagementScreen: React.FC = () => {
       const currentFieldPlayers = getFieldPlayers(currentPlayers);
       const currentGoalkeepers = getGoalkeepers(currentPlayers);
 
-      // Check field player limit
+      // Separate players into main list and reserves based on limits
+      const playersToMainList: string[] = [];
+      const playersToReserve: string[] = [];
+
+      // Handle field players
       if (selectedEvent.maxPlayers) {
-        const totalAfterAdd =
-          currentFieldPlayers.length + fieldPlayersToAdd.length;
-        if (totalAfterAdd > selectedEvent.maxPlayers) {
-          Alert.alert(
-            "Liikaa pelaajia",
-            `Tapahtumassa on tilaa vain ${
-              selectedEvent.maxPlayers - currentFieldPlayers.length
-            } kenttäpelaajalle lisää`
-          );
-          setIsAddingMultiplePlayers(false);
-          return;
-        }
+        const availableFieldSlots =
+          selectedEvent.maxPlayers - currentFieldPlayers.length;
+        const fieldPlayerIds = fieldPlayersToAdd.map((p) => p.id);
+
+        fieldPlayerIds.forEach((id, index) => {
+          if (index < availableFieldSlots) {
+            playersToMainList.push(id);
+          } else {
+            playersToReserve.push(id);
+          }
+        });
+      } else {
+        // No limit, add all to main list
+        playersToMainList.push(...fieldPlayersToAdd.map((p) => p.id));
       }
 
-      // Check goalkeeper limit
+      // Handle goalkeepers
       if (selectedEvent.maxGoalkeepers) {
-        const totalGoalkeepersAfterAdd =
-          currentGoalkeepers.length + goalkeepersToAdd.length;
-        if (totalGoalkeepersAfterAdd > selectedEvent.maxGoalkeepers) {
+        const availableGoalkeeperSlots =
+          selectedEvent.maxGoalkeepers - currentGoalkeepers.length;
+        const goalkeeperIds = goalkeepersToAdd.map((p) => p.id);
+
+        goalkeeperIds.forEach((id, index) => {
+          if (index < availableGoalkeeperSlots) {
+            playersToMainList.push(id);
+          } else {
+            playersToReserve.push(id);
+          }
+        });
+      } else {
+        // No limit, add all to main list
+        playersToMainList.push(...goalkeepersToAdd.map((p) => p.id));
+      }
+
+      // Show info if some players will be added to reserves
+      if (playersToReserve.length > 0) {
+        const proceed = await new Promise<boolean>((resolve) => {
           Alert.alert(
-            "Liikaa maalivahteja",
-            `Tapahtumassa on tilaa vain ${
-              selectedEvent.maxGoalkeepers - currentGoalkeepers.length
-            } maalivahtiille lisää`
+            "Lisätään varalle",
+            `${playersToMainList.length} pelaajaa lisätään tapahtumaan ja ${playersToReserve.length} pelaajaa lisätään varallaolioiksi täynnä olevien paikkojen vuoksi. Jatketaanko?`,
+            [
+              {
+                text: "Peruuta",
+                style: "cancel",
+                onPress: () => resolve(false),
+              },
+              { text: "Jatka", onPress: () => resolve(true) },
+            ]
           );
+        });
+
+        if (!proceed) {
           setIsAddingMultiplePlayers(false);
           return;
         }
       }
 
-      // Add all players at once
-      await updateDoc(eventRef, {
-        registeredPlayers: [...currentPlayers, ...playersToAdd],
-      });
+      // Add players to main list and reserves
+      const updateData: any = {
+        registeredPlayers: [...currentPlayers, ...playersToMainList],
+      };
+
+      if (playersToReserve.length > 0) {
+        updateData.reservePlayers = [
+          ...(selectedEvent.reservePlayers || []),
+          ...playersToReserve,
+        ];
+      }
+
+      await updateDoc(eventRef, updateData);
 
       await fetchEvents();
-      Alert.alert(
-        "Onnistui",
-        `${playersToAdd.length} pelaajaa lisätty tapahtumaan`
-      );
+
+      let message = `${playersToMainList.length} pelaajaa lisätty tapahtumaan`;
+      if (playersToReserve.length > 0) {
+        message += ` ja ${playersToReserve.length} varalle`;
+      }
+
+      Alert.alert("Onnistui", message);
 
       // Reset selection
       setSelectedPlayerIds([]);
