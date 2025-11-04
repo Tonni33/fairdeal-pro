@@ -442,10 +442,45 @@ const EventsScreen: React.FC = () => {
                 onPress: async () => {
                   try {
                     const currentReserves = eventData?.reservePlayers || [];
+                    const newReserves = [...currentReserves, currentPlayer.id];
 
-                    // Always append to end (guest before threshold)
+                    // Guest before threshold - re-sort to maintain priority
+                    // First, fetch teamMember status from Firestore for all players
+                    const teamMemberStatus: Record<string, boolean> = {};
+                    for (const playerId of newReserves) {
+                      try {
+                        const userRef = doc(db, "users", playerId);
+                        const userSnap = await getDoc(userRef);
+                        if (userSnap.exists()) {
+                          const userData = userSnap.data();
+                          teamMemberStatus[playerId] =
+                            userData.teamMember?.[teamId] === true;
+                        } else {
+                          teamMemberStatus[playerId] = false;
+                        }
+                      } catch (error) {
+                        console.error(
+                          `Error fetching teamMember status for ${playerId}:`,
+                          error
+                        );
+                        teamMemberStatus[playerId] = false;
+                      }
+                    }
+
+                    const sortedReserves = newReserves.sort((a, b) => {
+                      const isATeamMember = teamMemberStatus[a] === true;
+                      const isBTeamMember = teamMemberStatus[b] === true;
+
+                      if (isATeamMember && !isBTeamMember) return -1;
+                      if (!isATeamMember && isBTeamMember) return 1;
+
+                      return (
+                        currentReserves.indexOf(a) - currentReserves.indexOf(b)
+                      );
+                    });
+
                     await updateDoc(eventRef, {
-                      reservePlayers: arrayUnion(currentPlayer.id),
+                      reservePlayers: sortedReserves,
                     });
                     setIsReserve(true);
                     Alert.alert("Onnistui", "Ilmoittautunut varallistalle");
@@ -474,36 +509,56 @@ const EventsScreen: React.FC = () => {
                     const currentReserves = eventData?.reservePlayers || [];
 
                     // Priority queue insertion logic
-                    if (
-                      hoursUntilEvent > guestRegistrationHours &&
-                      isTeamMember
-                    ) {
-                      // Team member before threshold - insert before first guest
-                      let insertPosition = currentReserves.length; // Default: append to end
+                    if (hoursUntilEvent > guestRegistrationHours) {
+                      // Before threshold: Maintain priority order (team members first, then guests)
+                      const newReserves = [
+                        ...currentReserves,
+                        currentPlayer.id,
+                      ];
 
-                      for (let i = 0; i < currentReserves.length; i++) {
-                        const reservePlayer = players.find(
-                          (p) => p.id === currentReserves[i]
-                        );
-                        const isReserveTeamMember =
-                          teamId &&
-                          reservePlayer?.teamMember?.[teamId] === true;
-
-                        if (!isReserveTeamMember) {
-                          insertPosition = i;
-                          break;
+                      // Fetch teamMember status from Firestore for all players
+                      const teamMemberStatus: Record<string, boolean> = {};
+                      for (const playerId of newReserves) {
+                        try {
+                          const userRef = doc(db, "users", playerId);
+                          const userSnap = await getDoc(userRef);
+                          if (userSnap.exists()) {
+                            const userData = userSnap.data();
+                            teamMemberStatus[playerId] =
+                              userData.teamMember?.[teamId] === true;
+                          } else {
+                            teamMemberStatus[playerId] = false;
+                          }
+                        } catch (error) {
+                          console.error(
+                            `Error fetching teamMember status for ${playerId}:`,
+                            error
+                          );
+                          teamMemberStatus[playerId] = false;
                         }
                       }
 
-                      // Create new array with player inserted at correct position
-                      const newReserves = [...currentReserves];
-                      newReserves.splice(insertPosition, 0, currentPlayer.id);
+                      // Re-sort entire queue: team members first, then guests (FIFO within each group)
+                      const sortedReserves = newReserves.sort((a, b) => {
+                        const isATeamMember = teamMemberStatus[a] === true;
+                        const isBTeamMember = teamMemberStatus[b] === true;
+
+                        // Team members come before guests
+                        if (isATeamMember && !isBTeamMember) return -1;
+                        if (!isATeamMember && isBTeamMember) return 1;
+
+                        // Within same group, maintain original order (FIFO)
+                        return (
+                          currentReserves.indexOf(a) -
+                          currentReserves.indexOf(b)
+                        );
+                      });
 
                       await updateDoc(eventRef, {
-                        reservePlayers: newReserves,
+                        reservePlayers: sortedReserves,
                       });
                     } else {
-                      // After threshold OR guest: append to end (pure FIFO)
+                      // After threshold: pure FIFO - append to end
                       await updateDoc(eventRef, {
                         reservePlayers: arrayUnion(currentPlayer.id),
                       });
