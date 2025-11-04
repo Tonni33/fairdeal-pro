@@ -43,6 +43,10 @@ export interface Player {
       updatedAt: Date;
     };
   };
+  // Team member status - whether player is a regular member (vakiokävijä) in each team
+  teamMember?: {
+    [teamId: string]: boolean; // true = regular member, false = occasional/guest
+  };
   // Legacy fields for compatibility - required to avoid undefined errors
   skillLevel: number; // 1-5 scale (derived from multiplier)
   isActive: boolean;

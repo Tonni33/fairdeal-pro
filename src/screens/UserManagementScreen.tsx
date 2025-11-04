@@ -136,6 +136,7 @@ const UserManagementScreen: React.FC = () => {
   const [editPosition, setEditPosition] = useState("H");
   const [editCategory, setEditCategory] = useState(1);
   const [editMultiplier, setEditMultiplier] = useState(1.0);
+  const [editTeamMember, setEditTeamMember] = useState(true); // Vakiokävijä-status
   // Rooli: "member" | "admin"
   const [editRole, setEditRole] = useState<"member" | "admin">("member");
   const [editSelectedTeams, setEditSelectedTeams] = useState<string[]>([]);
@@ -226,11 +227,15 @@ const UserManagementScreen: React.FC = () => {
       setEditPosition(teamSkills?.position || player.position);
       setEditCategory(teamSkills?.category || player.category);
       setEditMultiplier(teamSkills?.multiplier || player.multiplier);
+      // Aseta vakiokävijä-status valitulle joukkueelle
+      setEditTeamMember(player.teamMember?.[selectedTeam] ?? true);
     } else {
       // Käytä pelaajan perustaitoja
       setEditPosition(player.position);
       setEditCategory(player.category);
       setEditMultiplier(player.multiplier);
+      // Kun ei ole joukkuetta valittu, aseta oletukseksi true
+      setEditTeamMember(true);
     }
 
     // Määritä rooli: jos joukkue on valittu, käytä joukkuekohtaista roolia
@@ -268,6 +273,7 @@ const UserManagementScreen: React.FC = () => {
     setEditPosition("H");
     setEditCategory(1);
     setEditMultiplier(1.0);
+    setEditTeamMember(true);
     setEditRole("member");
     setEditSelectedTeams([]);
     // Ei enää erillisiä edit-modaaleja
@@ -349,6 +355,10 @@ const UserManagementScreen: React.FC = () => {
       if (selectedTeam) {
         // Jos joukkue on valittu, tallenna myös joukkuekohtaiset taidot
         const currentTeamSkills = selectedPlayer.teamSkills?.[selectedTeam];
+        
+        // Tarkista vakiokävijä-statusmuutos
+        const currentTeamMember = selectedPlayer.teamMember?.[selectedTeam] ?? true;
+        const teamMemberChanged = editTeamMember !== currentTeamMember;
 
         // Tarkista onko taidot muuttuneet nykyisistä taidoista (joukkuekohtaisista tai perustaidoista)
         const currentCategory =
@@ -361,7 +371,8 @@ const UserManagementScreen: React.FC = () => {
         const skillsChanged =
           editCategory !== currentCategory ||
           editMultiplier !== currentMultiplier ||
-          editPosition !== currentPosition;
+          editPosition !== currentPosition ||
+          teamMemberChanged;
 
         console.log("Skills comparison:", {
           current: {
@@ -410,16 +421,25 @@ const UserManagementScreen: React.FC = () => {
               updatedAt: new Date(),
             },
           };
+          
+          // Päivitä myös teamMember-status
+          const currentTeamMember = selectedPlayer.teamMember || {};
+          const updatedTeamMember = {
+            ...currentTeamMember,
+            [selectedTeam]: editTeamMember,
+          };
 
-          console.log("Saving team skills to user document:", {
+          console.log("Saving team skills and member status to user document:", {
             playerId: selectedPlayer.id,
             teamId: selectedTeam,
             teamSkills: updatedTeamSkills[selectedTeam],
+            teamMember: updatedTeamMember[selectedTeam],
           });
 
-          // Päivitä pelaajan dokumentti teamSkills kentällä
+          // Päivitä pelaajan dokumentti teamSkills ja teamMember kentillä
           await updateDoc(playerRef, {
             teamSkills: updatedTeamSkills,
+            teamMember: updatedTeamMember,
           });
 
           console.log("✅ Team skills saved to user document successfully");
@@ -1074,6 +1094,62 @@ const UserManagementScreen: React.FC = () => {
                   </View>
                 )}
               </View>
+
+              {/* Vakiokävijä - näytetään vain kun joukkue on valittu */}
+              {selectedTeam && (
+                <View style={styles.editInputGroup}>
+                  <Text style={styles.label}>Vakiokävijä</Text>
+                  <TouchableOpacity
+                    style={styles.selector}
+                    onPress={() =>
+                      setEditDropdown(
+                        editDropdown === "teamMember" ? null : "teamMember"
+                      )
+                    }
+                  >
+                    <Text style={styles.selectorText}>
+                      {editTeamMember ? "Kyllä" : "Ei"}
+                    </Text>
+                    <Ionicons name="chevron-down" size={20} color="#666" />
+                  </TouchableOpacity>
+                  {editDropdown === "teamMember" && (
+                    <View style={styles.dropdownList}>
+                      <TouchableOpacity
+                        style={styles.dropdownOption}
+                        onPress={() => {
+                          setEditTeamMember(true);
+                          setEditDropdown(null);
+                        }}
+                      >
+                        <Text style={styles.optionText}>Kyllä</Text>
+                        {editTeamMember === true && (
+                          <Ionicons
+                            name="checkmark"
+                            size={20}
+                            color="#007AFF"
+                          />
+                        )}
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.dropdownOption}
+                        onPress={() => {
+                          setEditTeamMember(false);
+                          setEditDropdown(null);
+                        }}
+                      >
+                        <Text style={styles.optionText}>Ei</Text>
+                        {editTeamMember === false && (
+                          <Ionicons
+                            name="checkmark"
+                            size={20}
+                            color="#007AFF"
+                          />
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              )}
 
               {/* Role */}
               <View style={styles.editInputGroup}>

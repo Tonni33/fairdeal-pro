@@ -52,3 +52,4 @@ node scripts/deleteAuthUser.js abc123xyz456
 - `checkTeamsField.js` - Tarkistaa teams-kentän johdonmukaisuuden
 - `addNoTeamToKuntokiekkoilijat.js` - Lisää NO_TEAM pelaajat joukkueeseen
 - `removeMembersField.js` - Poistaa members-kentän teams-kokoelmasta
+- `addTeamMemberField.js` - Lisää teamMember-kentän kaikille käyttäjille (vakiokävijä-status joukkueittain)
