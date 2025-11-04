@@ -992,6 +992,42 @@ const HomeScreen: React.FC = () => {
               </Text>
             </TouchableOpacity>
 
+            {/* Reserve players list */}
+            {nextEvent.reservePlayers &&
+              nextEvent.reservePlayers.length > 0 && (
+                <View style={styles.reservePlayersSection}>
+                  <View style={styles.reservePlayersHeader}>
+                    <Ionicons name="time-outline" size={18} color="#ff9800" />
+                    <Text style={styles.reservePlayersTitle}>
+                      Varalla ({reservePlayers.length})
+                    </Text>
+                  </View>
+                  <View style={styles.reservePlayersList}>
+                    {sortPlayersByPosition(reservePlayers).map(
+                      (player, index) => {
+                        const isGoalkeeper = player?.position === "MV";
+                        return (
+                          <View
+                            key={player.id}
+                            style={styles.reservePlayersListItem}
+                          >
+                            <View style={styles.reservePlayerNumber}>
+                              <Text style={styles.reservePlayerNumberText}>
+                                {index + 1}
+                              </Text>
+                            </View>
+                            <Text style={styles.reservePlayersListName}>
+                              {player.name}
+                              {isGoalkeeper && " 🥅"}
+                            </Text>
+                          </View>
+                        );
+                      }
+                    )}
+                  </View>
+                </View>
+              )}
+
             {/* Generated teams banner */}
             {nextEvent.generatedTeams &&
               nextEvent.generatedTeams.teams &&
@@ -1675,6 +1711,51 @@ const styles = StyleSheet.create({
   },
   reserveButton: {
     backgroundColor: "#ff9800",
+  },
+  reservePlayersSection: {
+    marginTop: 16,
+    backgroundColor: "#fff8e1",
+    borderRadius: 8,
+    padding: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: "#ff9800",
+  },
+  reservePlayersHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+    gap: 6,
+  },
+  reservePlayersTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#f57c00",
+  },
+  reservePlayersList: {
+    gap: 6,
+  },
+  reservePlayersListItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  reservePlayerNumber: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#ff9800",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reservePlayerNumberText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  reservePlayersListName: {
+    fontSize: 14,
+    color: "#333",
+    flex: 1,
   },
   disabledButton: {
     opacity: 0.6,

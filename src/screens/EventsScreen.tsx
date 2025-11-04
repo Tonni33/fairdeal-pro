@@ -973,72 +973,40 @@ const EventsScreen: React.FC = () => {
 
                   {selectedEvent.reservePlayers &&
                     selectedEvent.reservePlayers.length > 0 && (
-                      <View style={styles.registeredSection}>
-                        <Text
-                          style={[styles.registeredTitle, styles.reserveTitle]}
-                        >
-                          Varalla ({reservePlayers.length})
-                        </Text>
+                      <View style={styles.reservePlayersSection}>
+                        <View style={styles.reservePlayersHeader}>
+                          <Ionicons
+                            name="time-outline"
+                            size={18}
+                            color="#ff9800"
+                          />
+                          <Text style={styles.reservePlayersTitle}>
+                            Varalla ({reservePlayers.length})
+                          </Text>
+                        </View>
 
-                        <View style={styles.playersList}>
+                        <View style={styles.reservePlayersList}>
                           {sortPlayersByPosition(reservePlayers).map(
                             (player, index) => {
                               const isGoalkeeper = player?.position === "MV";
                               return (
                                 <View
                                   key={player.id}
-                                  style={[
-                                    styles.playerItem,
-                                    styles.reservePlayerItem,
-                                    isGoalkeeper && {
-                                      borderLeftWidth: 4,
-                                      borderLeftColor: "#ff9800",
-                                      backgroundColor: "#fff8e1",
-                                    },
-                                  ]}
+                                  style={styles.reservePlayersListItem}
                                 >
-                                  <View
-                                    style={[
-                                      styles.playerIcon,
-                                      styles.reservePlayerIcon,
-                                      isGoalkeeper && {
-                                        backgroundColor: "#ff9800",
-                                      },
-                                    ]}
-                                  >
-                                    <Ionicons
-                                      name="time-outline"
-                                      size={16}
-                                      color={isGoalkeeper ? "#fff" : "#ff9800"}
-                                    />
-                                  </View>
-                                  <View style={styles.playerInfo}>
+                                  <View style={styles.reservePlayerNumber}>
                                     <Text
-                                      style={[
-                                        styles.playerName,
-                                        styles.reservePlayerName,
-                                        isGoalkeeper && {
-                                          color: "#ff9800",
-                                          fontWeight: "600",
-                                        },
-                                      ]}
+                                      style={styles.reservePlayerNumberText}
                                     >
-                                      {player.name ||
-                                        player.email ||
-                                        `ID: ${player.id}`}
-                                      {isGoalkeeper && " 🥅"}
+                                      {index + 1}
                                     </Text>
-                                    {player.email && (
-                                      <Text
-                                        style={[
-                                          styles.playerEmail,
-                                          styles.reservePlayerEmail,
-                                        ]}
-                                      >
-                                        {player.email}
-                                      </Text>
-                                    )}
                                   </View>
+                                  <Text style={styles.reservePlayersListName}>
+                                    {player.name ||
+                                      player.email ||
+                                      `ID: ${player.id}`}
+                                    {isGoalkeeper && " 🥅"}
+                                  </Text>
                                 </View>
                               );
                             }
@@ -1411,6 +1379,51 @@ const styles = StyleSheet.create({
   },
   reservePlayerEmail: {
     color: "#f57c00",
+  },
+  reservePlayersSection: {
+    marginTop: 16,
+    backgroundColor: "#fff8e1",
+    borderRadius: 8,
+    padding: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: "#ff9800",
+  },
+  reservePlayersHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+    gap: 6,
+  },
+  reservePlayersTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#f57c00",
+  },
+  reservePlayersList: {
+    gap: 6,
+  },
+  reservePlayersListItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  reservePlayerNumber: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#ff9800",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reservePlayerNumberText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  reservePlayersListName: {
+    fontSize: 14,
+    color: "#333",
+    flex: 1,
   },
 });
 
