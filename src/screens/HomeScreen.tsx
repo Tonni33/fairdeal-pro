@@ -493,11 +493,12 @@ const HomeScreen: React.FC = () => {
                     const eventDoc = await getDoc(eventRef);
                     const eventData = eventDoc.data();
                     const currentReserves = eventData?.reservePlayers || [];
-                    const newReserves = [...currentReserves, playerIdToUse];
 
-                    // Fetch teamMember status from Firestore for all players
+                    // Fetch teamMember status from Firestore for all existing + new player
                     const teamMemberStatus: Record<string, boolean> = {};
-                    for (const playerId of newReserves) {
+                    const allPlayerIds = [...currentReserves, playerIdToUse];
+
+                    for (const playerId of allPlayerIds) {
                       try {
                         const userRef = doc(db, "users", playerId);
                         const userSnap = await getDoc(userRef);
@@ -517,18 +518,27 @@ const HomeScreen: React.FC = () => {
                       }
                     }
 
-                    // Re-sort: team members first, then guests (FIFO within groups)
-                    const sortedReserves = newReserves.sort((a, b) => {
-                      const isATeamMember = teamMemberStatus[a] === true;
-                      const isBTeamMember = teamMemberStatus[b] === true;
+                    // Separate into team members and guests, maintaining order
+                    const teamMembers: string[] = [];
+                    const guests: string[] = [];
 
-                      if (isATeamMember && !isBTeamMember) return -1;
-                      if (!isATeamMember && isBTeamMember) return 1;
+                    for (const playerId of currentReserves) {
+                      if (teamMemberStatus[playerId]) {
+                        teamMembers.push(playerId);
+                      } else {
+                        guests.push(playerId);
+                      }
+                    }
 
-                      return (
-                        currentReserves.indexOf(a) - currentReserves.indexOf(b)
-                      );
-                    });
+                    // Add new player to appropriate group
+                    if (teamMemberStatus[playerIdToUse]) {
+                      teamMembers.push(playerIdToUse);
+                    } else {
+                      guests.push(playerIdToUse);
+                    }
+
+                    // Combine: team members first, then guests
+                    const sortedReserves = [...teamMembers, ...guests];
 
                     await updateDoc(eventRef, {
                       reservePlayers: sortedReserves,
@@ -560,11 +570,12 @@ const HomeScreen: React.FC = () => {
                     // Priority queue insertion logic
                     if (hoursUntilEvent > guestRegistrationHours) {
                       // Before threshold: Maintain priority order (team members first, then guests)
-                      const newReserves = [...currentReserves, playerIdToUse];
 
-                      // Fetch teamMember status from Firestore for all players
+                      // Fetch teamMember status from Firestore for all existing + new player
                       const teamMemberStatus: Record<string, boolean> = {};
-                      for (const playerId of newReserves) {
+                      const allPlayerIds = [...currentReserves, playerIdToUse];
+
+                      for (const playerId of allPlayerIds) {
                         try {
                           const userRef = doc(db, "users", playerId);
                           const userSnap = await getDoc(userRef);
@@ -584,21 +595,27 @@ const HomeScreen: React.FC = () => {
                         }
                       }
 
-                      // Re-sort entire queue: team members first, then guests (FIFO within each group)
-                      const sortedReserves = newReserves.sort((a, b) => {
-                        const isATeamMember = teamMemberStatus[a] === true;
-                        const isBTeamMember = teamMemberStatus[b] === true;
+                      // Separate into team members and guests, maintaining order
+                      const teamMembers: string[] = [];
+                      const guests: string[] = [];
 
-                        // Team members come before guests
-                        if (isATeamMember && !isBTeamMember) return -1;
-                        if (!isATeamMember && isBTeamMember) return 1;
+                      for (const playerId of currentReserves) {
+                        if (teamMemberStatus[playerId]) {
+                          teamMembers.push(playerId);
+                        } else {
+                          guests.push(playerId);
+                        }
+                      }
 
-                        // Within same group, maintain original order (FIFO)
-                        return (
-                          currentReserves.indexOf(a) -
-                          currentReserves.indexOf(b)
-                        );
-                      });
+                      // Add new player to appropriate group
+                      if (teamMemberStatus[playerIdToUse]) {
+                        teamMembers.push(playerIdToUse);
+                      } else {
+                        guests.push(playerIdToUse);
+                      }
+
+                      // Combine: team members first, then guests
+                      const sortedReserves = [...teamMembers, ...guests];
 
                       await updateDoc(eventRef, {
                         reservePlayers: sortedReserves,
