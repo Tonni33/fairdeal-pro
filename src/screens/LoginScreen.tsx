@@ -390,18 +390,6 @@ const LoginScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Always show option to go back to quick auth during login */}
-        {!isRegister && showEmailLogin && (
-          <TouchableOpacity
-            style={styles.backToQuickAuthButton}
-            onPress={() => setShowEmailLogin(false)}
-          >
-            <Text style={styles.backToQuickAuthButtonText}>
-              ← Takaisin pikakirjautumiseen
-            </Text>
-          </TouchableOpacity>
-        )}
-
         {/* Switch between login and register */}
         {!showEmailLogin && (
           <TouchableOpacity
@@ -512,16 +500,6 @@ const styles = StyleSheet.create({
     width: 140,
     marginBottom: 20,
     borderRadius: 20,
-  },
-  backToQuickAuthButton: {
-    alignItems: "center",
-    marginTop: 15,
-    padding: 10,
-  },
-  backToQuickAuthButtonText: {
-    color: "#666",
-    fontSize: 14,
-    textDecorationLine: "underline",
   },
 });
 
