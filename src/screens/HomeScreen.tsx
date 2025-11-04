@@ -374,10 +374,27 @@ const HomeScreen: React.FC = () => {
       const hoursUntilEvent =
         (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60);
 
-      // Check if current player is a team member
+      // Check if current player is a team member - fetch from Firestore for accuracy
       const teamId = nextEvent.teamId || "";
-      const isTeamMember =
-        teamId && currentPlayer.teamMember?.[teamId] === true;
+      let isTeamMember = false;
+      if (teamId && playerIdToUse) {
+        try {
+          const userRef = doc(db, "users", playerIdToUse);
+          const userSnap = await getDoc(userRef);
+          if (userSnap.exists()) {
+            const userData = userSnap.data();
+            isTeamMember = userData.teamMember?.[teamId] === true;
+            console.log(
+              `TeamMember check for ${playerIdToUse} in team ${teamId}:`,
+              isTeamMember
+            );
+          }
+        } catch (error) {
+          console.error("Error fetching teamMember status:", error);
+          // Fallback to local data
+          isTeamMember = currentPlayer.teamMember?.[teamId] === true;
+        }
+      }
 
       if (isRegistered) {
         // Unregister from main registration
