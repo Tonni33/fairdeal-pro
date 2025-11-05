@@ -36,7 +36,7 @@ exports.deleteUser = onCall(async (request) => {
   }
 
   try {
-    // Check if caller is an admin
+    // Check if caller exists
     const callerDoc = await admin
       .firestore()
       .collection("users")
@@ -49,11 +49,34 @@ exports.deleteUser = onCall(async (request) => {
 
     const callerData = callerDoc.data();
 
-    // Check if user is master admin OR admin of any team
+    // Check if user is master admin
     const isMasterAdmin = callerData.masterAdmin === true;
-    const isTeamAdmin =
-      callerData.admin &&
-      Object.values(callerData.admin).some((val) => val === true);
+
+    // Check if user is admin of any team by looking at teams collection
+    const teamsSnapshot = await admin.firestore().collection("teams").get();
+    let isTeamAdmin = false;
+
+    for (const teamDoc of teamsSnapshot.docs) {
+      const teamData = teamDoc.data();
+      // Check both adminId and adminIds fields
+      if (teamData.adminId === callerId) {
+        isTeamAdmin = true;
+        console.log(`User is admin (adminId) of team: ${teamDoc.id}`);
+        break;
+      }
+      if (teamData.adminIds && teamData.adminIds.includes(callerId)) {
+        isTeamAdmin = true;
+        console.log(`User is admin (adminIds) of team: ${teamDoc.id}`);
+        break;
+      }
+    }
+
+    console.log("Admin check:", {
+      callerId,
+      callerName: callerData.name,
+      isMasterAdmin,
+      isTeamAdmin,
+    });
 
     if (!isMasterAdmin && !isTeamAdmin) {
       throw new HttpsError(
