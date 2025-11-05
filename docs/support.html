@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="fi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FairDeal Pro - Tuki</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        overflow: hidden;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 40px 30px;
+        text-align: center;
+      }
+
+      .header h1 {
+        font-size: 2.5em;
+        margin-bottom: 10px;
+      }
+
+      .header p {
+        font-size: 1.2em;
+        opacity: 0.9;
+      }
+
+      .content {
+        padding: 40px 30px;
+      }
+
+      .section {
+        margin-bottom: 40px;
+      }
+
+      .section h2 {
+        color: #667eea;
+        font-size: 1.8em;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 3px solid #667eea;
+      }
+
+      .section p,
+      .section li {
+        margin-bottom: 15px;
+        font-size: 1.1em;
+      }
+
+      .section ul {
+        list-style: none;
+        padding-left: 0;
+      }
+
+      .section li:before {
+        content: "✓ ";
+        color: #667eea;
+        font-weight: bold;
+        margin-right: 10px;
+      }
+
+      .contact-box {
+        background: #f8f9fa;
+        padding: 25px;
+        border-radius: 10px;
+        border-left: 5px solid #667eea;
+      }
+
+      .contact-box a {
+        color: #667eea;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 1.1em;
+      }
+
+      .contact-box a:hover {
+        text-decoration: underline;
+      }
+
+      .faq-item {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 15px;
+      }
+
+      .faq-item h3 {
+        color: #667eea;
+        margin-bottom: 10px;
+      }
+
+      .footer {
+        background: #2d3748;
+        color: white;
+        text-align: center;
+        padding: 20px;
+        font-size: 0.9em;
+      }
+
+      .footer a {
+        color: #667eea;
+        text-decoration: none;
+      }
+
+      @media (max-width: 600px) {
+        .header h1 {
+          font-size: 2em;
+        }
+
+        .content {
+          padding: 30px 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>🏆 FairDeal Pro</h1>
+        <p>Tuki & Yhteystiedot</p>
+      </div>
+
+      <div class="content">
+        <div class="section">
+          <h2>📧 Ota yhteyttä</h2>
+          <div class="contact-box">
+            <p>
+              <strong>Sähköposti:</strong><br />
+              <a href="mailto:tomi.enkkila@finnair.com"
+                >tomi.enkkila@finnair.com</a
+              >
+            </p>
+
+            <p style="margin-top: 15px">
+              <strong>GitHub Issues:</strong><br />
+              <a
+                href="https://github.com/Tonni33/fairdeal-pro/issues"
+                target="_blank"
+                >Raportoi bugi tai ehdota ominaisuutta</a
+              >
+            </p>
+          </div>
+          <p style="margin-top: 15px">
+            Vastaamme kaikkiin yhteydenottoihin 1-3 arkipäivän sisällä.
+          </p>
+        </div>
+
+        <div class="section">
+          <h2>❓ Usein kysytyt kysymykset</h2>
+
+          <div class="faq-item">
+            <h3>Miten luon uuden joukkueen?</h3>
+            <p>
+              Avaa sovellus ja valitse "Luo uusi joukkue". Anna joukkueelle nimi
+              ja koodi, jolla muut voivat liittyä. Voit myös liittyä olemassa
+              olevaan joukkueeseen syöttämällä joukkuekoodin.
+            </p>
+          </div>
+
+          <div class="faq-item">
+            <h3>Miten tiimien tasapainotus toimii?</h3>
+            <p>
+              Sovellus käyttää älykästä algoritmia, joka huomioi pelaajien
+              taitotasot (tekniikka, nopeus, fysiikka, pelinluku, maalinteko) ja
+              luo mahdollisimman tasapainoiset joukkueet. Voit myös säätää
+              pelaajien rankingeja admin-näkymästä.
+            </p>
+          </div>
+
+          <div class="faq-item">
+            <h3>Miten ilmoittaudun peliin?</h3>
+            <p>
+              Avaa tapahtuma ja paina "Ilmoittaudu". Jos paikka on täynnä, sinut
+              lisätään varasijalistalle. Järjestelmä käyttää prioriteettijonoa:
+              teamMember-jäsenet ovat etusijalla yli 24h ennen peliä.
+            </p>
+          </div>
+
+          <div class="faq-item">
+            <h3>Miten saan admin-oikeudet?</h3>
+            <p>
+              Admin-oikeudet saa joukkueen luoja tai nykyinen admin voi lisätä
+              uusia admineja. Admineilla on oikeus hallita pelaajia, tapahtumia
+              ja joukkueasetuksia.
+            </p>
+          </div>
+
+          <div class="faq-item">
+            <h3>Voinko poistaa tilini?</h3>
+            <p>
+              Kyllä. Mene Profiili → Asetukset → Poista tili. Kaikki tietosi
+              poistetaan pysyvästi. Voit liittyä uudelleen milloin tahansa.
+            </p>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>🐛 Bugin raportointi</h2>
+          <p>Löysitkö bugin? Ole hyvä ja raportoi se meille:</p>
+          <ul>
+            <li>Kerro mitä yritit tehdä</li>
+            <li>Kerro mitä tapahtui (virheviesti, kaatuminen jne.)</li>
+            <li>Liitä kuvakaappaus jos mahdollista</li>
+            <li>Kerro puhelimesi malli ja iOS versio</li>
+          </ul>
+          <p style="margin-top: 15px">
+            Lähetä raportti sähköpostiin tai
+            <a
+              href="https://github.com/Tonni33/fairdeal-pro/issues"
+              target="_blank"
+              style="color: #667eea"
+              >GitHub Issuesiin</a
+            >.
+          </p>
+        </div>
+
+        <div class="section">
+          <h2>✨ Ominaisuuspyynnöt</h2>
+          <p>
+            Haluatko ehdottaa uutta ominaisuutta? Otamme mielellämme vastaan
+            kehitysehdotuksia! Kerro meille mitä haluaisit nähdä sovelluksessa
+            ja miksi se olisi hyödyllinen.
+          </p>
+        </div>
+
+        <div class="section">
+          <h2>📱 Järjestelmävaatimukset</h2>
+          <ul>
+            <li>iOS 13.0 tai uudempi</li>
+            <li>Internet-yhteys (reaaliaikaiset päivitykset)</li>
+            <li>Noin 50 MB vapaata tallennustilaa</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer">
+        <p>&copy; 2025 FairDeal Pro. Kaikki oikeudet pidätetään.</p>
+        <p style="margin-top: 10px">
+          <a href="https://github.com/Tonni33/fairdeal-pro">GitHub</a> |
+          <a href="privacy.html">Tietosuojaseloste</a>
+        </p>
+      </div>
+    </div>
+  </body>
+</html>
