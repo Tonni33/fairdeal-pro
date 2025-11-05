@@ -1,4 +1,4 @@
-const functions = require("firebase-functions");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 
 admin.initializeApp();
@@ -7,32 +7,32 @@ admin.initializeApp();
  * Cloud Function to delete a user from both Firestore and Authentication
  * Callable from the mobile app with proper authentication
  */
-exports.deleteUser = functions.https.onCall(async (data, context) => {
+exports.deleteUser = onCall(async (request) => {
+  const data = request.data;
+  const context = request.auth;
+
   // Debug logging
   console.log("deleteUser called with data:", JSON.stringify(data));
-  console.log("context.auth:", context.auth ? "present" : "MISSING");
+  console.log("context:", context ? "present" : "MISSING");
 
-  if (context.auth) {
-    console.log("context.auth.uid:", context.auth.uid);
-    console.log("context.auth.token:", Object.keys(context.auth.token || {}));
+  if (context) {
+    console.log("context.uid:", context.uid);
+    console.log("context.token:", Object.keys(context.token || {}));
   }
 
   // Verify that the request is made by an authenticated user
-  if (!context.auth) {
-    throw new functions.https.HttpsError(
+  if (!context) {
+    throw new HttpsError(
       "unauthenticated",
       "Käyttäjän tulee olla kirjautunut."
     );
   }
 
   const { userId } = data;
-  const callerId = context.auth.uid;
+  const callerId = context.uid;
 
   if (!userId) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "Käyttäjän ID puuttuu."
-    );
+    throw new HttpsError("invalid-argument", "Käyttäjän ID puuttuu.");
   }
 
   try {
@@ -44,10 +44,7 @@ exports.deleteUser = functions.https.onCall(async (data, context) => {
       .get();
 
     if (!callerDoc.exists) {
-      throw new functions.https.HttpsError(
-        "permission-denied",
-        "Käyttäjätietoja ei löytynyt."
-      );
+      throw new HttpsError("permission-denied", "Käyttäjätietoja ei löytynyt.");
     }
 
     const callerData = callerDoc.data();
@@ -59,7 +56,7 @@ exports.deleteUser = functions.https.onCall(async (data, context) => {
       Object.values(callerData.admin).some((val) => val === true);
 
     if (!isMasterAdmin && !isTeamAdmin) {
-      throw new functions.https.HttpsError(
+      throw new HttpsError(
         "permission-denied",
         "Vain adminit voivat poistaa käyttäjiä."
       );
@@ -67,10 +64,7 @@ exports.deleteUser = functions.https.onCall(async (data, context) => {
 
     // Prevent self-deletion
     if (userId === callerId) {
-      throw new functions.https.HttpsError(
-        "invalid-argument",
-        "Et voi poistaa omaa tiliäsi."
-      );
+      throw new HttpsError("invalid-argument", "Et voi poistaa omaa tiliäsi.");
     }
 
     // Get user data before deletion for logging
@@ -118,11 +112,11 @@ exports.deleteUser = functions.https.onCall(async (data, context) => {
   } catch (error) {
     console.error("Error deleting user:", error);
 
-    if (error instanceof functions.https.HttpsError) {
+    if (error instanceof HttpsError) {
       throw error;
     }
 
-    throw new functions.https.HttpsError(
+    throw new HttpsError(
       "internal",
       `Käyttäjän poistaminen epäonnistui: ${error.message}`
     );
