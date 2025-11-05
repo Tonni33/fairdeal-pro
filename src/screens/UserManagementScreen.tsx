@@ -20,9 +20,10 @@ import {
   deleteDoc,
   getDoc,
 } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
 
 import { RootStackParamList, Team, Player } from "../types";
-import { db } from "../services/firebase";
+import { db, functions } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import {
   useApp,
@@ -649,36 +650,38 @@ const UserManagementScreen: React.FC = () => {
     if (!selectedPlayer) return;
 
     Alert.alert(
-      "Poista pelaaja",
-      `Haluatko varmasti poistaa pelaajan ${selectedPlayer.name}?\n\nHUOM: Tämä poistaa pelaajan tietokannasta, mutta käyttäjä voi edelleen kirjautua sisään.\n\nPoista käyttäjä myös Firebase Authentication -palvelusta ajamalla:\nnode scripts/deleteAuthUser.js ${selectedPlayer.id}`,
+      "Poista käyttäjä",
+      `Haluatko varmasti poistaa käyttäjän ${selectedPlayer.name}?\n\nTämä poistaa käyttäjän sekä tietokannasta että kirjautumispalvelusta. Käyttäjä voi liittyä uudelleen samalla sähköpostilla.`,
       [
         { text: "Peruuta", style: "cancel" },
         {
-          text: "Poista tietokannasta",
+          text: "Poista",
           style: "destructive",
           onPress: async () => {
             try {
-              // Käytä users collectioa players sijasta
-              await deleteDoc(doc(db, "users", selectedPlayer.id));
+              // Call Cloud Function to delete user from both Firestore and Authentication
+              const deleteUserFunction = httpsCallable(functions, "deleteUser");
+              const result = await deleteUserFunction({
+                userId: selectedPlayer.id,
+              });
 
-              // Kopioi UID leikepöydälle helpottamaan skriptin ajoa
-              const uidMessage = `Käyttäjän UID kopioitu leikepöydälle: ${selectedPlayer.id}\n\nAja terminaalissa:\nnode scripts/deleteAuthUser.js ${selectedPlayer.id}`;
-
-              Alert.alert("Poistettu tietokannasta", uidMessage, [
-                {
-                  text: "OK",
-                  onPress: () => {
-                    // Kopioi UID leikepöydälle
-                    // Expo.Clipboard ei ole käytettävissä tässä kontekstissa
-                    console.log("UID to delete from Auth:", selectedPlayer.id);
-                  },
-                },
-              ]);
+              const data = result.data as { success: boolean; message: string };
+              Alert.alert("Onnistui", data.message);
               closePlayerModal();
               refreshData();
-            } catch (error) {
+            } catch (error: any) {
               console.error("Error deleting player:", error);
-              Alert.alert("Virhe", "Pelaajan poistaminen epäonnistui");
+
+              let errorMessage = "Käyttäjän poistaminen epäonnistui";
+              if (error.code === "functions/permission-denied") {
+                errorMessage = "Sinulla ei ole oikeuksia poistaa käyttäjiä";
+              } else if (error.code === "functions/unauthenticated") {
+                errorMessage = "Sinun tulee olla kirjautunut";
+              } else if (error.message) {
+                errorMessage = error.message;
+              }
+
+              Alert.alert("Virhe", errorMessage);
             }
           },
         },

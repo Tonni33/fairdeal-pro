@@ -2,6 +2,7 @@ import { initializeApp, getApps } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { getStorage } from "firebase/storage";
+import { getFunctions } from "firebase/functions";
 
 // Firebase configuration
 const firebaseConfig = {
@@ -20,6 +21,7 @@ const app =
 // Initialize Firebase services
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+export const functions = getFunctions(app);
 
 // Initialize Auth - Firebase v12 handles persistence automatically in React Native
 export const auth = getAuth(app);
