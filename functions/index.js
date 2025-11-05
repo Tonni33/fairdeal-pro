@@ -8,6 +8,15 @@ admin.initializeApp();
  * Callable from the mobile app with proper authentication
  */
 exports.deleteUser = functions.https.onCall(async (data, context) => {
+  // Debug logging
+  console.log("deleteUser called with data:", JSON.stringify(data));
+  console.log("context.auth:", context.auth ? "present" : "MISSING");
+
+  if (context.auth) {
+    console.log("context.auth.uid:", context.auth.uid);
+    console.log("context.auth.token:", Object.keys(context.auth.token || {}));
+  }
+
   // Verify that the request is made by an authenticated user
   if (!context.auth) {
     throw new functions.https.HttpsError(

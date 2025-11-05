@@ -23,7 +23,7 @@ import {
 import { httpsCallable } from "firebase/functions";
 
 import { RootStackParamList, Team, Player } from "../types";
-import { db, functions } from "../services/firebase";
+import { db, functions, auth } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import {
   useApp,
@@ -659,6 +659,26 @@ const UserManagementScreen: React.FC = () => {
           style: "destructive",
           onPress: async () => {
             try {
+              // Debug: Check auth state
+              console.log("Current user:", user?.id, user?.email);
+              console.log("Deleting player:", selectedPlayer.id);
+
+              if (!user) {
+                Alert.alert("Virhe", "Et ole kirjautunut sisään");
+                return;
+              }
+
+              // Get current auth token to ensure it's fresh
+              const currentUser = auth.currentUser;
+              if (!currentUser) {
+                Alert.alert("Virhe", "Käyttäjä ei ole kirjautunut");
+                return;
+              }
+
+              // Force token refresh to ensure we have a valid token
+              await currentUser.getIdToken(true);
+              console.log("Auth token refreshed");
+
               // Call Cloud Function to delete user from both Firestore and Authentication
               const deleteUserFunction = httpsCallable(functions, "deleteUser");
               const result = await deleteUserFunction({
@@ -671,6 +691,8 @@ const UserManagementScreen: React.FC = () => {
               refreshData();
             } catch (error: any) {
               console.error("Error deleting player:", error);
+              console.error("Error code:", error.code);
+              console.error("Error details:", JSON.stringify(error, null, 2));
 
               let errorMessage = "Käyttäjän poistaminen epäonnistui";
               if (error.code === "functions/permission-denied") {
