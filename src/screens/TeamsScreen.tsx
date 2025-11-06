@@ -603,12 +603,6 @@ const TeamsScreen: React.FC = () => {
                   <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.reshuffleButton}
-                  onPress={reshuffleAllTeams}
-                >
-                  <Ionicons name="shuffle" size={20} color="#FF9800" />
-                </TouchableOpacity>
-                <TouchableOpacity
                   style={styles.closeButton}
                   onPress={() => {
                     setIsTeamModalVisible(false);
@@ -628,13 +622,6 @@ const TeamsScreen: React.FC = () => {
               <Text style={styles.eventDate}>
                 {formatFullDateTime(selectedEvent.date)}
               </Text>
-
-              {selectedEvent.lastTeamGeneration && (
-                <Text style={styles.generationDate}>
-                  Joukkueet luotu:{" "}
-                  {formatFullDateTime(selectedEvent.lastTeamGeneration)}
-                </Text>
-              )}
 
               <View style={styles.teamsContainer}>
                 {teams.map((team, index) => (
@@ -691,9 +678,6 @@ const TeamsScreen: React.FC = () => {
                                 >
                                   {player.name}
                                   {isGoalkeeper && " 🥅"}
-                                </Text>
-                                <Text style={styles.playerDetails}>
-                                  {player.positions.join(", ")}
                                 </Text>
                               </View>
                             </View>
@@ -1029,11 +1013,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: "rgba(37, 211, 102, 0.1)",
   },
-  reshuffleButton: {
-    padding: 8,
-    borderRadius: 6,
-    backgroundColor: "#fff3e0",
-  },
   modalTitle: {
     fontSize: 18,
     fontWeight: "bold",
@@ -1053,14 +1032,6 @@ const styles = StyleSheet.create({
     color: "#1976d2",
     fontWeight: "600",
     marginBottom: 8,
-  },
-  generationDate: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
   },
   teamsContainer: {
     gap: 16,
@@ -1112,11 +1083,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#333",
-    marginBottom: 2,
-  },
-  playerDetails: {
-    fontSize: 12,
-    color: "#666",
   },
   teamOption: {
     padding: 16,
