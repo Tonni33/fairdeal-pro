@@ -158,6 +158,27 @@ const CreatePlayerScreen: React.FC = () => {
         })
         .filter((name): name is string => name !== undefined);
 
+      // Build teamSkills object - use current category and multiplier for all teams
+      const teamSkills: {
+        [teamId: string]: {
+          field: { category: number; multiplier: number };
+          goalkeeper: { category: number; multiplier: number };
+        };
+      } = {};
+
+      selectedTeams.forEach((teamId) => {
+        teamSkills[teamId] = {
+          field: {
+            category: category,
+            multiplier: multiplier,
+          },
+          goalkeeper: {
+            category: category,
+            multiplier: multiplier,
+          },
+        };
+      });
+
       const playerData = {
         name: name.trim(),
         displayName: name.trim(), // Lisää displayName yhtenäisyyden vuoksi
@@ -169,6 +190,7 @@ const CreatePlayerScreen: React.FC = () => {
         position: position, // Legacy: computed primary position
         category,
         multiplier,
+        teamSkills, // NEW: Team-specific skills
         isAdmin,
         teamMember: teamMemberStatus, // Vakiokävijä status per team
         createdAt: new Date(),
