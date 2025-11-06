@@ -140,7 +140,8 @@ const UserManagementScreen: React.FC = () => {
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
-  const [editPosition, setEditPosition] = useState("H");
+  const [editPosition, setEditPosition] = useState("H"); // Legacy: primary position
+  const [editPositions, setEditPositions] = useState<string[]>(["H"]); // New: array of positions
   const [editCategory, setEditCategory] = useState(1);
   const [editMultiplier, setEditMultiplier] = useState(1.0);
   const [editTeamMember, setEditTeamMember] = useState(true); // Vakiokävijä-status
@@ -154,7 +155,6 @@ const UserManagementScreen: React.FC = () => {
   const positions = [
     { value: "H", label: "Hyökkääjä" },
     { value: "P", label: "Puolustaja" },
-    { value: "H/P", label: "Hyökkääjä/Puolustaja" },
     { value: "MV", label: "Maalivahti" },
   ];
 
@@ -246,7 +246,12 @@ const UserManagementScreen: React.FC = () => {
       // Jos joukkue on valittu, käytä joukkuekohtaisia taitoja
       if (selectedTeam) {
         const teamSkills = getTeamSkillsWithLocal(freshPlayer.id, selectedTeam);
-        setEditPosition(teamSkills?.position || freshPlayer.position);
+        const position = teamSkills?.position || freshPlayer.position;
+        setEditPosition(position);
+        // Load positions array, convert from old position if needed
+        const positions =
+          (freshPlayer as any).positions || positionToArray(position);
+        setEditPositions(positions);
         setEditCategory(teamSkills?.category || freshPlayer.category);
         setEditMultiplier(teamSkills?.multiplier || freshPlayer.multiplier);
         // Aseta vakiokävijä-status valitulle joukkueelle tuoreesta datasta
@@ -261,6 +266,11 @@ const UserManagementScreen: React.FC = () => {
       } else {
         // Käytä pelaajan perustaitoja
         setEditPosition(freshPlayer.position);
+        // Load positions array, convert from old position if needed
+        const positions =
+          (freshPlayer as any).positions ||
+          positionToArray(freshPlayer.position);
+        setEditPositions(positions);
         setEditCategory(freshPlayer.category);
         setEditMultiplier(freshPlayer.multiplier);
         // Kun ei ole joukkuetta valittu, aseta oletukseksi true
@@ -276,12 +286,19 @@ const UserManagementScreen: React.FC = () => {
 
       if (selectedTeam) {
         const teamSkills = getTeamSkillsWithLocal(player.id, selectedTeam);
-        setEditPosition(teamSkills?.position || player.position);
+        const position = teamSkills?.position || player.position;
+        setEditPosition(position);
+        const positions =
+          (player as any).positions || positionToArray(position);
+        setEditPositions(positions);
         setEditCategory(teamSkills?.category || player.category);
         setEditMultiplier(teamSkills?.multiplier || player.multiplier);
         setEditTeamMember(player.teamMember?.[selectedTeam] ?? true);
       } else {
         setEditPosition(player.position);
+        const positions =
+          (player as any).positions || positionToArray(player.position);
+        setEditPositions(positions);
         setEditCategory(player.category);
         setEditMultiplier(player.multiplier);
         setEditTeamMember(true);
@@ -312,6 +329,22 @@ const UserManagementScreen: React.FC = () => {
     setIsPlayerModalVisible(true);
   };
 
+  // Helper: Convert old position string to positions array
+  const positionToArray = (position: string): string[] => {
+    if (position === "H/P") {
+      return ["H", "P"];
+    }
+    return [position];
+  };
+
+  // Helper: Convert positions array to legacy position string (primary position)
+  const arrayToPosition = (positions: string[]): string => {
+    if (!positions || positions.length === 0) return "H";
+    if (positions.includes("MV")) return "MV"; // Goalkeeper is primary if present
+    if (positions.includes("H") && positions.includes("P")) return "H/P";
+    return positions[0]; // Use first position as primary
+  };
+
   // Sulje pelaajan modaali ja nollaa tiedot
   const closePlayerModal = () => {
     console.log("UserManagement: Closing player modal");
@@ -321,6 +354,7 @@ const UserManagementScreen: React.FC = () => {
     setEditEmail("");
     setEditPhone("");
     setEditPosition("H");
+    setEditPositions(["H"]);
     setEditCategory(1);
     setEditMultiplier(1.0);
     setEditTeamMember(true);
@@ -455,7 +489,8 @@ const UserManagementScreen: React.FC = () => {
             [localKey]: {
               category: editCategory,
               multiplier: editMultiplier,
-              position: editPosition,
+              positions: editPositions,
+              position: arrayToPosition(editPositions),
             },
           }));
           console.log("⚡ Applied optimistic update for team skills");
@@ -468,7 +503,8 @@ const UserManagementScreen: React.FC = () => {
             [selectedTeam]: {
               category: editCategory,
               multiplier: editMultiplier,
-              position: editPosition,
+              positions: editPositions, // New: array of positions
+              position: arrayToPosition(editPositions), // Legacy: computed primary position
               updatedAt: new Date(),
             },
           };
@@ -542,7 +578,8 @@ const UserManagementScreen: React.FC = () => {
 
       // Päivitä perustaidot vain jos ei ole joukkuetta valittu
       if (!selectedTeam) {
-        updateData.position = editPosition;
+        updateData.positions = editPositions; // New: array of positions
+        updateData.position = arrayToPosition(editPositions); // Legacy: computed primary position
         updateData.category = editCategory;
         updateData.multiplier = editMultiplier;
       }
@@ -1063,43 +1100,47 @@ const UserManagementScreen: React.FC = () => {
                 )}
               </View>
 
-              {/* Position */}
+              {/* Position - Checkboxes for multiple selection */}
               <View style={styles.editInputGroup}>
-                <Text style={styles.label}>Pelipaikka</Text>
-                <TouchableOpacity
-                  style={styles.selector}
-                  onPress={() =>
-                    setEditDropdown(
-                      editDropdown === "position" ? null : "position"
-                    )
-                  }
-                >
-                  <Text style={styles.selectorText}>{getPositionLabel()}</Text>
-                  <Ionicons name="chevron-down" size={20} color="#666" />
-                </TouchableOpacity>
-                {editDropdown === "position" && (
-                  <View style={styles.dropdownList}>
-                    {positions.map((pos) => (
-                      <TouchableOpacity
-                        key={pos.value}
-                        style={styles.dropdownOption}
-                        onPress={() => {
-                          setEditPosition(pos.value);
-                          setEditDropdown(null);
-                        }}
-                      >
-                        <Text style={styles.optionText}>{pos.label}</Text>
-                        {editPosition === pos.value && (
-                          <Ionicons
-                            name="checkmark"
-                            size={20}
-                            color="#007AFF"
-                          />
-                        )}
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
+                <Text style={styles.label}>
+                  Pelipaikka (valitse yksi tai useampi)
+                </Text>
+                {positions.map((pos) => (
+                  <TouchableOpacity
+                    key={pos.value}
+                    style={styles.checkboxOption}
+                    onPress={() => {
+                      const isSelected = editPositions.includes(pos.value);
+                      if (isSelected) {
+                        // Don't allow unselecting if it's the only position
+                        if (editPositions.length > 1) {
+                          const newPositions = editPositions.filter(
+                            (p) => p !== pos.value
+                          );
+                          setEditPositions(newPositions);
+                          setEditPosition(arrayToPosition(newPositions));
+                        }
+                      } else {
+                        const newPositions = [...editPositions, pos.value];
+                        setEditPositions(newPositions);
+                        setEditPosition(arrayToPosition(newPositions));
+                      }
+                    }}
+                  >
+                    <View
+                      style={[
+                        styles.checkbox,
+                        editPositions.includes(pos.value) &&
+                          styles.checkboxChecked,
+                      ]}
+                    >
+                      {editPositions.includes(pos.value) && (
+                        <Ionicons name="checkmark" size={18} color="#fff" />
+                      )}
+                    </View>
+                    <Text style={styles.checkboxLabel}>{pos.label}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
 
               {/* Category */}
@@ -1598,6 +1639,25 @@ const styles = StyleSheet.create({
   },
   adminRole: {
     color: "#d32f2f",
+  },
+  checkboxOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+  },
+  checkboxChecked: {
+    backgroundColor: "#007AFF",
+    borderColor: "#007AFF",
+  },
+  checkboxLabel: {
+    fontSize: 16,
+    color: "#333",
+    marginLeft: 12,
   },
 });
 

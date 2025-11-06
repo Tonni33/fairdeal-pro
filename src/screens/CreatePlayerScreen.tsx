@@ -62,7 +62,8 @@ const CreatePlayerScreen: React.FC = () => {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
-  const [position, setPosition] = useState("H");
+  const [position, setPosition] = useState("H"); // Legacy: primary position
+  const [positions, setPositions] = useState<string[]>(["H"]); // New: array of positions
   const [category, setCategory] = useState(1);
   const [multiplier, setMultiplier] = useState(1.0);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -76,12 +77,19 @@ const CreatePlayerScreen: React.FC = () => {
     useState(false);
   const [isRoleModalVisible, setIsRoleModalVisible] = useState(false);
 
-  const positions = [
+  const positionOptions = [
     { value: "H", label: "Hyökkääjä" },
     { value: "P", label: "Puolustaja" },
-    { value: "H/P", label: "Hyökkääjä/Puolustaja" },
     { value: "MV", label: "Maalivahti" },
   ];
+
+  // Helper: Convert positions array to legacy position string (primary position)
+  const arrayToPosition = (positions: string[]): string => {
+    if (!positions || positions.length === 0) return "H";
+    if (positions.includes("MV")) return "MV"; // Goalkeeper is primary if present
+    if (positions.includes("H") && positions.includes("P")) return "H/P";
+    return positions[0]; // Use first position as primary
+  };
 
   const categories = [1, 2, 3];
 
@@ -139,7 +147,8 @@ const CreatePlayerScreen: React.FC = () => {
         email: email.trim().toLowerCase(),
         phone: phone.trim(),
         teamIds: selectedTeams, // Muuta teams -> teamIds yhtenäisyyden vuoksi
-        position,
+        positions: positions, // New: array of positions
+        position: position, // Legacy: computed primary position
         category,
         multiplier,
         isAdmin,
@@ -195,7 +204,11 @@ const CreatePlayerScreen: React.FC = () => {
   };
 
   const getPositionLabel = () => {
-    return positions.find((p) => p.value === position)?.label || position;
+    if (positions.length === 0) return "Valitse pelipaikka";
+    const labels = positions.map(
+      (pos) => positionOptions.find((p) => p.value === pos)?.label || pos
+    );
+    return labels.join(", ");
   };
 
   return (
@@ -396,7 +409,9 @@ const CreatePlayerScreen: React.FC = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Valitse pelipaikka</Text>
+              <Text style={styles.modalTitle}>
+                Valitse pelipaikka (yksi tai useampi)
+              </Text>
               <TouchableOpacity
                 style={styles.closeButton}
                 onPress={() => setIsPositionModalVisible(false)}
@@ -405,29 +420,39 @@ const CreatePlayerScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            {positions.map((pos) => (
+            {positionOptions.map((pos) => (
               <TouchableOpacity
                 key={pos.value}
-                style={[
-                  styles.option,
-                  position === pos.value && styles.selectedOption,
-                ]}
+                style={styles.checkboxOption}
                 onPress={() => {
-                  setPosition(pos.value);
-                  setIsPositionModalVisible(false);
+                  const isSelected = positions.includes(pos.value);
+                  if (isSelected) {
+                    // Don't allow unselecting if it's the only position
+                    if (positions.length > 1) {
+                      const newPositions = positions.filter(
+                        (p) => p !== pos.value
+                      );
+                      setPositions(newPositions);
+                      setPosition(arrayToPosition(newPositions));
+                    }
+                  } else {
+                    const newPositions = [...positions, pos.value];
+                    setPositions(newPositions);
+                    setPosition(arrayToPosition(newPositions));
+                  }
                 }}
               >
-                <Text
+                <View
                   style={[
-                    styles.optionText,
-                    position === pos.value && styles.selectedOptionText,
+                    styles.checkbox,
+                    positions.includes(pos.value) && styles.checkboxChecked,
                   ]}
                 >
-                  {pos.label}
-                </Text>
-                {position === pos.value && (
-                  <Ionicons name="checkmark" size={20} color="#007AFF" />
-                )}
+                  {positions.includes(pos.value) && (
+                    <Ionicons name="checkmark" size={18} color="#fff" />
+                  )}
+                </View>
+                <Text style={styles.checkboxLabel}>{pos.label}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -760,6 +785,21 @@ const styles = StyleSheet.create({
   selectedOptionText: {
     color: "#007AFF",
     fontWeight: "500",
+  },
+  checkboxOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  checkboxChecked: {
+    backgroundColor: "#007AFF",
+    borderColor: "#007AFF",
+  },
+  checkboxLabel: {
+    fontSize: 16,
+    color: "#333",
   },
 });
 

@@ -5,7 +5,8 @@ export interface TeamPlayer {
   teamId: string; // Reference to Team document
   category: number; // Team-specific category (1, 2, 3)
   multiplier: number; // Team-specific skill multiplier
-  position: string; // Team-specific position (may differ from global position)
+  position: string; // Primary team-specific position (legacy, for backwards compatibility)
+  positions?: string[]; // Team-specific positions array: ["H", "P", "MV"]
   isActive: boolean; // Active in this team
   joinedAt: Date; // When player joined this team
   updatedAt?: Date; // When team-specific skills were last updated
@@ -21,7 +22,8 @@ export interface Player {
   phone?: string;
   category: number; // Player category/class (1, 2, 3)
   multiplier: number; // Skill multiplier for balancing
-  position: string; // Player position
+  position: string; // Primary position (legacy, computed from positions array for backwards compatibility)
+  positions?: string[]; // Player positions array: ["H", "P", "MV"] - can have multiple roles
   image?: string; // Profile image URL
   isAdmin: boolean; // Legacy admin field for compatibility
   role?: "member" | "admin" | "eventManager"; // Global role (legacy)
