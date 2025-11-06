@@ -148,20 +148,22 @@ const EventManagementScreen: React.FC = () => {
   const getFieldPlayers = (playerIds: string[], event?: any) => {
     return playerIds.filter((id) => {
       const player = players.find((p) => p.id === id);
-      // Check playerRole first, then fall back to position
+      if (!player) return false;
+      // Check playerRole first, then fall back to player's primary position
       const eventToCheck = event || selectedEvent;
-      const role = eventToCheck?.playerRoles?.[id] || player?.position;
-      return player && ["H", "P", "H/P"].includes(role);
+      const role = eventToCheck?.playerRoles?.[id] || player?.positions[0];
+      return ["H", "P", "H/P"].includes(role);
     });
   };
 
   const getGoalkeepers = (playerIds: string[], event?: any) => {
     return playerIds.filter((id) => {
       const player = players.find((p) => p.id === id);
-      // Check playerRole first, then fall back to position
+      if (!player) return false;
+      // Check playerRole first, then fall back to player's primary position
       const eventToCheck = event || selectedEvent;
-      const role = eventToCheck?.playerRoles?.[id] || player?.position;
-      return player && role === "MV";
+      const role = eventToCheck?.playerRoles?.[id] || player?.positions[0];
+      return role === "MV";
     });
   };
 
@@ -174,8 +176,9 @@ const EventManagementScreen: React.FC = () => {
 
   // Helper function to get player style based on position
   const getPlayerIconColor = (player: any, teamId?: string) => {
-    // Check playerRole first, then fall back to position
-    const role = selectedEvent?.playerRoles?.[player?.id] || player?.position;
+    // Check playerRole first, then fall back to player's primary position
+    const role =
+      selectedEvent?.playerRoles?.[player?.id] || player?.positions?.[0];
     if (role === "MV") {
       return "#ff9800"; // Orange for goalkeepers
     }
@@ -312,7 +315,6 @@ const EventManagementScreen: React.FC = () => {
       console.log("🎯 handleAddPlayerToEvent:", {
         playerId,
         playerName: player.name,
-        position: player.position,
         positions: player.positions,
         needsSelection: needsRoleSelection(player),
         selectedRole,
@@ -352,8 +354,8 @@ const EventManagementScreen: React.FC = () => {
       const currentFieldPlayers = getFieldPlayers(currentPlayers);
       const currentGoalkeepers = getGoalkeepers(currentPlayers);
 
-      // Use selected role or player's default position
-      const playerRole = selectedRole || player.position;
+      // Use selected role or player's primary position
+      const playerRole = selectedRole || player.positions[0];
 
       if (playerRole === "MV") {
         // Check goalkeeper limit
@@ -498,9 +500,11 @@ const EventManagementScreen: React.FC = () => {
 
       // Separate players by position
       const fieldPlayersToAdd = playersData.filter((p) =>
-        ["H", "P", "H/P"].includes(p.position)
+        p.positions.some((pos) => ["H", "P", "H/P"].includes(pos))
       );
-      const goalkeepersToAdd = playersData.filter((p) => p.position === "MV");
+      const goalkeepersToAdd = playersData.filter((p) =>
+        p.positions.includes("MV")
+      );
 
       const currentFieldPlayers = getFieldPlayers(currentPlayers);
       const currentGoalkeepers = getGoalkeepers(currentPlayers);
@@ -667,7 +671,7 @@ const EventManagementScreen: React.FC = () => {
 
       // Find the player being removed to check their position
       const removedPlayer = players.find((p) => p.id === playerId);
-      const isRemovedPlayerGoalkeeper = removedPlayer?.position === "MV";
+      const isRemovedPlayerGoalkeeper = removedPlayer?.positions.includes("MV");
 
       // Calculate hours until event for priority queue logic
       const team = teams.find((t) => t.id === selectedEvent.teamId);
@@ -701,7 +705,8 @@ const EventManagementScreen: React.FC = () => {
             const isReserveTeamMember =
               teamId && reservePlayer.teamMember?.[teamId] === true;
             const positionMatches =
-              (reservePlayer.position === "MV") === isRemovedPlayerGoalkeeper;
+              reservePlayer.positions.includes("MV") ===
+              isRemovedPlayerGoalkeeper;
 
             if (isReserveTeamMember && positionMatches) {
               suitableReserve = reserveId;
@@ -714,7 +719,8 @@ const EventManagementScreen: React.FC = () => {
             const reservePlayer = players.find((p) => p.id === reserveId);
             return (
               reservePlayer &&
-              (reservePlayer.position === "MV") === isRemovedPlayerGoalkeeper
+              reservePlayer.positions.includes("MV") ===
+                isRemovedPlayerGoalkeeper
             );
           });
         }
@@ -1146,11 +1152,11 @@ const EventManagementScreen: React.FC = () => {
                   selectedEvent.registeredPlayers || []
                 ).map((pid: string) => {
                   const player = players.find((p) => p.id === pid);
-                  // Check playerRole from event first, then fall back to player.position
+                  // Check playerRole from event first, then fall back to player's positions
                   const playerRole = selectedEvent?.playerRoles?.[pid];
                   const isGoalkeeper =
                     playerRole === "MV" ||
-                    (!playerRole && player?.position === "MV");
+                    (!playerRole && player?.positions.includes("MV"));
                   return (
                     <View
                       key={pid}
@@ -1233,7 +1239,7 @@ const EventManagementScreen: React.FC = () => {
                     const playerRole = selectedEvent?.playerRoles?.[player.id];
                     const isGoalkeeper =
                       playerRole === "MV" ||
-                      (!playerRole && player?.position === "MV");
+                      (!playerRole && player?.positions.includes("MV"));
                     return (
                       <View
                         key={player.id}
@@ -1501,12 +1507,14 @@ const EventManagementScreen: React.FC = () => {
                 )
                 .sort((a, b) => {
                   // Sort goalkeepers to the end
-                  if (a.position === "MV" && b.position !== "MV") return 1;
-                  if (a.position !== "MV" && b.position === "MV") return -1;
+                  if (a.positions.includes("MV") && !b.positions.includes("MV"))
+                    return 1;
+                  if (!a.positions.includes("MV") && b.positions.includes("MV"))
+                    return -1;
                   return (a.name || "").localeCompare(b.name || "");
                 })
                 .map((player) => {
-                  const isGoalkeeper = player.position === "MV";
+                  const isGoalkeeper = player.positions.includes("MV");
                   const isSelected = selectedPlayerIds.includes(player.id);
                   const playerNeedsRoleSelection = needsRoleSelection(player);
                   return (

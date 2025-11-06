@@ -71,30 +71,24 @@ const PlayersScreen: React.FC = () => {
         const userData = userSnap.data();
 
         // Create enriched player object - prioritize legacy player name, then Firebase Auth displayName
-        const enrichedPlayer = {
-          ...player, // Include all legacy data first
+        const enrichedPlayer: Player = {
+          ...player, // Include all player data
           id: playerId,
-          // Override with proper name resolution - prioritize legacy name, then Firebase displayName
+          // Override with proper name resolution - prioritize player name, then Firebase displayName
           name:
             player?.name ||
             userData.displayName ||
             userData.email?.split("@")[0] ||
             "Nimeä ei löydy",
           email: userData.email || player?.email || "",
-          phone: userData.phone || player?.phone || undefined, // Prioritize userData.phone
-          // Ensure required fields have defaults
-          position: player?.position || "H",
-          skillLevel: player?.skillLevel || 5,
+          phone: userData.phone || player?.phone || undefined,
+          // Ensure required fields
+          positions: player?.positions || ["H"], // Default to field player
           teamIds: player?.teamIds || [],
-          isActive: player?.isActive !== false,
-          category: player?.category || 2,
-          multiplier: player?.multiplier || 1,
           isAdmin: player?.isAdmin || false,
           playerId: player?.playerId || playerId,
-          points: player?.points || 0,
           teamSkills: player?.teamSkills || {},
           teams: player?.teams || [],
-          isGoalkeeper: player?.isGoalkeeper || false,
           createdAt: player?.createdAt || new Date(),
         };
 
@@ -116,30 +110,24 @@ const PlayersScreen: React.FC = () => {
     }
 
     // Return basic object with ID if nothing found
-    const basicPlayer = {
+    const basicPlayer: Player = {
       id: playerId,
       name: `ID: ${playerId}`,
       email: "",
-      position: "H",
-      skillLevel: 5,
+      positions: ["H"], // Default to field player
       teamIds: [],
-      isActive: true,
-      category: 2,
-      multiplier: 1,
       isAdmin: false,
       playerId: playerId,
-      points: 0,
       teamSkills: {},
       teams: [],
       phone: "",
       image: "",
       notes: "",
       licenceCode: "",
-      isGoalkeeper: false,
       createdAt: new Date(),
       updatedAt: new Date(),
       createdBy: "",
-    } as Player;
+    };
 
     playerCache.set(playerId, basicPlayer);
     return basicPlayer;
