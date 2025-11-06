@@ -1,6 +1,8 @@
 import {
   Player,
+  EnrichedPlayer,
   Team,
+  GeneratedTeamData,
   TeamGenerationOptions,
   TeamBalanceResult,
 } from "../types";
@@ -13,12 +15,13 @@ export class TeamBalancer {
    * Generate balanced teams from a list of players using random category-based distribution
    */
   static generateBalancedTeams(
-    players: Player[],
+    players: EnrichedPlayer[], // Use EnrichedPlayer with computed fields
     options: TeamGenerationOptions,
     teamAName: string = "Joukkue A",
     teamBName: string = "Joukkue B"
   ): TeamBalanceResult {
-    const activePlayers = players.filter((p) => p.isActive);
+    // All players passed to this function are already filtered to be active
+    const activePlayers = players;
 
     if (activePlayers.length === 0) {
       return {
@@ -36,7 +39,7 @@ export class TeamBalancer {
     );
 
     // Always create exactly 2 teams
-    const teams: Team[] = [
+    const teams: GeneratedTeamData[] = [
       {
         id: "team-A",
         name: teamAName,
@@ -98,8 +101,8 @@ export class TeamBalancer {
    * Distribute field players by category using improved random balanced approach
    */
   private static distributePlayersByCategory(
-    teams: Team[],
-    fieldPlayers: Player[],
+    teams: GeneratedTeamData[],
+    fieldPlayers: EnrichedPlayer[],
     warnings: string[]
   ): void {
     // Separate players by category (1-3)
@@ -140,12 +143,12 @@ export class TeamBalancer {
    * Returns the updated next category array (with used players removed)
    */
   private static processCategoryWithPairing(
-    teams: Team[],
-    currentCategoryPlayers: Player[],
-    nextCategoryPlayers: Player[],
+    teams: GeneratedTeamData[],
+    currentCategoryPlayers: EnrichedPlayer[],
+    nextCategoryPlayers: EnrichedPlayer[],
     categoryNum: number,
     warnings: string[]
-  ): Player[] {
+  ): EnrichedPlayer[] {
     if (currentCategoryPlayers.length === 0) return nextCategoryPlayers;
 
     let playersToProcess = [...currentCategoryPlayers];
@@ -246,7 +249,9 @@ export class TeamBalancer {
   /**
    * Get the best player from a category (lowest multiplier)
    */
-  private static getBestPlayerFromCategory(players: Player[]): Player | null {
+  private static getBestPlayerFromCategory(
+    players: EnrichedPlayer[]
+  ): EnrichedPlayer | null {
     if (players.length === 0) return null;
 
     // Find minimum multiplier
@@ -267,7 +272,7 @@ export class TeamBalancer {
   /**
    * Get team average multiplier (lower = better team)
    */
-  private static getTeamAverage(team: Team): number {
+  private static getTeamAverage(team: GeneratedTeamData): number {
     if (team.players.length === 0) return 0;
 
     const totalMultiplier = team.players.reduce(
@@ -280,7 +285,10 @@ export class TeamBalancer {
   /**
    * Add player to team
    */
-  private static addPlayerToTeam(team: Team, player: Player): void {
+  private static addPlayerToTeam(
+    team: GeneratedTeamData,
+    player: EnrichedPlayer
+  ): void {
     team.players.push(player);
     if (!team.fieldPlayers) team.fieldPlayers = [];
     team.fieldPlayers.push(player);
@@ -292,8 +300,8 @@ export class TeamBalancer {
    * and ensure balanced distribution (one per team when possible)
    */
   private static distributeGoalkeepersByBalance(
-    teams: Team[],
-    goalkeepers: Player[],
+    teams: GeneratedTeamData[],
+    goalkeepers: EnrichedPlayer[],
     warnings: string[]
   ): void {
     if (goalkeepers.length === 0) return;
@@ -367,7 +375,7 @@ export class TeamBalancer {
   /**
    * Calculate how balanced the teams are (0-100 score)
    */
-  private static calculateBalanceScore(teams: Team[]): number {
+  private static calculateBalanceScore(teams: GeneratedTeamData[]): number {
     console.log("🔍 calculateBalanceScore called with teams:", teams.length);
 
     if (teams.length === 0) {
@@ -426,7 +434,7 @@ export class TeamBalancer {
   /**
    * Suggest team improvements
    */
-  static suggestTeamImprovements(teams: Team[]): string[] {
+  static suggestTeamImprovements(teams: GeneratedTeamData[]): string[] {
     const suggestions: string[] = [];
 
     if (teams.length === 0) return suggestions;

@@ -55,6 +55,14 @@ export interface Player {
   updatedAt?: Date;
 }
 
+// EnrichedPlayer extends Player with computed fields for team generation
+export interface EnrichedPlayer extends Player {
+  category: number; // Computed from teamSkills for this event
+  multiplier: number; // Computed from teamSkills for this event
+  position: string; // Primary position for this event (H/P/MV)
+  points: number; // Computed: multiplier * 100
+}
+
 // Team types (from teams collection)
 export interface Team {
   id: string;
@@ -228,10 +236,18 @@ export interface TeamGenerationOptions {
   allowPartialTeams: boolean;
 }
 
+// Team type for team generation with enriched players
+export interface GeneratedTeamData
+  extends Omit<Team, "players" | "goalkeepers" | "fieldPlayers"> {
+  players: EnrichedPlayer[];
+  goalkeepers?: EnrichedPlayer[];
+  fieldPlayers?: EnrichedPlayer[];
+}
+
 export interface TeamBalanceResult {
-  teams: Team[];
+  teams: GeneratedTeamData[]; // Use GeneratedTeamData with EnrichedPlayer
   balanceScore: number; // How balanced the teams are (0-100)
-  unusedPlayers: Player[];
+  unusedPlayers: EnrichedPlayer[];
   warnings: string[];
 }
 
