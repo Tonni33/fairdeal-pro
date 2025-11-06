@@ -418,15 +418,7 @@ const UserManagementScreen: React.FC = () => {
     setIsPlayerModalVisible(true);
   };
 
-  // Helper: Convert old position string to positions array
-  const positionToArray = (position: string): string[] => {
-    if (position === "H/P") {
-      return ["H", "P"];
-    }
-    return [position];
-  };
-
-  // Helper: Convert positions array to legacy position string (primary position)
+  // Helper: Convert positions array to display string (primary position)
   const arrayToPosition = (positions: string[]): string => {
     if (!positions || positions.length === 0) return "H";
     if (positions.includes("MV")) return "MV"; // Goalkeeper is primary if present
