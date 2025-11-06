@@ -1184,24 +1184,6 @@ const EventManagementScreen: React.FC = () => {
                             {player ? player.name : pid}
                             {isGoalkeeper && " 🥅"}
                           </Text>
-                          {player && (
-                            <Text style={styles.playerSubinfo}>
-                              {(() => {
-                                const eventSkills = getPlayerEventSkills(
-                                  player,
-                                  selectedEvent?.teamId,
-                                  playerRole
-                                );
-                                return (
-                                  <>
-                                    {eventSkills.position} • Kat.{" "}
-                                    {eventSkills.category} •{" "}
-                                    {eventSkills.multiplier?.toFixed(1)}
-                                  </>
-                                );
-                              })()}
-                            </Text>
-                          )}
                         </View>
                       </View>
                       <TouchableOpacity
@@ -1267,22 +1249,6 @@ const EventManagementScreen: React.FC = () => {
                             >
                               {player.name}
                               {isGoalkeeper && " 🥅"}
-                            </Text>
-                            <Text style={styles.playerSubinfo}>
-                              {(() => {
-                                const eventSkills = getPlayerEventSkills(
-                                  player,
-                                  selectedEvent?.teamId,
-                                  playerRole
-                                );
-                                return (
-                                  <>
-                                    {eventSkills.position} • Kat.{" "}
-                                    {eventSkills.category} •{" "}
-                                    {eventSkills.multiplier?.toFixed(1)}
-                                  </>
-                                );
-                              })()}
                             </Text>
                           </View>
                         </View>
@@ -1565,21 +1531,6 @@ const EventManagementScreen: React.FC = () => {
                           >
                             {player.name}
                             {isGoalkeeper && " 🥅"}
-                          </Text>
-                          <Text style={styles.modalPlayerSubinfo}>
-                            {(() => {
-                              const eventSkills = getPlayerEventSkills(
-                                player,
-                                selectedEvent?.teamId
-                              );
-                              return (
-                                <>
-                                  {eventSkills.position} • Kat.{" "}
-                                  {eventSkills.category} •{" "}
-                                  {eventSkills.multiplier?.toFixed(1)}
-                                </>
-                              );
-                            })()}
                           </Text>
                         </View>
                       </View>
