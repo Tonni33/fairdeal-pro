@@ -246,12 +246,14 @@ const UserManagementScreen: React.FC = () => {
       // Jos joukkue on valittu, käytä joukkuekohtaisia taitoja
       if (selectedTeam) {
         const teamSkills = getTeamSkillsWithLocal(freshPlayer.id, selectedTeam);
-        const position = teamSkills?.position || freshPlayer.position;
-        setEditPosition(position);
-        // Load positions array, convert from old position if needed
+
+        // Positions is always loaded from player's basic data (not team-specific)
         const positions =
-          (freshPlayer as any).positions || positionToArray(position);
+          (freshPlayer as any).positions ||
+          positionToArray(freshPlayer.position);
         setEditPositions(positions);
+        setEditPosition(arrayToPosition(positions));
+
         setEditCategory(teamSkills?.category || freshPlayer.category);
         setEditMultiplier(teamSkills?.multiplier || freshPlayer.multiplier);
         // Aseta vakiokävijä-status valitulle joukkueelle tuoreesta datasta
@@ -286,11 +288,13 @@ const UserManagementScreen: React.FC = () => {
 
       if (selectedTeam) {
         const teamSkills = getTeamSkillsWithLocal(player.id, selectedTeam);
-        const position = teamSkills?.position || player.position;
-        setEditPosition(position);
+
+        // Positions is always loaded from player's basic data (not team-specific)
         const positions =
-          (player as any).positions || positionToArray(position);
+          (player as any).positions || positionToArray(player.position);
         setEditPositions(positions);
+        setEditPosition(arrayToPosition(positions));
+
         setEditCategory(teamSkills?.category || player.category);
         setEditMultiplier(teamSkills?.multiplier || player.multiplier);
         setEditTeamMember(player.teamMember?.[selectedTeam] ?? true);
@@ -489,21 +493,20 @@ const UserManagementScreen: React.FC = () => {
             [localKey]: {
               category: editCategory,
               multiplier: editMultiplier,
-              positions: editPositions,
-              position: arrayToPosition(editPositions),
+              position: arrayToPosition(editPositions), // Keep legacy position field
             },
           }));
           console.log("⚡ Applied optimistic update for team skills");
 
           // Tallenna joukkuekohtaiset taidot suoraan pelaajan dokumenttiin
           // Käytä teamSkills kenttää jossa avaimena on teamId
+          // Note: positions array is saved to player's basic data, not in teamSkills
           const currentTeamSkills = selectedPlayer.teamSkills || {};
           const updatedTeamSkills = {
             ...currentTeamSkills,
             [selectedTeam]: {
               category: editCategory,
               multiplier: editMultiplier,
-              positions: editPositions, // New: array of positions
               position: arrayToPosition(editPositions), // Legacy: computed primary position
               updatedAt: new Date(),
             },
@@ -576,13 +579,20 @@ const UserManagementScreen: React.FC = () => {
         console.log("Saving updated teamSkills:", currentTeamSkillsData);
       }
 
+      // Päivitä positions aina (ei joukkuekohtainen tieto)
+      updateData.positions = editPositions; // New: array of positions
+      updateData.position = arrayToPosition(editPositions); // Legacy: computed primary position
+
       // Päivitä perustaidot vain jos ei ole joukkuetta valittu
       if (!selectedTeam) {
-        updateData.positions = editPositions; // New: array of positions
-        updateData.position = arrayToPosition(editPositions); // Legacy: computed primary position
         updateData.category = editCategory;
         updateData.multiplier = editMultiplier;
       }
+
+      console.log("Saving player basic data including positions:", {
+        positions: editPositions,
+        position: arrayToPosition(editPositions),
+      });
 
       await updateDoc(playerRef, updateData);
 
