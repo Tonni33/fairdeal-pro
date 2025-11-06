@@ -25,7 +25,7 @@ import {
   getDoc,
 } from "firebase/firestore";
 
-import { RootStackParamList, Event, Team } from "../types";
+import { RootStackParamList, Event, Team, Player } from "../types";
 import { db } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import { useApp, getUserTeams } from "../contexts/AppContext";
@@ -66,13 +66,16 @@ const EventsScreen: React.FC = () => {
         return ["H", "P"].includes(eventRole);
       }
 
-      // Fall back to player's default position
-      console.log(
-        `🔍 Player ${player.name} using default position: ${
-          player.position
-        }, isFieldPlayer: ${["H", "P", "H/P"].includes(player.position)}`
+      // Fall back to player's positions array
+      const hasFieldPosition = player.positions.some((pos) =>
+        ["H", "P", "H/P"].includes(pos)
       );
-      return ["H", "P", "H/P"].includes(player.position);
+      console.log(
+        `🔍 Player ${player.name} using positions: ${player.positions.join(
+          ", "
+        )}, isFieldPlayer: ${hasFieldPosition}`
+      );
+      return hasFieldPosition;
     });
   };
 
@@ -92,13 +95,14 @@ const EventsScreen: React.FC = () => {
         return eventRole === "MV";
       }
 
-      // Fall back to player's default position
+      // Fall back to player's positions array
+      const isGoalkeeper = player.positions.includes("MV");
       console.log(
-        `🥅 Player ${player.name} using default position: ${
-          player.position
-        }, isGoalkeeper: ${player.position === "MV"}`
+        `🥅 Player ${player.name} using positions: ${player.positions.join(
+          ", "
+        )}, isGoalkeeper: ${isGoalkeeper}`
       );
-      return player.position === "MV";
+      return isGoalkeeper;
     });
   }; // Helper function to sort players - goalkeepers at the end
   const sortPlayersByPosition = (playerData: any[], event?: any) => {
@@ -161,15 +165,13 @@ const EventsScreen: React.FC = () => {
         );
         console.log("DEBUG - EventsScreen player?.name:", player?.name);
 
-        // Create enriched player object - prioritize legacy player name, then Firebase Auth displayName
+        // Create enriched player object
         const enrichedPlayer = {
+          ...player, // Include all player data
           id: playerId,
-          position: player?.position || "H",
-          skillLevel: player?.skillLevel || 5,
+          positions: player?.positions || ["H"], // Default to field player
           teamIds: player?.teamIds || [],
-          isActive: player?.isActive !== false,
-          ...player, // Include all legacy data
-          // Override with proper name resolution - prioritize legacy name, then Firebase displayName
+          // Override with proper name resolution - prioritize player name, then Firebase displayName
           name:
             player?.name ||
             userData.displayName ||
@@ -300,16 +302,15 @@ const EventsScreen: React.FC = () => {
     const playerData = players.find((p) => p.id === playerIdToUse);
 
     return {
+      ...playerData, // Include all player data if found
       id: playerIdToUse,
       name: user.displayName || user.email?.split("@")[0] || "Käyttäjä",
       email: user.email || "",
-      position: playerData?.position || "H",
-      positions: playerData?.positions || undefined,
-      skillLevel: playerData?.skillLevel || 5,
+      positions: playerData?.positions || ["H"], // Default to field player
       teamIds: playerData?.teamIds || [],
-      isActive: playerData?.isActive !== false,
+      teamSkills: playerData?.teamSkills || {},
       teamMember: playerData?.teamMember || {},
-    };
+    } as Player;
   }, [user, players]);
 
   // Päivitä valittu tapahtuma kun events-data muuttuu
@@ -440,7 +441,7 @@ const EventsScreen: React.FC = () => {
 
         if (reservePlayerIds.length > 0) {
           // Find a suitable reserve player to promote
-          const isGoalkeeper = currentPlayer.position === "MV";
+          const isGoalkeeper = currentPlayer.positions.includes("MV");
 
           let suitableReserve: string | undefined;
 
@@ -454,7 +455,7 @@ const EventsScreen: React.FC = () => {
               const isReserveTeamMember =
                 teamId && reservePlayer.teamMember?.[teamId] === true;
               const positionMatches =
-                (reservePlayer.position === "MV") === isGoalkeeper;
+                reservePlayer.positions.includes("MV") === isGoalkeeper;
 
               if (isReserveTeamMember && positionMatches) {
                 suitableReserve = reserveId;
@@ -467,7 +468,7 @@ const EventsScreen: React.FC = () => {
               const reservePlayer = players.find((p) => p.id === reserveId);
               return (
                 reservePlayer &&
-                (reservePlayer.position === "MV") === isGoalkeeper
+                reservePlayer.positions.includes("MV") === isGoalkeeper
               );
             });
           }
@@ -528,7 +529,7 @@ const EventsScreen: React.FC = () => {
           eventWithRoles
         );
 
-        const isGoalkeeper = currentPlayer.position === "MV";
+        const isGoalkeeper = currentPlayer.positions.includes("MV");
         const isEventFull = isGoalkeeper
           ? selectedEvent.maxGoalkeepers &&
             currentGoalkeepers.length >= selectedEvent.maxGoalkeepers

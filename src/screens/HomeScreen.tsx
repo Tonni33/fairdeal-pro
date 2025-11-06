@@ -77,8 +77,8 @@ const HomeScreen: React.FC = () => {
         return ["H", "P"].includes(eventRole);
       }
 
-      // Fall back to player's default position
-      return ["H", "P", "H/P"].includes(player.position);
+      // Fall back to player's positions array
+      return player.positions.some((pos) => ["H", "P", "H/P"].includes(pos));
     });
   };
 
@@ -93,8 +93,8 @@ const HomeScreen: React.FC = () => {
         return eventRole === "MV";
       }
 
-      // Fall back to player's default position
-      return player.position === "MV";
+      // Fall back to player's positions array
+      return player.positions.includes("MV");
     });
   };
 
@@ -446,7 +446,7 @@ const HomeScreen: React.FC = () => {
 
         if (reservePlayerIds.length > 0) {
           // Find a suitable reserve player to promote
-          const isGoalkeeper = currentPlayer.position === "MV";
+          const isGoalkeeper = currentPlayer.positions.includes("MV");
 
           let suitableReserve: string | undefined;
 
@@ -460,7 +460,7 @@ const HomeScreen: React.FC = () => {
               const isReserveTeamMember =
                 teamId && reservePlayer.teamMember?.[teamId] === true;
               const positionMatches =
-                (reservePlayer.position === "MV") === isGoalkeeper;
+                reservePlayer.positions.includes("MV") === isGoalkeeper;
 
               if (isReserveTeamMember && positionMatches) {
                 suitableReserve = reserveId;
@@ -473,7 +473,7 @@ const HomeScreen: React.FC = () => {
               const reservePlayer = players.find((p) => p.id === reserveId);
               return (
                 reservePlayer &&
-                (reservePlayer.position === "MV") === isGoalkeeper
+                reservePlayer.positions.includes("MV") === isGoalkeeper
               );
             });
           }
@@ -531,7 +531,7 @@ const HomeScreen: React.FC = () => {
           eventWithRoles
         );
 
-        const isGoalkeeper = currentPlayer.position === "MV";
+        const isGoalkeeper = currentPlayer.positions.includes("MV");
         const isEventFull = isGoalkeeper
           ? nextEvent.maxGoalkeepers &&
             currentGoalkeepers.length >= nextEvent.maxGoalkeepers
@@ -1206,7 +1206,7 @@ const HomeScreen: React.FC = () => {
                   </View>
                   <View style={styles.reservePlayersList}>
                     {reservePlayers.map((player, index) => {
-                      const isGoalkeeper = player?.position === "MV";
+                      const isGoalkeeper = player?.positions.includes("MV");
                       return (
                         <View
                           key={player.id}
@@ -1544,7 +1544,7 @@ const HomeScreen: React.FC = () => {
                             nextEvent?.playerRoles?.[player.id];
                           const isGoalkeeper =
                             playerRole === "MV" ||
-                            (!playerRole && player?.position === "MV");
+                            (!playerRole && player?.positions.includes("MV"));
                           return (
                             <View
                               key={player.id}
@@ -1610,7 +1610,7 @@ const HomeScreen: React.FC = () => {
 
                     <View style={styles.modalPlayersList}>
                       {reservePlayers.map((player, index) => {
-                        const isGoalkeeper = player?.position === "MV";
+                        const isGoalkeeper = player?.positions.includes("MV");
                         return (
                           <View
                             key={player.id}

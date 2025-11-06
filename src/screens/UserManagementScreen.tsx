@@ -270,35 +270,23 @@ const UserManagementScreen: React.FC = () => {
 
       // Jos joukkue on valittu, käytä joukkuekohtaisia taitoja
       if (selectedTeam) {
-        const teamSkills = getTeamSkillsWithLocal(freshPlayer.id, selectedTeam);
+        const teamSkills = freshPlayer.teamSkills?.[selectedTeam];
 
         // Positions is always loaded from player's basic data (not team-specific)
-        const positions =
-          (freshPlayer as any).positions ||
-          positionToArray(freshPlayer.position);
+        const positions = freshPlayer.positions;
         setEditPositions(positions);
         setEditPosition(arrayToPosition(positions));
 
         // Load field player skills (H/P)
-        const fieldCategory =
-          (teamSkills as any)?.field?.category ||
-          teamSkills?.category ||
-          freshPlayer.category;
-        const fieldMultiplier =
-          (teamSkills as any)?.field?.multiplier ||
-          teamSkills?.multiplier ||
-          freshPlayer.multiplier;
+        const fieldCategory = teamSkills?.field?.category || 2;
+        const fieldMultiplier = teamSkills?.field?.multiplier || 2.0;
 
         setEditFieldCategory(fieldCategory);
         setEditFieldMultiplier(fieldMultiplier);
 
         // Load goalkeeper skills (MV)
-        // If goalkeeper skills exist separately, use them
-        // Otherwise fall back to field skills (legacy data)
-        const goalkeeperCategory =
-          (teamSkills as any)?.goalkeeper?.category || fieldCategory;
-        const goalkeeperMultiplier =
-          (teamSkills as any)?.goalkeeper?.multiplier || fieldMultiplier;
+        const goalkeeperCategory = teamSkills?.goalkeeper?.category || 2;
+        const goalkeeperMultiplier = teamSkills?.goalkeeper?.multiplier || 2.0;
 
         setEditGoalkeeperCategory(goalkeeperCategory);
         setEditGoalkeeperMultiplier(goalkeeperMultiplier);
@@ -322,9 +310,9 @@ const UserManagementScreen: React.FC = () => {
             : "field"
         );
 
-        // Legacy fields for backwards compatibility
-        setEditCategory(teamSkills?.category || freshPlayer.category);
-        setEditMultiplier(teamSkills?.multiplier || freshPlayer.multiplier);
+        // Legacy fields for backwards compatibility with old UI code
+        setEditCategory(fieldCategory);
+        setEditMultiplier(fieldMultiplier);
 
         // Aseta vakiokävijä-status valitulle joukkueelle tuoreesta datasta
         setEditTeamMember(freshPlayer.teamMember?.[selectedTeam] ?? true);
@@ -336,15 +324,27 @@ const UserManagementScreen: React.FC = () => {
           allTeamMembers: freshPlayer.teamMember,
         });
       } else {
-        // Käytä pelaajan perustaitoja
-        setEditPosition(freshPlayer.position);
-        // Load positions array, convert from old position if needed
-        const positions =
-          (freshPlayer as any).positions ||
-          positionToArray(freshPlayer.position);
+        // Käytä pelaajan perustaitoja - kun ei ole joukkuetta valittu
+        // Käytä ensimmäisen joukkueen taitoja jos saatavilla
+        const positions = freshPlayer.positions;
         setEditPositions(positions);
-        setEditCategory(freshPlayer.category);
-        setEditMultiplier(freshPlayer.multiplier);
+        setEditPosition(arrayToPosition(positions));
+
+        // Try to get skills from first team, otherwise use defaults
+        const firstTeamId = freshPlayer.teamIds?.[0];
+        const firstTeamSkills = firstTeamId
+          ? freshPlayer.teamSkills?.[firstTeamId]
+          : null;
+
+        setEditCategory(firstTeamSkills?.field?.category || 2);
+        setEditMultiplier(firstTeamSkills?.field?.multiplier || 2.0);
+        setEditFieldCategory(firstTeamSkills?.field?.category || 2);
+        setEditFieldMultiplier(firstTeamSkills?.field?.multiplier || 2.0);
+        setEditGoalkeeperCategory(firstTeamSkills?.goalkeeper?.category || 2);
+        setEditGoalkeeperMultiplier(
+          firstTeamSkills?.goalkeeper?.multiplier || 2.0
+        );
+
         // Kun ei ole joukkuetta valittu, aseta oletukseksi true
         setEditTeamMember(true);
       }
@@ -357,24 +357,39 @@ const UserManagementScreen: React.FC = () => {
       setEditPhone(player.phone || "");
 
       if (selectedTeam) {
-        const teamSkills = getTeamSkillsWithLocal(player.id, selectedTeam);
+        const teamSkills = player.teamSkills?.[selectedTeam];
 
         // Positions is always loaded from player's basic data (not team-specific)
-        const positions =
-          (player as any).positions || positionToArray(player.position);
+        const positions = player.positions;
         setEditPositions(positions);
         setEditPosition(arrayToPosition(positions));
 
-        setEditCategory(teamSkills?.category || player.category);
-        setEditMultiplier(teamSkills?.multiplier || player.multiplier);
+        setEditCategory(teamSkills?.field?.category || 2);
+        setEditMultiplier(teamSkills?.field?.multiplier || 2.0);
+        setEditFieldCategory(teamSkills?.field?.category || 2);
+        setEditFieldMultiplier(teamSkills?.field?.multiplier || 2.0);
+        setEditGoalkeeperCategory(teamSkills?.goalkeeper?.category || 2);
+        setEditGoalkeeperMultiplier(teamSkills?.goalkeeper?.multiplier || 2.0);
         setEditTeamMember(player.teamMember?.[selectedTeam] ?? true);
       } else {
-        setEditPosition(player.position);
-        const positions =
-          (player as any).positions || positionToArray(player.position);
+        const positions = player.positions;
         setEditPositions(positions);
-        setEditCategory(player.category);
-        setEditMultiplier(player.multiplier);
+        setEditPosition(arrayToPosition(positions));
+
+        // Try to get skills from first team, otherwise use defaults
+        const firstTeamId = player.teamIds?.[0];
+        const firstTeamSkills = firstTeamId
+          ? player.teamSkills?.[firstTeamId]
+          : null;
+
+        setEditCategory(firstTeamSkills?.field?.category || 2);
+        setEditMultiplier(firstTeamSkills?.field?.multiplier || 2.0);
+        setEditFieldCategory(firstTeamSkills?.field?.category || 2);
+        setEditFieldMultiplier(firstTeamSkills?.field?.multiplier || 2.0);
+        setEditGoalkeeperCategory(firstTeamSkills?.goalkeeper?.category || 2);
+        setEditGoalkeeperMultiplier(
+          firstTeamSkills?.goalkeeper?.multiplier || 2.0
+        );
         setEditTeamMember(true);
       }
     }
@@ -490,21 +505,18 @@ const UserManagementScreen: React.FC = () => {
             "Creating default team skills for new team:",
             addedTeamId
           );
-          const defaultCategory = selectedPlayer.category || 2;
-          const defaultMultiplier = selectedPlayer.multiplier || 2.0;
+          // Use current edit values as defaults for new teams
+          const defaultCategory = editFieldCategory || 2;
+          const defaultMultiplier = editFieldMultiplier || 2.0;
           currentTeamSkillsData[addedTeamId] = {
             field: {
               category: defaultCategory,
               multiplier: defaultMultiplier,
             },
             goalkeeper: {
-              category: defaultCategory,
-              multiplier: defaultMultiplier,
+              category: editGoalkeeperCategory || defaultCategory,
+              multiplier: editGoalkeeperMultiplier || defaultMultiplier,
             },
-            // Legacy fields
-            category: defaultCategory,
-            multiplier: defaultMultiplier,
-            position: selectedPlayer.position || "H",
             updatedAt: new Date(),
           };
         }
@@ -530,23 +542,15 @@ const UserManagementScreen: React.FC = () => {
           selectedPlayer.teamMember?.[selectedTeam] ?? true;
         const teamMemberChanged = editTeamMember !== currentTeamMember;
 
-        // Tarkista onko taidot muuttuneet nykyisistä taidoista (joukkuekohtaisista tai perustaidoista)
-        const currentFieldCategory =
-          (currentTeamSkills as any)?.field?.category ||
-          currentTeamSkills?.category ||
-          selectedPlayer.category;
+        // Tarkista onko taidot muuttuneet nykyisistä taidoista
+        const currentFieldCategory = currentTeamSkills?.field?.category || 2;
         const currentFieldMultiplier =
-          (currentTeamSkills as any)?.field?.multiplier ||
-          currentTeamSkills?.multiplier ||
-          selectedPlayer.multiplier;
+          currentTeamSkills?.field?.multiplier || 2.0;
         const currentGoalkeeperCategory =
-          (currentTeamSkills as any)?.goalkeeper?.category ||
-          currentFieldCategory;
+          currentTeamSkills?.goalkeeper?.category || 2;
         const currentGoalkeeperMultiplier =
-          (currentTeamSkills as any)?.goalkeeper?.multiplier ||
-          currentFieldMultiplier;
-        const currentPosition =
-          currentTeamSkills?.position || selectedPlayer.position;
+          currentTeamSkills?.goalkeeper?.multiplier || 2.0;
+        const currentPosition = arrayToPosition(selectedPlayer.positions);
 
         const skillsChanged =
           editFieldCategory !== currentFieldCategory ||
@@ -960,24 +964,20 @@ const UserManagementScreen: React.FC = () => {
                 </Text>
               ) : (
                 filteredPlayers.map((player) => {
-                  const isGoalkeeper = player.position === "MV";
+                  const isGoalkeeper = player.positions.includes("MV");
                   // Käytä valittua joukkuetta värikoodaukseen
                   const selectedTeamData = teams.find(
                     (team) => team.id === selectedTeam
                   );
 
-                  // Get team-specific skills - try all possible IDs
-                  let teamSkills =
-                    getTeamSkillsWithLocal(player.id, selectedTeam) ||
-                    getTeamSkillsWithLocal(player.playerId, selectedTeam) ||
-                    getTeamSkillsWithLocal(player.email, selectedTeam);
+                  // Get team-specific skills from player.teamSkills
+                  const teamSkills = player.teamSkills?.[selectedTeam];
 
-                  const displayCategory =
-                    teamSkills?.category || player.category;
+                  // Display field player skills by default (H/P)
+                  const displayCategory = teamSkills?.field?.category || 2;
                   const displayMultiplier =
-                    teamSkills?.multiplier || player.multiplier;
-                  const displayPosition =
-                    teamSkills?.position || player.position;
+                    teamSkills?.field?.multiplier || 2.0;
+                  const displayPosition = arrayToPosition(player.positions);
                   const hasTeamSkills = Boolean(teamSkills);
 
                   // Määritä rooli joukkuekohtaisesti
