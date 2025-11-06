@@ -63,19 +63,24 @@ const RankingScreen: React.FC = () => {
     // Get team-specific multipliers from teamSkills
     const playersWithTeamMultipliers = teamPlayers.map((player) => {
       const teamSkill = player.teamSkills?.[selectedTeamId];
+      const isGoalkeeper = player.positions.includes("MV");
+
+      // Get skills based on player's role
+      const skills = isGoalkeeper ? teamSkill?.goalkeeper : teamSkill?.field;
+
       return {
         ...player,
-        multiplier: teamSkill?.multiplier || player.multiplier || 1,
-        category: teamSkill?.category || player.category || 1,
+        multiplier: skills?.multiplier || 1,
+        category: skills?.category || 1,
       };
     });
 
     // Separate goalkeepers and field players
-    const goalkeepers = playersWithTeamMultipliers.filter(
-      (p) => p.position?.toUpperCase().includes("M") || p.position === "MV"
+    const goalkeepers = playersWithTeamMultipliers.filter((p) =>
+      p.positions.includes("MV")
     );
     const fieldPlayers = playersWithTeamMultipliers.filter(
-      (p) => !(p.position?.toUpperCase().includes("M") || p.position === "MV")
+      (p) => !p.positions.includes("MV")
     );
 
     // Sort by multiplier (ascending - smallest first)
@@ -102,10 +107,14 @@ const RankingScreen: React.FC = () => {
     try {
       const playerRef = doc(db, "users", player.id);
 
-      // Update team-specific skills
+      // Determine if this is a goalkeeper or field player
+      const isGoalkeeper = player.positions.includes("MV");
+      const skillType = isGoalkeeper ? "goalkeeper" : "field";
+
+      // Update team-specific skills (field or goalkeeper)
       await updateDoc(playerRef, {
-        [`teamSkills.${selectedTeamId}.category`]: category,
-        [`teamSkills.${selectedTeamId}.multiplier`]: multiplier,
+        [`teamSkills.${selectedTeamId}.${skillType}.category`]: category,
+        [`teamSkills.${selectedTeamId}.${skillType}.multiplier`]: multiplier,
         [`teamSkills.${selectedTeamId}.updatedAt`]: new Date(),
         updatedAt: new Date(),
       });
@@ -116,13 +125,13 @@ const RankingScreen: React.FC = () => {
   };
 
   const PlayerRow: React.FC<{ item: Player }> = ({ item }) => {
-    const isGoalkeeper =
-      item.position?.toUpperCase().includes("M") || item.position === "MV";
+    const isGoalkeeper = item.positions.includes("MV");
 
     // Get team-specific values
     const teamSkill = selectedTeamId ? item.teamSkills?.[selectedTeamId] : null;
-    const category = teamSkill?.category || item.category || 1;
-    const multiplier = teamSkill?.multiplier || item.multiplier || 1.0;
+    const skills = isGoalkeeper ? teamSkill?.goalkeeper : teamSkill?.field;
+    const category = skills?.category || 1;
+    const multiplier = skills?.multiplier || 1.0;
 
     // Local state for editing
     const [isLocked, setIsLocked] = useState(true);

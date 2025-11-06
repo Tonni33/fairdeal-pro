@@ -56,14 +56,17 @@ const TeamsScreen: React.FC = () => {
   const getFieldPlayers = (playerIds: string[]) => {
     return playerIds.filter((id) => {
       const player = getPlayerById(id);
-      return player && ["H", "P", "H/P"].includes(player.position);
+      return (
+        player &&
+        player.positions.some((pos) => ["H", "P", "H/P"].includes(pos))
+      );
     });
   };
 
   const getGoalkeepers = (playerIds: string[]) => {
     return playerIds.filter((id) => {
       const player = getPlayerById(id);
-      return player && player.position === "MV";
+      return player && player.positions.includes("MV");
     });
   };
 
@@ -79,11 +82,14 @@ const TeamsScreen: React.FC = () => {
     const shuffled = [...playerIds];
     const goalkeepers = shuffled.filter((id) => {
       const player = getPlayerById(id);
-      return player && player.position === "MV";
+      return player && player.positions.includes("MV");
     });
     const fieldPlayers = shuffled.filter((id) => {
       const player = getPlayerById(id);
-      return player && ["H", "P", "H/P"].includes(player.position);
+      return (
+        player &&
+        player.positions.some((pos) => ["H", "P", "H/P"].includes(pos))
+      );
     });
 
     // Shuffle field players
@@ -206,7 +212,7 @@ const TeamsScreen: React.FC = () => {
         shuffledPlayers.forEach((playerId: string) => {
           const player = getPlayerById(playerId);
           if (player) {
-            const isGoalkeeper = player.position === "MV";
+            const isGoalkeeper = player.positions.includes("MV");
             textToCopy += `- ${player.name}`;
             if (isGoalkeeper) {
               textToCopy += " 🥅";
@@ -253,7 +259,7 @@ const TeamsScreen: React.FC = () => {
         shuffledPlayers.forEach((playerId: string) => {
           const player = getPlayerById(playerId);
           if (player) {
-            const isGoalkeeper = player.position === "MV";
+            const isGoalkeeper = player.positions.includes("MV");
             message += `• ${player.name}`;
             if (isGoalkeeper) {
               message += " 🥅";
@@ -643,7 +649,7 @@ const TeamsScreen: React.FC = () => {
                           const player = getPlayerById(playerId);
                           if (!player) return null;
 
-                          const isGoalkeeper = player.position === "MV";
+                          const isGoalkeeper = player.positions.includes("MV");
                           return (
                             <View
                               key={playerId}
@@ -687,7 +693,7 @@ const TeamsScreen: React.FC = () => {
                                   {isGoalkeeper && " 🥅"}
                                 </Text>
                                 <Text style={styles.playerDetails}>
-                                  {player.position}
+                                  {player.positions.join(", ")}
                                 </Text>
                               </View>
                             </View>
