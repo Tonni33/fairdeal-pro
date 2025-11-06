@@ -3,10 +3,7 @@ export interface TeamPlayer {
   id: string; // Unique document ID
   playerId: string; // Reference to Player document
   teamId: string; // Reference to Team document
-  category: number; // Team-specific category (1, 2, 3)
-  multiplier: number; // Team-specific skill multiplier
-  position: string; // Primary team-specific position (legacy, for backwards compatibility)
-  positions?: string[]; // Team-specific positions array: ["H", "P", "MV"]
+  positions: string[]; // Team-specific positions array: ["H", "P", "MV"]
   isActive: boolean; // Active in this team
   joinedAt: Date; // When player joined this team
   updatedAt?: Date; // When team-specific skills were last updated
@@ -20,14 +17,11 @@ export interface Player {
   name: string;
   email: string;
   phone?: string;
-  category: number; // Player category/class (1, 2, 3)
-  multiplier: number; // Skill multiplier for balancing
-  position: string; // Primary position (legacy, computed from positions array for backwards compatibility)
-  positions?: string[]; // Player positions array: ["H", "P", "MV"] - can have multiple roles
+  positions: string[]; // Player positions array: ["H", "P", "MV"] - can have multiple roles
   image?: string; // Profile image URL
-  isAdmin: boolean; // Legacy admin field for compatibility
-  role?: "member" | "admin" | "eventManager"; // Global role (legacy)
-  // Team-specific roles - NEW!
+  isAdmin: boolean;
+  role?: "member" | "admin" | "eventManager"; // Global role
+  // Team-specific roles
   teamRoles?: {
     [teamId: string]: "member" | "admin" | "eventManager";
   };
@@ -37,22 +31,18 @@ export interface Player {
   teams: string[]; // Array of team names
   createdAt: Date;
   // Team-specific skills stored in the user document
-  teamSkills?: {
+  teamSkills: {
     [teamId: string]: {
-      field?: {
+      field: {
         // Kenttäpelaaja (H tai P)
         category: number;
         multiplier: number;
       };
-      goalkeeper?: {
+      goalkeeper: {
         // Maalivahti (MV)
         category: number;
         multiplier: number;
       };
-      // Legacy fields for backwards compatibility
-      category?: number;
-      multiplier?: number;
-      position?: string;
       updatedAt?: Date;
     };
   };
@@ -60,11 +50,6 @@ export interface Player {
   teamMember?: {
     [teamId: string]: boolean; // true = regular member, false = occasional/guest
   };
-  // Legacy fields for compatibility - required to avoid undefined errors
-  skillLevel: number; // 1-5 scale (derived from multiplier)
-  isActive: boolean;
-  isGoalkeeper: boolean; // Derived from position
-  points: number; // Skill points for balancing (derived from multiplier)
   notes?: string; // Additional notes about player
   createdBy?: string; // User ID who created the player
   updatedAt?: Date;

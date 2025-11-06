@@ -115,51 +115,8 @@ export function isUserSoleAdminInAnyTeam(
   return false;
 }
 
-// Hakee pelaajan joukkuekohtaiset taidot
-export function getPlayerTeamSkills(
-  playerId: string,
-  teamId: string,
-  teamPlayers: TeamPlayer[]
-): { category: number; multiplier: number; position: string } | null {
-  const teamPlayer = teamPlayers.find(
-    (tp) => tp.playerId === playerId && tp.teamId === teamId && tp.isActive
-  );
-
-  if (teamPlayer) {
-    return {
-      category: teamPlayer.category,
-      multiplier: teamPlayer.multiplier,
-      position: teamPlayer.position,
-    };
-  }
-
-  return null;
-}
-
-// Luo Player objektin joukkuekohtaisilla taidoilla
-export function createPlayerWithTeamSkills(
-  player: Player,
-  teamId: string,
-  teamPlayers: TeamPlayer[]
-): Player {
-  const teamSkills = getPlayerTeamSkills(player.id, teamId, teamPlayers);
-
-  if (teamSkills) {
-    return {
-      ...player,
-      category: teamSkills.category,
-      multiplier: teamSkills.multiplier,
-      position: teamSkills.position,
-      // Update derived fields
-      skillLevel: Math.round(teamSkills.multiplier * 2.5) || 1,
-      isGoalkeeper: teamSkills.position === "MV",
-      points: Math.round(teamSkills.multiplier * 100) || 100,
-    };
-  }
-
-  // Return player with default skills if no team-specific skills found
-  return player;
-}
+// Note: Team-specific skills are now stored directly in player.teamSkills[teamId].field and .goalkeeper
+// No need for separate TeamPlayer collection or helper functions
 
 export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
   const [players, setPlayers] = useState<Player[]>([]);
@@ -225,26 +182,19 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 "",
               email: data.email,
               phone: data.phone || undefined,
-              category: data.category || "Intermediate",
-              multiplier: data.multiplier || 1,
-              position: normalizedPosition,
-              positions: data.positions || undefined, // New: array of positions for multi-position support
+              positions: data.positions || [normalizedPosition], // Required: array of positions
               image: data.image || "",
               isAdmin: data.isAdmin || false,
               teamIds: data.teamIds || [],
               teams: data.teams || [],
               playerId: data.playerId || doc.id,
               licenceCode: data.licenceCode || "",
-              teamSkills: data.teamSkills || {}, // Lisätään teamSkills kenttä
+              teamSkills: data.teamSkills || {}, // Required: team-specific skills
               createdAt: data.createdAt?.toDate
                 ? data.createdAt.toDate()
                 : new Date(data.createdAt || Date.now()),
-              // Legacy compatibility fields - all required
-              skillLevel: Math.round((data.multiplier || 1) * 2.5) || 1, // Convert multiplier to 1-5 scale
-              isActive: true,
-              isGoalkeeper: normalizedPosition === "MV",
-              points: Math.round((data.multiplier || 1) * 100) || 100,
-              notes: "",
+              teamMember: data.teamMember || false,
+              notes: data.notes || "",
               createdBy: data.createdBy || "",
               updatedAt: data.updatedAt?.toDate
                 ? data.updatedAt.toDate()
@@ -399,10 +349,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
               id: doc.id,
               playerId: data.playerId,
               teamId: data.teamId,
-              category: data.category || 2,
-              multiplier: data.multiplier || 1.0,
-              position: data.position || "H",
-              positions: data.positions || undefined, // New: array of positions for multi-position support
+              positions: data.positions || ["H"], // Required: array of positions
               isActive: data.isActive !== false,
               joinedAt: data.joinedAt?.toDate
                 ? data.joinedAt.toDate()

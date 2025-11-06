@@ -1287,7 +1287,7 @@ const UserManagementScreen: React.FC = () => {
                         editSkillsRole === "field" && styles.roleTabTextActive,
                       ]}
                     >
-                      Kenttäpelaaja
+                      H/P
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -1310,7 +1310,7 @@ const UserManagementScreen: React.FC = () => {
                           styles.roleTabTextActive,
                       ]}
                     >
-                      Maalivahti
+                      MV
                     </Text>
                   </TouchableOpacity>
                 </View>

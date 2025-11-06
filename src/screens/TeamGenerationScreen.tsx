@@ -37,13 +37,21 @@ interface RouteParams {
   eventId: string;
 }
 
+// Extended Player type for team generation with computed fields
+interface EnrichedPlayer extends Player {
+  category: number; // Computed from teamSkills
+  multiplier: number; // Computed from teamSkills
+  position: string; // Primary position for this event
+  points: number; // Computed: multiplier * 100
+}
+
 interface GeneratedTeam {
   id: string;
   name: string;
-  players: Player[];
+  players: EnrichedPlayer[]; // Use enriched players with computed fields
   totalPoints: number;
-  goalkeepers: Player[];
-  fieldPlayers: Player[];
+  goalkeepers: EnrichedPlayer[];
+  fieldPlayers: EnrichedPlayer[];
   color: string;
 }
 
@@ -60,13 +68,17 @@ const TeamGenerationScreen: React.FC = () => {
     teamId?: string,
     playerRole?: string
   ) => {
-    if (!teamId || !player.teamSkills?.[teamId]) {
-      // Return default player skills
+    // teamSkills is now required in Player type, so we can rely on it being present
+    if (!teamId || !player.teamSkills[teamId]) {
+      // This shouldn't happen with proper data, but provide safe defaults
+      console.warn(
+        `Missing team skills for player ${player.name} in team ${teamId}`
+      );
       return {
-        category: player.category,
-        multiplier: player.multiplier,
-        position: player.position,
-        points: Math.round(player.multiplier * 100),
+        category: 2,
+        multiplier: 2.0,
+        position: playerRole || (player.positions.includes("MV") ? "MV" : "H"),
+        points: 200,
       };
     }
 
@@ -74,20 +86,18 @@ const TeamGenerationScreen: React.FC = () => {
 
     // Determine which role's skills to use
     // If playerRole is provided (from event registration), use that
-    // Otherwise, use player's default position
-    const roleToUse = playerRole || player.position;
+    // Otherwise, determine from player's positions array
+    const roleToUse =
+      playerRole ||
+      (player.positions.includes("MV") ? "MV" : player.positions[0]);
     const isGoalkeeper = roleToUse === "MV";
 
-    // Use role-specific skills if available, otherwise fall back to legacy fields
-    const roleSkills = isGoalkeeper
-      ? (teamSkills as any).goalkeeper
-      : (teamSkills as any).field;
+    // Use role-specific skills
+    const roleSkills = isGoalkeeper ? teamSkills.goalkeeper : teamSkills.field;
 
-    const category =
-      roleSkills?.category || teamSkills.category || player.category;
-    const multiplier =
-      roleSkills?.multiplier || teamSkills.multiplier || player.multiplier;
-    const position = teamSkills.position || player.position;
+    const category = roleSkills.category;
+    const multiplier = roleSkills.multiplier;
+    const position = roleToUse;
 
     return {
       category,
@@ -110,20 +120,30 @@ const TeamGenerationScreen: React.FC = () => {
   const getFieldPlayers = (playerIds: string[], event?: any) => {
     return playerIds.filter((id) => {
       const player = players.find((p) => p.id === id);
-      // Check playerRole first, then fall back to position
+      if (!player) return false;
+      // Check playerRole first, then fall back to positions array
       const eventToCheck = event || selectedEvent;
-      const role = eventToCheck?.playerRoles?.[id] || player?.position;
-      return player && ["H", "P", "H/P"].includes(role);
+      const role = eventToCheck?.playerRoles?.[id];
+      if (role) {
+        return ["H", "P", "H/P"].includes(role);
+      }
+      // Check if player has field positions
+      return player.positions.some((pos) => ["H", "P", "H/P"].includes(pos));
     });
   };
 
   const getGoalkeepers = (playerIds: string[], event?: any) => {
     return playerIds.filter((id) => {
       const player = players.find((p) => p.id === id);
-      // Check playerRole first, then fall back to position
+      if (!player) return false;
+      // Check playerRole first, then fall back to positions array
       const eventToCheck = event || selectedEvent;
-      const role = eventToCheck?.playerRoles?.[id] || player?.position;
-      return player && role === "MV";
+      const role = eventToCheck?.playerRoles?.[id];
+      if (role) {
+        return role === "MV";
+      }
+      // Check if player has goalkeeper position
+      return player.positions.includes("MV");
     });
   };
 
@@ -352,14 +372,15 @@ const TeamGenerationScreen: React.FC = () => {
       });
 
       // Convert to our GeneratedTeam format
+      // Note: registeredPlayers are EnrichedPlayer types, so result.teams.players are too
       const newGeneratedTeams: GeneratedTeam[] = result.teams.map(
         (team, index) => ({
           id: `team_${index + 1}`,
           name: team.name, // Use the name from TeamBalancer (already has custom names)
-          players: team.players,
+          players: team.players as EnrichedPlayer[],
           totalPoints: team.totalPoints,
-          goalkeepers: team.goalkeepers || [],
-          fieldPlayers: team.fieldPlayers || [],
+          goalkeepers: (team.goalkeepers as EnrichedPlayer[]) || [],
+          fieldPlayers: (team.fieldPlayers as EnrichedPlayer[]) || [],
           color: index === 0 ? "#1976d2" : "#f44336", // Blue vs Red
         })
       );
