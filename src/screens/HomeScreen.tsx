@@ -55,6 +55,12 @@ const HomeScreen: React.FC = () => {
   const [messageLoading, setMessageLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
+  const [isRoleSelectionModalVisible, setIsRoleSelectionModalVisible] =
+    useState(false);
+  const [selectedRole, setSelectedRole] = useState<string>("");
+  const [pendingRegistrationEventId, setPendingRegistrationEventId] = useState<
+    string | null
+  >(null);
   const { selectedTeamId, setSelectedTeamId } = useApp();
   const { user } = useAuth();
   const { players, events, teams, refreshData } = useApp();
@@ -81,6 +87,19 @@ const HomeScreen: React.FC = () => {
       if (a.position !== "MV" && b.position === "MV") return -1;
       return a.name.localeCompare(b.name);
     });
+  };
+
+  // Helper function to check if player needs role selection
+  const needsRoleSelection = (player: Player | null): boolean => {
+    if (!player || !player.positions || player.positions.length <= 1) {
+      return false;
+    }
+    // Player needs role selection if they have MV AND at least one field position
+    const hasMV = player.positions.includes("MV");
+    const hasFieldPosition = player.positions.some((p) =>
+      ["H", "P"].includes(p)
+    );
+    return hasMV && hasFieldPosition;
   };
 
   // Hae nykyinen pelaaja käyttäjän sähköpostilla
@@ -659,15 +678,54 @@ const HomeScreen: React.FC = () => {
           );
         } else {
           // Register normally (event not full and either team member or after threshold)
-          await updateDoc(eventRef, {
-            registeredPlayers: arrayUnion(playerIdToUse),
-          });
-          setIsRegistered(true);
-          Alert.alert("Onnistui", "Ilmoittautuminen tallennettu");
+          // Check if player needs role selection
+          if (needsRoleSelection(currentPlayer)) {
+            // Show role selection modal
+            setPendingRegistrationEventId(nextEvent.id);
+            setIsRoleSelectionModalVisible(true);
+          } else {
+            // Direct registration without role selection
+            await updateDoc(eventRef, {
+              registeredPlayers: arrayUnion(playerIdToUse),
+            });
+            setIsRegistered(true);
+            Alert.alert("Onnistui", "Ilmoittautuminen tallennettu");
+          }
         }
       }
     } catch (error) {
       console.error("Error updating registration:", error);
+      Alert.alert("Virhe", "Ilmoittautumisen tallennus epäonnistui");
+    } finally {
+      setRegistrationLoading(false);
+    }
+  };
+
+  const handleRoleSelection = async (role: string) => {
+    if (!pendingRegistrationEventId || !currentPlayer || !user) {
+      setIsRoleSelectionModalVisible(false);
+      return;
+    }
+
+    setRegistrationLoading(true);
+    setIsRoleSelectionModalVisible(false);
+
+    try {
+      const eventRef = doc(db, "events", pendingRegistrationEventId);
+      const playerIdToUse = user.id;
+
+      // Register player and save their selected role
+      await updateDoc(eventRef, {
+        registeredPlayers: arrayUnion(playerIdToUse),
+        [`playerRoles.${playerIdToUse}`]: role,
+      });
+
+      setIsRegistered(true);
+      setSelectedRole("");
+      setPendingRegistrationEventId(null);
+      Alert.alert("Onnistui", "Ilmoittautuminen tallennettu");
+    } catch (error) {
+      console.error("Error registering with role:", error);
       Alert.alert("Virhe", "Ilmoittautumisen tallennus epäonnistui");
     } finally {
       setRegistrationLoading(false);
@@ -1237,6 +1295,91 @@ const HomeScreen: React.FC = () => {
           </View>
         )}
       </ScrollView>
+
+      {/* Roolin valinta modal */}
+      <Modal
+        visible={isRoleSelectionModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => {
+          setIsRoleSelectionModalVisible(false);
+          setSelectedRole("");
+          setPendingRegistrationEventId(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Valitse roolisi</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => {
+                  setIsRoleSelectionModalVisible(false);
+                  setSelectedRole("");
+                  setPendingRegistrationEventId(null);
+                }}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.roleSelectionDescription}>
+              Sinulla on useita pelipaikk oja. Valitse rooli tälle tapahtumalle:
+            </Text>
+
+            {currentPlayer?.positions?.map((position) => {
+              const labels: Record<string, string> = {
+                H: "Hyökkääjä",
+                P: "Puolustaja",
+                MV: "Maalivahti",
+              };
+
+              return (
+                <TouchableOpacity
+                  key={position}
+                  style={[
+                    styles.roleOption,
+                    selectedRole === position && styles.selectedRoleOption,
+                  ]}
+                  onPress={() => setSelectedRole(position)}
+                >
+                  <Text
+                    style={[
+                      styles.roleOptionText,
+                      selectedRole === position &&
+                        styles.selectedRoleOptionText,
+                    ]}
+                  >
+                    {labels[position] || position}
+                  </Text>
+                  {selectedRole === position && (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={24}
+                      color="#007AFF"
+                    />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+
+            <TouchableOpacity
+              style={[
+                styles.confirmRoleButton,
+                !selectedRole && styles.disabledButton,
+              ]}
+              onPress={() => {
+                if (selectedRole) {
+                  handleRoleSelection(selectedRole);
+                }
+              }}
+              disabled={!selectedRole}
+            >
+              <Text style={styles.confirmRoleButtonText}>Vahvista</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Joukkuevalinta modal */}
       <Modal
@@ -2411,6 +2554,48 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#2e7d32",
     marginBottom: 2,
+  },
+  roleSelectionDescription: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  roleOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+    backgroundColor: "#f8f9fa",
+    borderRadius: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+  },
+  selectedRoleOption: {
+    backgroundColor: "#e3f2fd",
+    borderColor: "#007AFF",
+    borderWidth: 2,
+  },
+  roleOptionText: {
+    fontSize: 16,
+    color: "#333",
+  },
+  selectedRoleOptionText: {
+    color: "#007AFF",
+    fontWeight: "600",
+  },
+  confirmRoleButton: {
+    backgroundColor: "#007AFF",
+    padding: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  confirmRoleButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
 

@@ -158,6 +158,7 @@ export interface Event {
   maxGoalkeepers?: number; // Maximum number of goalkeepers
   registeredPlayers?: string[]; // User/Player IDs from users collection
   reservePlayers?: string[]; // User/Player IDs in reserve queue
+  playerRoles?: Record<string, string>; // Player ID -> selected role for this event (H, P, or MV)
   teams?: Team[];
   teamId?: string; // Associated team ID
   createdBy: string; // User ID
