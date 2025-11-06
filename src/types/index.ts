@@ -98,6 +98,8 @@ export interface Team {
   whatsappGroupInviteLink?: string; // WhatsApp group invite link
   // Guest registration settings
   guestRegistrationHours?: number; // Hours before event when guests (teamMember: false) can register
+  // Notification settings
+  notificationEnabled?: boolean; // Whether push notifications are enabled for this team
   createdAt: Date;
   // Legacy fields for compatibility - required to avoid undefined errors
   players: Player[]; // Populated players array (derived from members)
@@ -262,7 +264,7 @@ export type RootStackParamList = {
   TeamGeneration: { eventId: string };
   Profile: undefined;
   EventManagementScreen: undefined;
-  Settings: undefined;
+  Settings: { tab?: "global" | "team"; hideTabSwitch?: boolean } | undefined;
   Migration: undefined;
   TeamManagement: undefined;
   AdminMenu: undefined;

@@ -67,6 +67,7 @@ const CreatePlayerScreen: React.FC = () => {
   const [category, setCategory] = useState(1);
   const [multiplier, setMultiplier] = useState(1.0);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isRegularMember, setIsRegularMember] = useState(true); // Vakiokävijä
   const [loading, setLoading] = useState(false);
 
   // Modal states
@@ -76,6 +77,8 @@ const CreatePlayerScreen: React.FC = () => {
   const [isMultiplierModalVisible, setIsMultiplierModalVisible] =
     useState(false);
   const [isRoleModalVisible, setIsRoleModalVisible] = useState(false);
+  const [isMemberStatusModalVisible, setIsMemberStatusModalVisible] =
+    useState(false);
 
   const positionOptions = [
     { value: "H", label: "Hyökkääjä" },
@@ -141,17 +144,33 @@ const CreatePlayerScreen: React.FC = () => {
 
     setLoading(true);
     try {
+      // Build teamMember object for selected teams
+      const teamMemberStatus: { [teamId: string]: boolean } = {};
+      selectedTeams.forEach((teamId) => {
+        teamMemberStatus[teamId] = isRegularMember;
+      });
+
+      // Build teams array (team names)
+      const teamNames = selectedTeams
+        .map((teamId) => {
+          const team = userTeams.find((t) => t.id === teamId);
+          return team?.name;
+        })
+        .filter((name): name is string => name !== undefined);
+
       const playerData = {
         name: name.trim(),
         displayName: name.trim(), // Lisää displayName yhtenäisyyden vuoksi
         email: email.trim().toLowerCase(),
         phone: phone.trim(),
-        teamIds: selectedTeams, // Muuta teams -> teamIds yhtenäisyyden vuoksi
+        teamIds: selectedTeams, // Array of team IDs
+        teams: teamNames, // Array of team names
         positions: positions, // New: array of positions
         position: position, // Legacy: computed primary position
         category,
         multiplier,
         isAdmin,
+        teamMember: teamMemberStatus, // Vakiokävijä status per team
         createdAt: new Date(),
         createdBy: user?.uid,
         // Lisää käyttäjätilin tiedot
@@ -328,6 +347,24 @@ const CreatePlayerScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
+          {/* Member Status */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Vakiokävijä</Text>
+            <TouchableOpacity
+              style={styles.selector}
+              onPress={() => setIsMemberStatusModalVisible(true)}
+            >
+              <Text style={styles.selectorText}>
+                {isRegularMember ? "Kyllä" : "Ei"}
+              </Text>
+              <Ionicons name="chevron-down" size={20} color="#666" />
+            </TouchableOpacity>
+            <Text style={styles.helperText}>
+              Vakiokävijät voivat ilmoittautua tapahtumiin heti. Muut pelaajat
+              voivat ilmoittautua vain määritellyn ajan sisällä.
+            </Text>
+          </View>
+
           {/* Submit Button */}
           <TouchableOpacity
             style={[styles.submitButton, loading && styles.disabledButton]}
@@ -409,9 +446,7 @@ const CreatePlayerScreen: React.FC = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                Valitse pelipaikka (yksi tai useampi)
-              </Text>
+              <Text style={styles.modalTitle}>Valitse pelipaikka</Text>
               <TouchableOpacity
                 style={styles.closeButton}
                 onPress={() => setIsPositionModalVisible(false)}
@@ -420,41 +455,54 @@ const CreatePlayerScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            {positionOptions.map((pos) => (
-              <TouchableOpacity
-                key={pos.value}
-                style={styles.checkboxOption}
-                onPress={() => {
-                  const isSelected = positions.includes(pos.value);
-                  if (isSelected) {
-                    // Don't allow unselecting if it's the only position
-                    if (positions.length > 1) {
-                      const newPositions = positions.filter(
-                        (p) => p !== pos.value
-                      );
+            <Text style={styles.modalSubtitle}>
+              Voit valita yhden tai useamman pelipaikan
+            </Text>
+
+            <ScrollView style={styles.modalScrollView}>
+              {positionOptions.map((pos) => (
+                <TouchableOpacity
+                  key={pos.value}
+                  style={styles.checkboxOption}
+                  onPress={() => {
+                    const isSelected = positions.includes(pos.value);
+                    if (isSelected) {
+                      // Don't allow unselecting if it's the only position
+                      if (positions.length > 1) {
+                        const newPositions = positions.filter(
+                          (p) => p !== pos.value
+                        );
+                        setPositions(newPositions);
+                        setPosition(arrayToPosition(newPositions));
+                      }
+                    } else {
+                      const newPositions = [...positions, pos.value];
                       setPositions(newPositions);
                       setPosition(arrayToPosition(newPositions));
                     }
-                  } else {
-                    const newPositions = [...positions, pos.value];
-                    setPositions(newPositions);
-                    setPosition(arrayToPosition(newPositions));
-                  }
-                }}
-              >
-                <View
-                  style={[
-                    styles.checkbox,
-                    positions.includes(pos.value) && styles.checkboxChecked,
-                  ]}
+                  }}
                 >
-                  {positions.includes(pos.value) && (
-                    <Ionicons name="checkmark" size={18} color="#fff" />
-                  )}
-                </View>
-                <Text style={styles.checkboxLabel}>{pos.label}</Text>
-              </TouchableOpacity>
-            ))}
+                  <View
+                    style={[
+                      styles.checkbox,
+                      positions.includes(pos.value) && styles.checkboxChecked,
+                    ]}
+                  >
+                    {positions.includes(pos.value) && (
+                      <Ionicons name="checkmark" size={18} color="#fff" />
+                    )}
+                  </View>
+                  <Text style={styles.checkboxLabel}>{pos.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.modalConfirmButton}
+              onPress={() => setIsPositionModalVisible(false)}
+            >
+              <Text style={styles.modalConfirmText}>Valmis</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -618,6 +666,68 @@ const CreatePlayerScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Member Status Selection Modal */}
+      <Modal
+        visible={isMemberStatusModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setIsMemberStatusModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Vakiokävijä</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setIsMemberStatusModalVisible(false)}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.option, isRegularMember && styles.selectedOption]}
+              onPress={() => {
+                setIsRegularMember(true);
+                setIsMemberStatusModalVisible(false);
+              }}
+            >
+              <Text
+                style={[
+                  styles.optionText,
+                  isRegularMember && styles.selectedOptionText,
+                ]}
+              >
+                Kyllä
+              </Text>
+              {isRegularMember && (
+                <Ionicons name="checkmark" size={20} color="#007AFF" />
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.option, !isRegularMember && styles.selectedOption]}
+              onPress={() => {
+                setIsRegularMember(false);
+                setIsMemberStatusModalVisible(false);
+              }}
+            >
+              <Text
+                style={[
+                  styles.optionText,
+                  !isRegularMember && styles.selectedOptionText,
+                ]}
+              >
+                Ei
+              </Text>
+              {!isRegularMember && (
+                <Ionicons name="checkmark" size={20} color="#007AFF" />
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -649,6 +759,12 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#333",
     marginBottom: 8,
+  },
+  helperText: {
+    fontSize: 13,
+    color: "#666",
+    marginTop: 8,
+    lineHeight: 18,
   },
   input: {
     backgroundColor: "#fff",
@@ -722,6 +838,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     color: "#333",
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 16,
   },
   closeButton: {
     padding: 8,

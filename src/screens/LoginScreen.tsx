@@ -496,10 +496,9 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline",
   },
   logo: {
-    height: 140,
-    width: 140,
+    height: 120,
+    width: 120,
     marginBottom: 20,
-    borderRadius: 20,
   },
 });
 

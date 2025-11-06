@@ -53,16 +53,34 @@ interface UserWithoutPassword {
   selected?: boolean;
 }
 
-const SettingsScreen: React.FC = () => {
+interface SettingsScreenProps {
+  route?: {
+    params?: {
+      tab?: "global" | "team";
+      hideTabSwitch?: boolean; // Piilottaa tab-valitsimen
+    };
+  };
+}
+
+const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
   const navigation = useNavigation();
   const { user } = useAuth();
   const { teams, refreshData } = useApp();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const justSavedRef = useRef(false); // Track if we just saved to prevent field clearing
-  // Tavallinen admin aloittaa team-tabista, MasterAdmin global-tabista
+
+  // Determine initial tab based on route params or user role
+  const getInitialTab = (): "global" | "team" => {
+    if (route?.params?.tab) {
+      return route.params.tab;
+    }
+    // Default: MasterAdmin starts with global, regular admin with team
+    return user?.isMasterAdmin ? "global" : "team";
+  };
+
   const [activeTab, setActiveTab] = useState<"global" | "team">(
-    user?.isMasterAdmin ? "global" : "team"
+    getInitialTab()
   );
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
 
@@ -204,11 +222,20 @@ const SettingsScreen: React.FC = () => {
       const teamSettingsMap: Record<string, EventDefaults> = {};
       for (const team of adminTeams) {
         const teamDoc = await getDoc(doc(db, "settings", `team-${team.id}`));
+        const teamData = teams.find((t) => t.id === team.id);
+
         if (teamDoc.exists()) {
-          teamSettingsMap[team.id] = teamDoc.data() as EventDefaults;
+          teamSettingsMap[team.id] = {
+            ...(teamDoc.data() as EventDefaults),
+            // Override with team-specific data if available
+            notificationEnabled: teamData?.notificationEnabled ?? true,
+          };
         } else {
           // Use global settings as default for teams without specific settings
-          teamSettingsMap[team.id] = { ...globalSettings };
+          teamSettingsMap[team.id] = {
+            ...globalSettings,
+            notificationEnabled: teamData?.notificationEnabled ?? true,
+          };
         }
       }
       setTeamSettings(teamSettingsMap);
@@ -276,15 +303,11 @@ const SettingsScreen: React.FC = () => {
   const saveSettings = async () => {
     if (!user) return;
 
-    console.log(
-      `SettingsScreen: Starting save operation, activeTab: ${activeTab}, selectedTeamId: ${selectedTeamId}`
-    );
     setSaving(true);
     justSavedRef.current = true; // Mark that we're saving to prevent field clearing
     try {
       if (activeTab === "global") {
         // Save global settings
-        console.log("SettingsScreen: Saving global settings");
         await setDoc(doc(db, "settings", "eventDefaults"), {
           ...globalSettings,
           updatedBy: user.email,
@@ -292,32 +315,30 @@ const SettingsScreen: React.FC = () => {
         });
       } else if (selectedTeamId && teamSettings[selectedTeamId]) {
         // Save team-specific settings
-        console.log(
-          `SettingsScreen: Saving team settings for ${selectedTeamId}`
-        );
+        const currentTeam = teams.find((t) => t.id === selectedTeamId);
         await setDoc(doc(db, "settings", `team-${selectedTeamId}`), {
           ...teamSettings[selectedTeamId],
           teamId: selectedTeamId,
+          teamName: currentTeam?.name || "Tuntematon joukkue",
+          teamCode: currentTeam?.code || "",
+          teamColor: currentTeam?.color || "",
+          teamAdminIds: currentTeam?.adminIds || [],
           updatedBy: user.email,
           updatedAt: new Date(),
         });
 
         // Also save WhatsApp group data to team document
-        console.log("SettingsScreen: Saving WhatsApp group data");
         await saveTeamWhatsAppData();
 
         // Refresh data after save to update teams state with new WhatsApp data
-        console.log("SettingsScreen: Refreshing data after save");
         await refreshData();
       }
-      console.log("SettingsScreen: Save completed successfully");
       Alert.alert("Onnistui", "Asetukset tallennettu");
     } catch (error) {
       console.error("Error saving settings:", error);
       Alert.alert("Virhe", "Asetusten tallentaminen epäonnistui");
     } finally {
       setSaving(false);
-      console.log("SettingsScreen: Save operation finished");
     }
   };
 
@@ -393,19 +414,20 @@ const SettingsScreen: React.FC = () => {
     if (!selectedTeamId || !user) return;
 
     try {
-      console.log(
-        `SettingsScreen: Saving WhatsApp data for team ${selectedTeamId}:`,
-        {
-          whatsappGroupName,
-          whatsappGroupInviteLink,
-        }
-      );
+      console.log(`SettingsScreen: Saving team data for ${selectedTeamId}:`, {
+        whatsappGroupName,
+        whatsappGroupInviteLink,
+        guestRegistrationHours,
+        notificationEnabled: teamSettings[selectedTeamId]?.notificationEnabled,
+      });
 
       const teamRef = doc(db, "teams", selectedTeamId);
       await updateDoc(teamRef, {
         whatsappGroupName: whatsappGroupName,
         whatsappGroupInviteLink: whatsappGroupInviteLink,
         guestRegistrationHours: guestRegistrationHours,
+        notificationEnabled:
+          teamSettings[selectedTeamId]?.notificationEnabled ?? true,
         updatedBy: user.email,
         updatedAt: new Date(),
       });
@@ -605,39 +627,41 @@ const SettingsScreen: React.FC = () => {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Tab selector - vain MasterAdminille näytetään molemmat tabit */}
-        <View style={styles.tabContainer}>
-          {isMasterAdmin() && (
-            <TouchableOpacity
-              style={[styles.tab, activeTab === "global" && styles.activeTab]}
-              onPress={() => setActiveTab("global")}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === "global" && styles.activeTabText,
-                ]}
+        {/* Tab selector - piilotetaan jos tullaan suoraan tiettyyn näkymään AdminMenusta */}
+        {!route?.params?.hideTabSwitch && (
+          <View style={styles.tabContainer}>
+            {isMasterAdmin() && (
+              <TouchableOpacity
+                style={[styles.tab, activeTab === "global" && styles.activeTab]}
+                onPress={() => setActiveTab("global")}
               >
-                Yleiset oletusarvot
-              </Text>
-            </TouchableOpacity>
-          )}
-          {adminTeams.length > 0 && (
-            <TouchableOpacity
-              style={[styles.tab, activeTab === "team" && styles.activeTab]}
-              onPress={() => setActiveTab("team")}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === "team" && styles.activeTabText,
-                ]}
+                <Text
+                  style={[
+                    styles.tabText,
+                    activeTab === "global" && styles.activeTabText,
+                  ]}
+                >
+                  Yleiset oletusarvot
+                </Text>
+              </TouchableOpacity>
+            )}
+            {adminTeams.length > 0 && (
+              <TouchableOpacity
+                style={[styles.tab, activeTab === "team" && styles.activeTab]}
+                onPress={() => setActiveTab("team")}
               >
-                Joukkuekohtaiset
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
+                <Text
+                  style={[
+                    styles.tabText,
+                    activeTab === "team" && styles.activeTabText,
+                  ]}
+                >
+                  Joukkuekohtaiset
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
         {/* Team selector for team-specific settings */}
         {activeTab === "team" && adminTeams.length > 0 && (
@@ -897,8 +921,8 @@ const SettingsScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* User Management Section */}
-        {usersWithoutPassword.length > 0 && (
+        {/* User Management Section - vain joukkuekohtaisissa asetuksissa */}
+        {activeTab === "team" && usersWithoutPassword.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Käyttäjien hallinta</Text>
             <Text style={styles.sectionDescription}>

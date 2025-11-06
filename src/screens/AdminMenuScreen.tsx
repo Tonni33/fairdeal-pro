@@ -123,19 +123,30 @@ const AdminMenuScreen: React.FC = () => {
       description: "Luo ja hallinnoi joukkueita",
       adminOnly: true,
     },
-
     {
-      title: "Asetukset",
+      title: "Yleiset asetukset",
+      icon: "settings-outline",
+      screen: "Settings",
+      params: { tab: "global" as const, hideTabSwitch: true },
+      description: "Sovelluksen yleiset asetukset",
+      adminOnly: false,
+      masterAdminOnly: true,
+    },
+    {
+      title: "Joukkuekohtaiset asetukset",
       icon: "cog-outline",
       screen: "Settings",
+      params: { tab: "team" as const, hideTabSwitch: true },
       description: "Tapahtumien oletusasetukset",
       adminOnly: true,
     },
   ];
 
-  const handleMenuItemPress = (screen: string) => {
+  const handleMenuItemPress = (screen: string, params?: any) => {
     if (screen === "TeamGeneration") {
       navigation.navigate("TeamGeneration", { eventId: "" });
+    } else if (screen === "Settings") {
+      navigation.navigate("Settings", params || {});
     } else {
       navigation.navigate(screen as any);
     }
@@ -175,7 +186,7 @@ const AdminMenuScreen: React.FC = () => {
               <TouchableOpacity
                 key={index}
                 style={styles.menuItem}
-                onPress={() => handleMenuItemPress(item.screen)}
+                onPress={() => handleMenuItemPress(item.screen, item.params)}
               >
                 <View style={styles.menuItemIcon}>
                   <Ionicons name={item.icon as any} size={24} color="#1976d2" />

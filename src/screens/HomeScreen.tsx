@@ -2426,6 +2426,7 @@ const styles = StyleSheet.create({
   // Message modal styles
   messageModalContent: {
     maxHeight: "80%",
+    width: "92%", // Levitetään hieman
     height: 500, // Lisätään kiinteä korkeus
   },
   messageModalScroll: {
@@ -2518,10 +2519,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#ddd",
     borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
+    padding: 10,
+    paddingTop: 10,
+    paddingBottom: 10,
+    fontSize: 15,
     color: "#333",
-    minHeight: 120,
+    minHeight: 100,
+    maxHeight: 180,
     marginBottom: 16,
   },
   messageEditButtons: {
