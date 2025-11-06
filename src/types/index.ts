@@ -39,10 +39,21 @@ export interface Player {
   // Team-specific skills stored in the user document
   teamSkills?: {
     [teamId: string]: {
-      category: number;
-      multiplier: number;
-      position: string;
-      updatedAt: Date;
+      field?: {
+        // Kenttäpelaaja (H tai P)
+        category: number;
+        multiplier: number;
+      };
+      goalkeeper?: {
+        // Maalivahti (MV)
+        category: number;
+        multiplier: number;
+      };
+      // Legacy fields for backwards compatibility
+      category?: number;
+      multiplier?: number;
+      position?: string;
+      updatedAt?: Date;
     };
   };
   // Team member status - whether player is a regular member (vakiokävijä) in each team

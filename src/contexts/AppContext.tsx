@@ -359,6 +359,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
               lastTeamGeneration: data.lastTeamGeneration?.toDate
                 ? data.lastTeamGeneration.toDate()
                 : data.lastTeamGeneration || undefined,
+              // Add playerRoles for role selection support
+              playerRoles: data.playerRoles || undefined,
             });
           });
           setEvents(eventsData);

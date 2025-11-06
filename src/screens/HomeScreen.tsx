@@ -57,7 +57,6 @@ const HomeScreen: React.FC = () => {
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [isRoleSelectionModalVisible, setIsRoleSelectionModalVisible] =
     useState(false);
-  const [selectedRole, setSelectedRole] = useState<string>("");
   const [pendingRegistrationEventId, setPendingRegistrationEventId] = useState<
     string | null
   >(null);
@@ -66,40 +65,59 @@ const HomeScreen: React.FC = () => {
   const { players, events, teams, refreshData } = useApp();
 
   // Helper functions for player counting by position
-  const getFieldPlayers = (playerIds: string[]) => {
+  // Note: These check event-specific playerRoles first, then fall back to player's default position
+  const getFieldPlayers = (playerIds: string[], event?: Event) => {
     return playerIds.filter((id) => {
       const player = players.find((p) => p.id === id);
-      return player && ["H", "P", "H/P"].includes(player.position);
+      if (!player) return false;
+
+      // Check if player has selected a specific role for this event
+      const eventRole = event?.playerRoles?.[id];
+      if (eventRole) {
+        return ["H", "P"].includes(eventRole);
+      }
+
+      // Fall back to player's default position
+      return ["H", "P", "H/P"].includes(player.position);
     });
   };
 
-  const getGoalkeepers = (playerIds: string[]) => {
+  const getGoalkeepers = (playerIds: string[], event?: Event) => {
     return playerIds.filter((id) => {
       const player = players.find((p) => p.id === id);
-      return player && player.position === "MV";
+      if (!player) return false;
+
+      // Check if player has selected a specific role for this event
+      const eventRole = event?.playerRoles?.[id];
+      if (eventRole) {
+        return eventRole === "MV";
+      }
+
+      // Fall back to player's default position
+      return player.position === "MV";
     });
   };
 
   // Helper function to sort players - goalkeepers at the end
-  const sortPlayersByPosition = (playerData: any[]) => {
+  const sortPlayersByPosition = (playerData: any[], event?: any) => {
     return playerData.sort((a, b) => {
-      if (a.position === "MV" && b.position !== "MV") return 1;
-      if (a.position !== "MV" && b.position === "MV") return -1;
+      // Check playerRole from event first, then fall back to position
+      const aRole = event?.playerRoles?.[a.id] || a.position;
+      const bRole = event?.playerRoles?.[b.id] || b.position;
+
+      if (aRole === "MV" && bRole !== "MV") return 1;
+      if (aRole !== "MV" && bRole === "MV") return -1;
       return a.name.localeCompare(b.name);
     });
   };
 
   // Helper function to check if player needs role selection
   const needsRoleSelection = (player: Player | null): boolean => {
-    if (!player || !player.positions || player.positions.length <= 1) {
+    if (!player || !player.positions || player.positions.length === 0) {
       return false;
     }
-    // Player needs role selection if they have MV AND at least one field position
-    const hasMV = player.positions.includes("MV");
-    const hasFieldPosition = player.positions.some((p) =>
-      ["H", "P"].includes(p)
-    );
-    return hasMV && hasFieldPosition;
+    // Player needs role selection only if they have MV as one of their positions
+    return player.positions.includes("MV");
   };
 
   // Hae nykyinen pelaaja käyttäjän sähköpostilla
@@ -498,8 +516,20 @@ const HomeScreen: React.FC = () => {
         const currentRegistered = eventData?.registeredPlayers || [];
         const currentReserves = eventData?.reservePlayers || [];
 
-        const currentFieldPlayers = getFieldPlayers(currentRegistered);
-        const currentGoalkeepers = getGoalkeepers(currentRegistered);
+        // Create event object with playerRoles for role checking
+        const eventWithRoles = {
+          ...nextEvent,
+          playerRoles: eventData?.playerRoles,
+        };
+
+        const currentFieldPlayers = getFieldPlayers(
+          currentRegistered,
+          eventWithRoles
+        );
+        const currentGoalkeepers = getGoalkeepers(
+          currentRegistered,
+          eventWithRoles
+        );
 
         const isGoalkeeper = currentPlayer.position === "MV";
         const isEventFull = isGoalkeeper
@@ -707,6 +737,13 @@ const HomeScreen: React.FC = () => {
       return;
     }
 
+    console.log("🎯 HomeScreen handleRoleSelection:", {
+      playerId: user.id,
+      playerName: currentPlayer.name,
+      selectedRole: role,
+      eventId: pendingRegistrationEventId,
+    });
+
     setRegistrationLoading(true);
     setIsRoleSelectionModalVisible(false);
 
@@ -720,8 +757,12 @@ const HomeScreen: React.FC = () => {
         [`playerRoles.${playerIdToUse}`]: role,
       });
 
+      console.log("✅ Role saved to Firestore successfully:", {
+        playerId: playerIdToUse,
+        role: role,
+      });
+
       setIsRegistered(true);
-      setSelectedRole("");
       setPendingRegistrationEventId(null);
       Alert.alert("Onnistui", "Ilmoittautuminen tallennettu");
     } catch (error) {
@@ -1054,15 +1095,22 @@ const HomeScreen: React.FC = () => {
                 <View style={styles.detailContent}>
                   <Text style={styles.detailLabel}>Osallistujat</Text>
                   <Text style={styles.detailText}>
-                    {getFieldPlayers(nextEvent.registeredPlayers || []).length}{" "}
+                    {
+                      getFieldPlayers(
+                        nextEvent.registeredPlayers || [],
+                        nextEvent
+                      ).length
+                    }{" "}
                     / {nextEvent.maxPlayers} pelaajaa
                     {nextEvent.maxGoalkeepers &&
                       nextEvent.maxGoalkeepers > 0 && (
                         <Text style={{ color: "#ff9800", fontWeight: "500" }}>
                           {" • "}
                           {
-                            getGoalkeepers(nextEvent.registeredPlayers || [])
-                              .length
+                            getGoalkeepers(
+                              nextEvent.registeredPlayers || [],
+                              nextEvent
+                            ).length
                           }{" "}
                           / {nextEvent.maxGoalkeepers} MV
                         </Text>
@@ -1074,18 +1122,23 @@ const HomeScreen: React.FC = () => {
                         styles.capacityFill,
                         {
                           width: `${Math.min(
-                            (getFieldPlayers(nextEvent.registeredPlayers || [])
-                              .length /
+                            (getFieldPlayers(
+                              nextEvent.registeredPlayers || [],
+                              nextEvent
+                            ).length /
                               nextEvent.maxPlayers) *
                               100,
                             100
                           )}%`,
                           backgroundColor:
-                            getFieldPlayers(nextEvent.registeredPlayers || [])
-                              .length >= nextEvent.maxPlayers
+                            getFieldPlayers(
+                              nextEvent.registeredPlayers || [],
+                              nextEvent
+                            ).length >= nextEvent.maxPlayers
                               ? "#f44336"
                               : getFieldPlayers(
-                                  nextEvent.registeredPlayers || []
+                                  nextEvent.registeredPlayers || [],
+                                  nextEvent
                                 ).length /
                                   nextEvent.maxPlayers >
                                 0.8
@@ -1221,8 +1274,10 @@ const HomeScreen: React.FC = () => {
                         </Text>
                         <Text style={styles.participantsBannerSubtitle}>
                           {
-                            getFieldPlayers(nextEvent.registeredPlayers || [])
-                              .length
+                            getFieldPlayers(
+                              nextEvent.registeredPlayers || [],
+                              nextEvent
+                            ).length
                           }{" "}
                           pelaajaa
                           {nextEvent.maxGoalkeepers &&
@@ -1233,7 +1288,8 @@ const HomeScreen: React.FC = () => {
                                 {" • "}
                                 {
                                   getGoalkeepers(
-                                    nextEvent.registeredPlayers || []
+                                    nextEvent.registeredPlayers || [],
+                                    nextEvent
                                   ).length
                                 }{" "}
                                 MV
@@ -1303,19 +1359,17 @@ const HomeScreen: React.FC = () => {
         animationType="slide"
         onRequestClose={() => {
           setIsRoleSelectionModalVisible(false);
-          setSelectedRole("");
           setPendingRegistrationEventId(null);
         }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Valitse roolisi</Text>
+              <Text style={styles.modalTitle}>Pelipaikkasi tänään</Text>
               <TouchableOpacity
                 style={styles.closeButton}
                 onPress={() => {
                   setIsRoleSelectionModalVisible(false);
-                  setSelectedRole("");
                   setPendingRegistrationEventId(null);
                 }}
               >
@@ -1324,59 +1378,33 @@ const HomeScreen: React.FC = () => {
             </View>
 
             <Text style={styles.roleSelectionDescription}>
-              Sinulla on useita pelipaikk oja. Valitse rooli tälle tapahtumalle:
+              Oletko tänään maalivahti?
             </Text>
 
-            {currentPlayer?.positions?.map((position) => {
-              const labels: Record<string, string> = {
-                H: "Hyökkääjä",
-                P: "Puolustaja",
-                MV: "Maalivahti",
-              };
+            <View style={styles.roleButtonsContainer}>
+              <TouchableOpacity
+                style={[styles.roleButton, styles.roleButtonNo]}
+                onPress={() => {
+                  // Käytä ensimmäistä kenttäpelaajan positiota tai "H" oletuksena
+                  const fieldPosition =
+                    currentPlayer?.positions?.find((p) =>
+                      ["H", "P"].includes(p)
+                    ) || "H";
+                  handleRoleSelection(fieldPosition);
+                }}
+              >
+                <Text style={styles.roleButtonText}>Ei</Text>
+              </TouchableOpacity>
 
-              return (
-                <TouchableOpacity
-                  key={position}
-                  style={[
-                    styles.roleOption,
-                    selectedRole === position && styles.selectedRoleOption,
-                  ]}
-                  onPress={() => setSelectedRole(position)}
-                >
-                  <Text
-                    style={[
-                      styles.roleOptionText,
-                      selectedRole === position &&
-                        styles.selectedRoleOptionText,
-                    ]}
-                  >
-                    {labels[position] || position}
-                  </Text>
-                  {selectedRole === position && (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={24}
-                      color="#007AFF"
-                    />
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-
-            <TouchableOpacity
-              style={[
-                styles.confirmRoleButton,
-                !selectedRole && styles.disabledButton,
-              ]}
-              onPress={() => {
-                if (selectedRole) {
-                  handleRoleSelection(selectedRole);
-                }
-              }}
-              disabled={!selectedRole}
-            >
-              <Text style={styles.confirmRoleButtonText}>Vahvista</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.roleButton, styles.roleButtonYes]}
+                onPress={() => handleRoleSelection("MV")}
+              >
+                <Text style={[styles.roleButtonText, { color: "white" }]}>
+                  Kyllä
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1502,61 +1530,66 @@ const HomeScreen: React.FC = () => {
                             playerId: p.playerId,
                           }))
                         );
-                        return sortPlayersByPosition(registeredPlayers).map(
-                          (player, index) => {
-                            console.log("HomeScreen Modal: rendering player:", {
-                              id: player.id,
-                              name: player.name,
-                              email: player.email,
-                            });
-                            const isGoalkeeper = player?.position === "MV";
-                            return (
+                        return sortPlayersByPosition(
+                          registeredPlayers,
+                          nextEvent
+                        ).map((player, index) => {
+                          console.log("HomeScreen Modal: rendering player:", {
+                            id: player.id,
+                            name: player.name,
+                            email: player.email,
+                          });
+                          // Check playerRole from event first, then fall back to player.position
+                          const playerRole =
+                            nextEvent?.playerRoles?.[player.id];
+                          const isGoalkeeper =
+                            playerRole === "MV" ||
+                            (!playerRole && player?.position === "MV");
+                          return (
+                            <View
+                              key={player.id}
+                              style={[
+                                styles.modalPlayerItem,
+                                isGoalkeeper && styles.modalGoalkeeperItem,
+                              ]}
+                            >
                               <View
-                                key={player.id}
                                 style={[
-                                  styles.modalPlayerItem,
-                                  isGoalkeeper && styles.modalGoalkeeperItem,
+                                  styles.modalPlayerIcon,
+                                  isGoalkeeper && styles.modalGoalkeeperIcon,
                                 ]}
                               >
-                                <View
+                                <Text
                                   style={[
-                                    styles.modalPlayerIcon,
-                                    isGoalkeeper && styles.modalGoalkeeperIcon,
+                                    styles.modalPlayerNumber,
+                                    isGoalkeeper &&
+                                      styles.modalGoalkeeperNumber,
                                   ]}
                                 >
-                                  <Text
-                                    style={[
-                                      styles.modalPlayerNumber,
-                                      isGoalkeeper &&
-                                        styles.modalGoalkeeperNumber,
-                                    ]}
-                                  >
-                                    {index + 1}
-                                  </Text>
-                                </View>
-                                <View style={styles.modalPlayerInfo}>
-                                  <Text
-                                    style={[
-                                      styles.modalPlayerName,
-                                      isGoalkeeper &&
-                                        styles.modalGoalkeeperName,
-                                    ]}
-                                  >
-                                    {player.name ||
-                                      player.email ||
-                                      `ID: ${player.id}`}
-                                    {isGoalkeeper && " 🥅"}
-                                  </Text>
-                                  {player.email && (
-                                    <Text style={styles.modalPlayerEmail}>
-                                      {player.email}
-                                    </Text>
-                                  )}
-                                </View>
+                                  {index + 1}
+                                </Text>
                               </View>
-                            );
-                          }
-                        );
+                              <View style={styles.modalPlayerInfo}>
+                                <Text
+                                  style={[
+                                    styles.modalPlayerName,
+                                    isGoalkeeper && styles.modalGoalkeeperName,
+                                  ]}
+                                >
+                                  {player.name ||
+                                    player.email ||
+                                    `ID: ${player.id}`}
+                                  {isGoalkeeper && " 🥅"}
+                                </Text>
+                                {player.email && (
+                                  <Text style={styles.modalPlayerEmail}>
+                                    {player.email}
+                                  </Text>
+                                )}
+                              </View>
+                            </View>
+                          );
+                        });
                       })()}
                     </View>
                   </View>
@@ -2596,6 +2629,32 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontWeight: "600",
+  },
+  roleButtonsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    marginTop: 16,
+  },
+  roleButton: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  roleButtonNo: {
+    backgroundColor: "#f5f5f5",
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  roleButtonYes: {
+    backgroundColor: "#007AFF",
+  },
+  roleButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
   },
 });
 

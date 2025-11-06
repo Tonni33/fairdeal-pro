@@ -44,7 +44,11 @@ const EventManagementScreen: React.FC = () => {
   const [isAddingMultiplePlayers, setIsAddingMultiplePlayers] = useState(false);
 
   // Helper function to get player's team-specific skills for the event
-  const getPlayerEventSkills = (player: any, eventTeamId?: string) => {
+  const getPlayerEventSkills = (
+    player: any,
+    eventTeamId?: string,
+    playerRole?: string
+  ) => {
     if (!eventTeamId || !player.teamSkills?.[eventTeamId]) {
       // Return default player skills
       return {
@@ -61,10 +65,26 @@ const EventManagementScreen: React.FC = () => {
       `📋 EventManagement: Using team skills for ${player.name} in event team ${eventTeamId}:`,
       teamSkills
     );
+
+    // Determine which role's skills to use
+    const roleToUse = playerRole || player.position;
+    const isGoalkeeper = roleToUse === "MV";
+
+    // Use role-specific skills if available, otherwise fall back to legacy fields
+    const roleSkills = isGoalkeeper
+      ? (teamSkills as any).goalkeeper
+      : (teamSkills as any).field;
+
+    const category =
+      roleSkills?.category || teamSkills.category || player.category;
+    const multiplier =
+      roleSkills?.multiplier || teamSkills.multiplier || player.multiplier;
+    const position = roleToUse || teamSkills.position || player.position;
+
     return {
-      category: teamSkills.category,
-      multiplier: teamSkills.multiplier,
-      position: teamSkills.position,
+      category,
+      multiplier,
+      position,
       hasTeamSkills: true,
     };
   };
@@ -81,18 +101,67 @@ const EventManagementScreen: React.FC = () => {
     );
   };
 
+  // Helper function to check if player needs role selection
+  const needsRoleSelection = (player: any) => {
+    console.log("🔍 needsRoleSelection check:", {
+      playerName: player.name,
+      hasPositions: !!player.positions,
+      positions: player.positions,
+      hasTeamSkills: !!player.teamSkills,
+      teamId: selectedEvent?.teamId,
+      teamSkills: player.teamSkills?.[selectedEvent?.teamId || ""],
+    });
+
+    // Check if player has positions array
+    if (player.positions && player.positions.length > 0) {
+      const hasMV = player.positions.includes("MV");
+      const hasFieldPosition = player.positions.some((p: string) =>
+        ["H", "P"].includes(p)
+      );
+      console.log("✅ Using positions array:", { hasMV, hasFieldPosition });
+      return hasMV && hasFieldPosition;
+    }
+
+    // Fallback: check teamSkills for field and goalkeeper skills
+    if (selectedEvent?.teamId && player.teamSkills?.[selectedEvent.teamId]) {
+      const teamSkills = player.teamSkills[selectedEvent.teamId];
+      const fieldSkills = (teamSkills as any).field;
+      const goalkeeperSkills = (teamSkills as any).goalkeeper;
+      const hasFieldSkills = !!(fieldSkills && typeof fieldSkills === "object");
+      const hasGoalkeeperSkills = !!(
+        goalkeeperSkills && typeof goalkeeperSkills === "object"
+      );
+      console.log("✅ Using teamSkills fallback:", {
+        hasFieldSkills,
+        hasGoalkeeperSkills,
+        fieldSkills,
+        goalkeeperSkills,
+      });
+      return hasFieldSkills && hasGoalkeeperSkills;
+    }
+
+    console.log("❌ No role selection needed");
+    return false;
+  };
+
   // Helper functions for player counting by position
-  const getFieldPlayers = (playerIds: string[]) => {
+  const getFieldPlayers = (playerIds: string[], event?: any) => {
     return playerIds.filter((id) => {
       const player = players.find((p) => p.id === id);
-      return player && ["H", "P", "H/P"].includes(player.position);
+      // Check playerRole first, then fall back to position
+      const eventToCheck = event || selectedEvent;
+      const role = eventToCheck?.playerRoles?.[id] || player?.position;
+      return player && ["H", "P", "H/P"].includes(role);
     });
   };
 
-  const getGoalkeepers = (playerIds: string[]) => {
+  const getGoalkeepers = (playerIds: string[], event?: any) => {
     return playerIds.filter((id) => {
       const player = players.find((p) => p.id === id);
-      return player && player.position === "MV";
+      // Check playerRole first, then fall back to position
+      const eventToCheck = event || selectedEvent;
+      const role = eventToCheck?.playerRoles?.[id] || player?.position;
+      return player && role === "MV";
     });
   };
 
@@ -105,10 +174,12 @@ const EventManagementScreen: React.FC = () => {
 
   // Helper function to get player style based on position
   const getPlayerIconColor = (player: any, teamId?: string) => {
-    if (player?.position === "MV") {
+    // Check playerRole first, then fall back to position
+    const role = selectedEvent?.playerRoles?.[player?.id] || player?.position;
+    if (role === "MV") {
       return "#ff9800"; // Orange for goalkeepers
     }
-    return teamId ? getTeamColor(teamId) : "#1976d2";
+    return "#4CAF50"; // Green for field players
   };
 
   // Edit form states
@@ -215,7 +286,10 @@ const EventManagementScreen: React.FC = () => {
     setEditTime(timeObj);
   };
 
-  const handleAddPlayerToEvent = async (playerId: string) => {
+  const handleAddPlayerToEvent = async (
+    playerId: string,
+    selectedRole?: string
+  ) => {
     if (!selectedEvent) return;
     setAddingPlayerId(playerId);
     try {
@@ -235,10 +309,53 @@ const EventManagementScreen: React.FC = () => {
         return;
       }
 
+      console.log("🎯 handleAddPlayerToEvent:", {
+        playerId,
+        playerName: player.name,
+        position: player.position,
+        positions: player.positions,
+        needsSelection: needsRoleSelection(player),
+        selectedRole,
+      });
+
+      // Ask for role if player has multiple positions including MV
+      if (!selectedRole && needsRoleSelection(player)) {
+        Alert.alert(
+          "Valitse rooli",
+          "Pelaaja voi pelata useassa roolissa. Missä roolissa lisätään tähän tapahtumaan?",
+          [
+            {
+              text: "Peruuta",
+              style: "cancel",
+              onPress: () => setAddingPlayerId(null),
+            },
+            {
+              text: "Kenttäpelaaja",
+              onPress: () => {
+                const fieldPosition =
+                  player.positions?.find((p: string) =>
+                    ["H", "P"].includes(p)
+                  ) || "H";
+                handleAddPlayerToEvent(playerId, fieldPosition);
+              },
+            },
+            {
+              text: "Maalivahti",
+              onPress: () => handleAddPlayerToEvent(playerId, "MV"),
+            },
+          ],
+          { cancelable: false }
+        );
+        return;
+      }
+
       const currentFieldPlayers = getFieldPlayers(currentPlayers);
       const currentGoalkeepers = getGoalkeepers(currentPlayers);
 
-      if (player.position === "MV") {
+      // Use selected role or player's default position
+      const playerRole = selectedRole || player.position;
+
+      if (playerRole === "MV") {
         // Check goalkeeper limit
         if (
           selectedEvent.maxGoalkeepers &&
@@ -272,7 +389,7 @@ const EventManagementScreen: React.FC = () => {
           setAddingPlayerId(null);
           return;
         }
-      } else if (["H", "P", "H/P"].includes(player.position)) {
+      } else if (["H", "P", "H/P"].includes(playerRole)) {
         // Check field player limit
         if (
           selectedEvent.maxPlayers &&
@@ -308,14 +425,22 @@ const EventManagementScreen: React.FC = () => {
         }
       }
 
+      // Save player and their selected role
       await updateDoc(eventRef, {
         registeredPlayers: [...currentPlayers, playerId],
+        ...(selectedRole && {
+          [`playerRoles.${playerId}`]: selectedRole,
+        }),
       });
 
       // Update selectedEvent state
+      const updatedPlayerRoles = selectedRole
+        ? { ...selectedEvent.playerRoles, [playerId]: selectedRole }
+        : selectedEvent.playerRoles;
       const updatedEvent = {
         ...selectedEvent,
         registeredPlayers: [...currentPlayers, playerId],
+        playerRoles: updatedPlayerRoles,
       };
       setSelectedEvent(updatedEvent);
 
@@ -351,10 +476,27 @@ const EventManagementScreen: React.FC = () => {
         return;
       }
 
-      // Check player limits
+      // Check if any players need role selection
       const playersData = playersToAdd
         .map((id) => players.find((p) => p.id === id))
         .filter((p): p is NonNullable<typeof p> => p != null);
+
+      const multiPositionPlayers = playersData.filter((p) =>
+        needsRoleSelection(p)
+      );
+
+      if (multiPositionPlayers.length > 0) {
+        Alert.alert(
+          "Valitse roolit erikseen",
+          `${multiPositionPlayers.length} pelaajalla on useita positioita. Ole hyvä ja lisää heidät yksi kerrallaan valitsemalla rooli jokaiselle.`,
+          [{ text: "OK", onPress: () => setIsAddingMultiplePlayers(false) }]
+        );
+        setSelectedPlayerIds([]);
+        setIsAddingMultiplePlayers(false);
+        return;
+      }
+
+      // Separate players by position
       const fieldPlayersToAdd = playersData.filter((p) =>
         ["H", "P", "H/P"].includes(p.position)
       );
@@ -469,12 +611,59 @@ const EventManagementScreen: React.FC = () => {
     });
   };
 
+  const handlePlayerClick = (player: any) => {
+    // Check if player needs role selection
+    if (needsRoleSelection(player)) {
+      // Show role selection dialog and add player directly
+      Alert.alert(
+        "Valitse rooli",
+        `${player.name} voi pelata useassa roolissa. Missä roolissa lisätään tähän tapahtumaan?`,
+        [
+          {
+            text: "Peruuta",
+            style: "cancel",
+          },
+          {
+            text: "Kenttäpelaaja",
+            onPress: () => {
+              // Use "H" as default field player position for playerRole
+              // TeamGenerationScreen will use field skills for any non-MV role
+              handleAddPlayerToEvent(player.id, "H");
+            },
+          },
+          {
+            text: "Maalivahti",
+            onPress: () => handleAddPlayerToEvent(player.id, "MV"),
+          },
+        ]
+      );
+    } else {
+      // Normal toggle for multi-select
+      togglePlayerSelection(player.id);
+    }
+  };
+
   const handleRemovePlayerFromEvent = async (playerId: string) => {
     if (!selectedEvent) return;
     setRemovingPlayerId(playerId);
     try {
       const eventRef = doc(db, "events", selectedEvent.id);
       const currentPlayers = selectedEvent.registeredPlayers || [];
+      const currentReservePlayers = selectedEvent.reservePlayers || [];
+
+      // Check if player is in reserve list
+      const isInReserve = currentReservePlayers.includes(playerId);
+
+      if (isInReserve) {
+        // Simply remove from reserve list
+        await updateDoc(eventRef, {
+          reservePlayers: arrayRemove(playerId),
+        });
+        Alert.alert("Onnistui", "Varapelaaja poistettu tapahtumasta");
+        await fetchEvents();
+        setRemovingPlayerId(null);
+        return;
+      }
 
       // Find the player being removed to check their position
       const removedPlayer = players.find((p) => p.id === playerId);
@@ -770,14 +959,19 @@ const EventManagementScreen: React.FC = () => {
                     <View style={styles.eventDetailRow}>
                       <Ionicons name="person-outline" size={16} color="#666" />
                       <Text style={styles.eventDetailText}>
-                        {getFieldPlayers(event.registeredPlayers || []).length}{" "}
+                        {
+                          getFieldPlayers(event.registeredPlayers || [], event)
+                            .length
+                        }{" "}
                         / {event.maxPlayers || "∞"} pelaajaa
                         {event.maxGoalkeepers && event.maxGoalkeepers > 0 && (
                           <Text style={styles.goalkeeperText}>
                             {" • "}
                             {
-                              getGoalkeepers(event.registeredPlayers || [])
-                                .length
+                              getGoalkeepers(
+                                event.registeredPlayers || [],
+                                event
+                              ).length
                             }{" "}
                             / {event.maxGoalkeepers} MV
                           </Text>
@@ -821,22 +1015,21 @@ const EventManagementScreen: React.FC = () => {
               },
             ]}
           >
+            {/* Top row: Team name on left, action buttons on right */}
             <View style={styles.eventHeaderTop}>
               {(() => {
                 const eventTeam = teams.find(
                   (team) => team.id === selectedEvent.teamId
                 );
                 return (
-                  <View style={styles.titleContainer}>
-                    <Text
-                      style={[
-                        styles.title,
-                        { color: eventTeam?.color || "#1976d2" },
-                      ]}
-                    >
-                      {eventTeam?.name || "Tuntematon joukkue"}
-                    </Text>
-                  </View>
+                  <Text
+                    style={[
+                      styles.eventHeaderTeamName,
+                      { color: eventTeam?.color || "#1976d2" },
+                    ]}
+                  >
+                    {eventTeam?.name || "Tuntematon joukkue"}
+                  </Text>
                 );
               })()}
               <View style={styles.actionButtons}>
@@ -859,27 +1052,67 @@ const EventManagementScreen: React.FC = () => {
                 </TouchableOpacity>
               </View>
             </View>
-            <View style={styles.eventInfoRow}>
-              <View style={styles.eventInfoItem}>
-                <Ionicons name="calendar" size={16} color="#1976d2" />
-                <Text style={styles.eventInfoText}>
-                  {formatEventDate(selectedEvent.date)}
-                </Text>
-              </View>
-              <View style={styles.eventInfoItem}>
-                <Ionicons name="time" size={16} color="#1976d2" />
-                <Text style={styles.eventInfoText}>
-                  {formatEventTime(selectedEvent.date)}
-                </Text>
-              </View>
-              {selectedEvent.location && (
+
+            {/* Middle row: Event details and player counts */}
+            <View style={styles.eventHeaderMiddle}>
+              <View style={styles.eventInfoColumn}>
                 <View style={styles.eventInfoItem}>
-                  <Ionicons name="location" size={16} color="#1976d2" />
+                  <Ionicons
+                    name="information-circle"
+                    size={16}
+                    color="#1976d2"
+                  />
                   <Text style={styles.eventInfoText}>
-                    {selectedEvent.location}
+                    {selectedEvent.name || selectedEvent.title}
                   </Text>
                 </View>
-              )}
+                <View style={styles.eventInfoItem}>
+                  <Ionicons name="calendar" size={16} color="#1976d2" />
+                  <Text style={styles.eventInfoText}>
+                    {formatEventDate(selectedEvent.date)}
+                  </Text>
+                </View>
+                <View style={styles.eventInfoItem}>
+                  <Ionicons name="time" size={16} color="#1976d2" />
+                  <Text style={styles.eventInfoText}>
+                    {formatEventTime(selectedEvent.date)}
+                  </Text>
+                </View>
+                {selectedEvent.location && (
+                  <View style={styles.eventInfoItem}>
+                    <Ionicons name="location" size={16} color="#1976d2" />
+                    <Text style={styles.eventInfoText}>
+                      {selectedEvent.location}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Player count badges on the right */}
+              <View style={styles.eventHeaderPlayerCounts}>
+                <View style={styles.playerCountBadge}>
+                  <Ionicons name="people" size={20} color="#1976d2" />
+                  <Text style={styles.playerCountNumber}>
+                    {
+                      getFieldPlayers(selectedEvent.registeredPlayers || [])
+                        .length
+                    }
+                  </Text>
+                </View>
+
+                {selectedEvent.maxGoalkeepers &&
+                  selectedEvent.maxGoalkeepers > 0 && (
+                    <View style={[styles.playerCountBadge, { marginLeft: 8 }]}>
+                      <Text style={styles.goalkeeperBadgeEmoji}>🥅</Text>
+                      <Text style={styles.playerCountNumber}>
+                        {
+                          getGoalkeepers(selectedEvent.registeredPlayers || [])
+                            .length
+                        }
+                      </Text>
+                    </View>
+                  )}
+              </View>
             </View>
           </View>
 
@@ -913,7 +1146,11 @@ const EventManagementScreen: React.FC = () => {
                   selectedEvent.registeredPlayers || []
                 ).map((pid: string) => {
                   const player = players.find((p) => p.id === pid);
-                  const isGoalkeeper = player?.position === "MV";
+                  // Check playerRole from event first, then fall back to player.position
+                  const playerRole = selectedEvent?.playerRoles?.[pid];
+                  const isGoalkeeper =
+                    playerRole === "MV" ||
+                    (!playerRole && player?.position === "MV");
                   return (
                     <View
                       key={pid}
@@ -946,7 +1183,8 @@ const EventManagementScreen: React.FC = () => {
                               {(() => {
                                 const eventSkills = getPlayerEventSkills(
                                   player,
-                                  selectedEvent?.teamId
+                                  selectedEvent?.teamId,
+                                  playerRole
                                 );
                                 return (
                                   <>
@@ -974,6 +1212,89 @@ const EventManagementScreen: React.FC = () => {
                     </View>
                   );
                 })
+              )}
+
+              {/* Reserve Players Section */}
+              {(selectedEvent.reservePlayers || []).length > 0 && (
+                <View style={{ marginTop: 16 }}>
+                  <Text
+                    style={[
+                      styles.sectionTitle,
+                      { fontSize: 16, color: "#ff9800" },
+                    ]}
+                  >
+                    Varalla ({selectedEvent.reservePlayers.length})
+                  </Text>
+                  {sortPlayersByPosition(
+                    selectedEvent.reservePlayers || []
+                  ).map((pid: string) => {
+                    const player = players.find((p) => p.id === pid);
+                    if (!player) return null;
+                    const playerRole = selectedEvent?.playerRoles?.[player.id];
+                    const isGoalkeeper =
+                      playerRole === "MV" ||
+                      (!playerRole && player?.position === "MV");
+                    return (
+                      <View
+                        key={player.id}
+                        style={[
+                          styles.playerCard,
+                          { borderLeftWidth: 4, borderLeftColor: "#ff9800" },
+                          isGoalkeeper && styles.goalkeeperCard,
+                        ]}
+                      >
+                        <View style={styles.playerInfo}>
+                          <Ionicons
+                            name="person"
+                            size={20}
+                            color={getPlayerIconColor(
+                              player,
+                              selectedEvent.teamId
+                            )}
+                          />
+                          <View style={styles.playerDetails}>
+                            <Text
+                              style={[
+                                styles.playerName,
+                                isGoalkeeper && styles.goalkeeperName,
+                              ]}
+                            >
+                              {player.name}
+                              {isGoalkeeper && " 🥅"}
+                            </Text>
+                            <Text style={styles.playerSubinfo}>
+                              {(() => {
+                                const eventSkills = getPlayerEventSkills(
+                                  player,
+                                  selectedEvent?.teamId,
+                                  playerRole
+                                );
+                                return (
+                                  <>
+                                    {eventSkills.position} • Kat.{" "}
+                                    {eventSkills.category} •{" "}
+                                    {eventSkills.multiplier?.toFixed(1)}
+                                  </>
+                                );
+                              })()}
+                            </Text>
+                          </View>
+                        </View>
+                        <TouchableOpacity
+                          style={styles.removeButton}
+                          onPress={() => handleRemovePlayerFromEvent(player.id)}
+                          disabled={removingPlayerId === player.id}
+                        >
+                          {removingPlayerId === player.id ? (
+                            <ActivityIndicator size="small" color="#dc3545" />
+                          ) : (
+                            <Ionicons name="close" size={18} color="#dc3545" />
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </View>
               )}
             </ScrollView>
           </View>
@@ -1175,7 +1496,8 @@ const EventManagementScreen: React.FC = () => {
                   (player) =>
                     !(selectedEvent?.registeredPlayers || []).includes(
                       player.id
-                    )
+                    ) &&
+                    !(selectedEvent?.reservePlayers || []).includes(player.id)
                 )
                 .sort((a, b) => {
                   // Sort goalkeepers to the end
@@ -1186,6 +1508,7 @@ const EventManagementScreen: React.FC = () => {
                 .map((player) => {
                   const isGoalkeeper = player.position === "MV";
                   const isSelected = selectedPlayerIds.includes(player.id);
+                  const playerNeedsRoleSelection = needsRoleSelection(player);
                   return (
                     <TouchableOpacity
                       key={player.id}
@@ -1194,7 +1517,7 @@ const EventManagementScreen: React.FC = () => {
                         isGoalkeeper && styles.goalkeeperCard,
                         isSelected && styles.selectedPlayerCard,
                       ]}
-                      onPress={() => togglePlayerSelection(player.id)}
+                      onPress={() => handlePlayerClick(player)}
                       disabled={
                         addingPlayerId === player.id || isAddingMultiplePlayers
                       }
@@ -1414,6 +1737,42 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
+  },
+  eventHeaderTeamName: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#1976d2",
+  },
+  eventHeaderMiddle: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 16,
+  },
+  eventInfoColumn: {
+    flex: 1,
+    gap: 8,
+  },
+  eventHeaderPlayerCounts: {
+    flexDirection: "row",
+    marginLeft: 16,
+    alignItems: "center",
+  },
+  playerCountBadge: {
+    backgroundColor: "#f5f5f5",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  playerCountNumber: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#1976d2",
+  },
+  goalkeeperBadgeEmoji: {
+    fontSize: 20,
   },
   eventInfoRow: {
     flexDirection: "column",

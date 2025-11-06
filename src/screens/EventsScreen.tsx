@@ -42,46 +42,94 @@ const EventsScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [isRoleSelectionModalVisible, setIsRoleSelectionModalVisible] =
     useState(false);
-  const [selectedRole, setSelectedRole] = useState<string>("");
   const [pendingRegistrationEventId, setPendingRegistrationEventId] = useState<
     string | null
   >(null);
 
   // Helper functions for player counting by position
-  const getFieldPlayers = (playerIds: string[]) => {
+  // Note: These check event-specific playerRoles first, then fall back to player's default position
+  const getFieldPlayers = (playerIds: string[], event?: Event) => {
     return playerIds.filter((id) => {
       const player = players.find((p) => p.id === id);
-      return player && ["H", "P", "H/P"].includes(player.position);
+      if (!player) return false;
+
+      // Check if player has selected a specific role for this event
+      const eventRole = event?.playerRoles?.[id];
+      if (eventRole) {
+        console.log(
+          `🔍 Player ${
+            player.name
+          } has event role: ${eventRole}, isFieldPlayer: ${["H", "P"].includes(
+            eventRole
+          )}`
+        );
+        return ["H", "P"].includes(eventRole);
+      }
+
+      // Fall back to player's default position
+      console.log(
+        `🔍 Player ${player.name} using default position: ${
+          player.position
+        }, isFieldPlayer: ${["H", "P", "H/P"].includes(player.position)}`
+      );
+      return ["H", "P", "H/P"].includes(player.position);
     });
   };
 
-  const getGoalkeepers = (playerIds: string[]) => {
+  const getGoalkeepers = (playerIds: string[], event?: Event) => {
     return playerIds.filter((id) => {
       const player = players.find((p) => p.id === id);
-      return player && player.position === "MV";
-    });
-  };
+      if (!player) return false;
 
-  // Helper function to sort players - goalkeepers at the end
-  const sortPlayersByPosition = (playerData: any[]) => {
+      // Check if player has selected a specific role for this event
+      const eventRole = event?.playerRoles?.[id];
+      if (eventRole) {
+        console.log(
+          `🥅 Player ${
+            player.name
+          } has event role: ${eventRole}, isGoalkeeper: ${eventRole === "MV"}`
+        );
+        return eventRole === "MV";
+      }
+
+      // Fall back to player's default position
+      console.log(
+        `🥅 Player ${player.name} using default position: ${
+          player.position
+        }, isGoalkeeper: ${player.position === "MV"}`
+      );
+      return player.position === "MV";
+    });
+  }; // Helper function to sort players - goalkeepers at the end
+  const sortPlayersByPosition = (playerData: any[], event?: any) => {
     return playerData.sort((a, b) => {
-      if (a.position === "MV" && b.position !== "MV") return 1;
-      if (a.position !== "MV" && b.position === "MV") return -1;
+      // Check playerRole from event first, then fall back to position
+      const aRole = event?.playerRoles?.[a.id] || a.position;
+      const bRole = event?.playerRoles?.[b.id] || b.position;
+
+      if (aRole === "MV" && bRole !== "MV") return 1;
+      if (aRole !== "MV" && bRole === "MV") return -1;
       return a.name.localeCompare(b.name);
     });
   };
 
   // Helper function to check if player needs role selection
   const needsRoleSelection = (player: any): boolean => {
-    if (!player || !player.positions || player.positions.length <= 1) {
+    console.log("🔍 needsRoleSelection check:", {
+      player: player?.id,
+      hasPositions: !!player?.positions,
+      positions: player?.positions,
+      length: player?.positions?.length,
+      hasMV: player?.positions?.includes("MV"),
+    });
+
+    if (!player || !player.positions || player.positions.length === 0) {
+      console.log("❌ No positions found, returning false");
       return false;
     }
-    // Player needs role selection if they have MV AND at least one field position
-    const hasMV = player.positions.includes("MV");
-    const hasFieldPosition = player.positions.some((p: string) =>
-      ["H", "P"].includes(p)
-    );
-    return hasMV && hasFieldPosition;
+    // Player needs role selection only if they have MV as one of their positions
+    const result = player.positions.includes("MV");
+    return result;
   };
 
   const navigation = useNavigation<EventsScreenNavigationProp>();
@@ -256,6 +304,7 @@ const EventsScreen: React.FC = () => {
       name: user.displayName || user.email?.split("@")[0] || "Käyttäjä",
       email: user.email || "",
       position: playerData?.position || "H",
+      positions: playerData?.positions || undefined,
       skillLevel: playerData?.skillLevel || 5,
       teamIds: playerData?.teamIds || [],
       isActive: playerData?.isActive !== false,
@@ -331,7 +380,17 @@ const EventsScreen: React.FC = () => {
   }, [selectedEvent, currentPlayer, players]);
 
   const handleRegistration = async () => {
-    if (!selectedEvent || !currentPlayer) return;
+    console.log("🎯 EventsScreen handleRegistration called", {
+      selectedEvent: selectedEvent?.id,
+      currentPlayer: currentPlayer?.id,
+      playerPositions: currentPlayer?.positions,
+      needsRole: currentPlayer ? needsRoleSelection(currentPlayer) : false,
+    });
+
+    if (!selectedEvent || !currentPlayer) {
+      console.log("❌ Missing selectedEvent or currentPlayer");
+      return;
+    }
     setRegistrationLoading(true);
     try {
       const eventRef = doc(db, "events", selectedEvent.id);
@@ -437,21 +496,37 @@ const EventsScreen: React.FC = () => {
         }
 
         setIsRegistered(false);
+        setRegistrationLoading(false);
+        return;
       } else if (isReserve) {
         // Unregister from reserve list
         await updateDoc(eventRef, {
           reservePlayers: arrayRemove(currentPlayer.id),
         });
         setIsReserve(false);
+        setRegistrationLoading(false);
         Alert.alert("Onnistui", "Varamies-ilmoittautuminen peruttu");
+        return;
       } else {
         // Check if event is full based on player position
         const eventDoc = await getDoc(eventRef);
         const eventData = eventDoc.data();
         const currentRegistered = eventData?.registeredPlayers || [];
 
-        const currentFieldPlayers = getFieldPlayers(currentRegistered);
-        const currentGoalkeepers = getGoalkeepers(currentRegistered);
+        // Create event object with playerRoles for role checking
+        const eventWithRoles = {
+          ...selectedEvent,
+          playerRoles: eventData?.playerRoles,
+        };
+
+        const currentFieldPlayers = getFieldPlayers(
+          currentRegistered,
+          eventWithRoles
+        );
+        const currentGoalkeepers = getGoalkeepers(
+          currentRegistered,
+          eventWithRoles
+        );
 
         const isGoalkeeper = currentPlayer.position === "MV";
         const isEventFull = isGoalkeeper
@@ -633,9 +708,14 @@ const EventsScreen: React.FC = () => {
         } else {
           // Register normally (event not full and either team member or after threshold)
           // Check if player needs role selection
+          // Check if role selection is needed
           if (needsRoleSelection(currentPlayer)) {
+            // Close event details modal first to prevent modal conflicts
+            setEventModalVisible(false);
+
             // Show role selection modal
             setPendingRegistrationEventId(selectedEvent.id);
+            setRegistrationLoading(false);
             setIsRoleSelectionModalVisible(true);
           } else {
             // Direct registration without role selection
@@ -643,6 +723,7 @@ const EventsScreen: React.FC = () => {
               registeredPlayers: arrayUnion(currentPlayer.id),
             });
             setIsRegistered(true);
+            setRegistrationLoading(false);
             Alert.alert("Onnistui", "Ilmoittautuminen tallennettu");
           }
         }
@@ -650,7 +731,6 @@ const EventsScreen: React.FC = () => {
     } catch (error) {
       console.error("Error updating registration:", error);
       Alert.alert("Virhe", "Ilmoittautumisen tallennus epäonnistui");
-    } finally {
       setRegistrationLoading(false);
     }
   };
@@ -660,6 +740,13 @@ const EventsScreen: React.FC = () => {
       setIsRoleSelectionModalVisible(false);
       return;
     }
+
+    console.log("🎯 EventsScreen handleRoleSelection:", {
+      playerId: currentPlayer.id,
+      playerName: currentPlayer.name,
+      selectedRole: role,
+      eventId: pendingRegistrationEventId,
+    });
 
     setRegistrationLoading(true);
     setIsRoleSelectionModalVisible(false);
@@ -674,7 +761,6 @@ const EventsScreen: React.FC = () => {
       });
 
       setIsRegistered(true);
-      setSelectedRole("");
       setPendingRegistrationEventId(null);
       Alert.alert("Onnistui", "Ilmoittautuminen tallennettu");
     } catch (error) {
@@ -709,8 +795,8 @@ const EventsScreen: React.FC = () => {
 
     // Calculate position-based participant counts
     const registeredPlayerIds = item.registeredPlayers || [];
-    const fieldPlayerCount = getFieldPlayers(registeredPlayerIds).length;
-    const goalkeeperCount = getGoalkeepers(registeredPlayerIds).length;
+    const fieldPlayerCount = getFieldPlayers(registeredPlayerIds, item).length;
+    const goalkeeperCount = getGoalkeepers(registeredPlayerIds, item).length;
 
     // Hae joukkueen väri
     const team = teams.find((t) => t.id === item.teamId);
@@ -788,6 +874,14 @@ const EventsScreen: React.FC = () => {
     </View>
   );
 
+  // Debug: Log modal state on every render
+  console.log("🎭 EventsScreen render - Modal state:", {
+    isRoleSelectionModalVisible,
+    pendingRegistrationEventId,
+    hasCurrentPlayer: !!currentPlayer,
+    currentPlayerPositions: currentPlayer?.positions,
+  });
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -824,93 +918,6 @@ const EventsScreen: React.FC = () => {
         }
         ListEmptyComponent={!loading ? <EmptyState /> : null}
       />
-
-      {/* Roolin valinta modal */}
-      <Modal
-        visible={isRoleSelectionModalVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => {
-          setIsRoleSelectionModalVisible(false);
-          setSelectedRole("");
-          setPendingRegistrationEventId(null);
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Valitse roolisi</Text>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => {
-                  setIsRoleSelectionModalVisible(false);
-                  setSelectedRole("");
-                  setPendingRegistrationEventId(null);
-                }}
-              >
-                <Ionicons name="close" size={24} color="#666" />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.roleSelectionDescription}>
-              Sinulla on useita pelipaikkoja. Valitse rooli tälle tapahtumalle:
-            </Text>
-
-            {((currentPlayer as any)?.positions || []).map(
-              (position: string) => {
-                const labels: Record<string, string> = {
-                  H: "Hyökkääjä",
-                  P: "Puolustaja",
-                  MV: "Maalivahti",
-                };
-
-                return (
-                  <TouchableOpacity
-                    key={position}
-                    style={[
-                      styles.roleOption,
-                      selectedRole === position && styles.selectedRoleOption,
-                    ]}
-                    onPress={() => setSelectedRole(position)}
-                  >
-                    <Text
-                      style={[
-                        styles.roleOptionText,
-                        selectedRole === position &&
-                          styles.selectedRoleOptionText,
-                      ]}
-                    >
-                      {labels[position] || position}
-                    </Text>
-                    {selectedRole === position && (
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={24}
-                        color="#007AFF"
-                      />
-                    )}
-                  </TouchableOpacity>
-                );
-              }
-            )}
-
-            <TouchableOpacity
-              style={[
-                styles.confirmRoleButton,
-                !selectedRole && styles.disabledButton,
-              ]}
-              onPress={() => {
-                if (selectedRole) {
-                  handleRoleSelection(selectedRole);
-                }
-              }}
-              disabled={!selectedRole}
-            >
-              <Text style={styles.confirmRoleButtonText}>Vahvista</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
       {/* Joukkuevalinta modal */}
       <Modal
@@ -1080,8 +1087,10 @@ const EventsScreen: React.FC = () => {
                     />
                     <Text style={styles.participantText}>
                       {
-                        getFieldPlayers(selectedEvent.registeredPlayers || [])
-                          .length
+                        getFieldPlayers(
+                          selectedEvent.registeredPlayers || [],
+                          selectedEvent
+                        ).length
                       }{" "}
                       / {selectedEvent.maxPlayers} pelaajaa
                       {selectedEvent.maxGoalkeepers &&
@@ -1090,7 +1099,8 @@ const EventsScreen: React.FC = () => {
                             {" • "}
                             {
                               getGoalkeepers(
-                                selectedEvent.registeredPlayers || []
+                                selectedEvent.registeredPlayers || [],
+                                selectedEvent
                               ).length
                             }{" "}
                             / {selectedEvent.maxGoalkeepers} MV
@@ -1143,63 +1153,69 @@ const EventsScreen: React.FC = () => {
                         </Text>
 
                         <View style={styles.playersList}>
-                          {sortPlayersByPosition(registeredPlayers).map(
-                            (player, index) => {
-                              const isGoalkeeper = player?.position === "MV";
-                              return (
+                          {sortPlayersByPosition(
+                            registeredPlayers,
+                            selectedEvent
+                          ).map((player, index) => {
+                            // Check playerRole from event first, then fall back to player.position
+                            const playerRole =
+                              selectedEvent?.playerRoles?.[player.id];
+                            const isGoalkeeper =
+                              playerRole === "MV" ||
+                              (!playerRole && player?.position === "MV");
+                            return (
+                              <View
+                                key={player.id}
+                                style={[
+                                  styles.playerItem,
+                                  isGoalkeeper && {
+                                    borderLeftWidth: 4,
+                                    borderLeftColor: "#ff9800",
+                                    backgroundColor: "#fff8e1",
+                                  },
+                                ]}
+                              >
                                 <View
-                                  key={player.id}
                                   style={[
-                                    styles.playerItem,
+                                    styles.playerIcon,
                                     isGoalkeeper && {
-                                      borderLeftWidth: 4,
-                                      borderLeftColor: "#ff9800",
-                                      backgroundColor: "#fff8e1",
+                                      backgroundColor: "#ff9800",
                                     },
                                   ]}
                                 >
-                                  <View
+                                  <Text
                                     style={[
-                                      styles.playerIcon,
+                                      styles.playerNumber,
+                                      isGoalkeeper && { color: "#fff" },
+                                    ]}
+                                  >
+                                    {index + 1}
+                                  </Text>
+                                </View>
+                                <View style={styles.playerInfo}>
+                                  <Text
+                                    style={[
+                                      styles.playerName,
                                       isGoalkeeper && {
-                                        backgroundColor: "#ff9800",
+                                        color: "#ff9800",
+                                        fontWeight: "600",
                                       },
                                     ]}
                                   >
-                                    <Text
-                                      style={[
-                                        styles.playerNumber,
-                                        isGoalkeeper && { color: "#fff" },
-                                      ]}
-                                    >
-                                      {index + 1}
+                                    {player.name ||
+                                      player.email ||
+                                      `ID: ${player.id}`}
+                                    {isGoalkeeper && " 🥅"}
+                                  </Text>
+                                  {player.email && (
+                                    <Text style={styles.playerEmail}>
+                                      {player.email}
                                     </Text>
-                                  </View>
-                                  <View style={styles.playerInfo}>
-                                    <Text
-                                      style={[
-                                        styles.playerName,
-                                        isGoalkeeper && {
-                                          color: "#ff9800",
-                                          fontWeight: "600",
-                                        },
-                                      ]}
-                                    >
-                                      {player.name ||
-                                        player.email ||
-                                        `ID: ${player.id}`}
-                                      {isGoalkeeper && " 🥅"}
-                                    </Text>
-                                    {player.email && (
-                                      <Text style={styles.playerEmail}>
-                                        {player.email}
-                                      </Text>
-                                    )}
-                                  </View>
+                                  )}
                                 </View>
-                              );
-                            }
-                          )}
+                              </View>
+                            );
+                          })}
                         </View>
                       </View>
                     )}
@@ -1246,6 +1262,63 @@ const EventsScreen: React.FC = () => {
                 </>
               )}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Roolin valinta modal */}
+      <Modal
+        visible={isRoleSelectionModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => {
+          setIsRoleSelectionModalVisible(false);
+          setPendingRegistrationEventId(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Pelipaikkasi tänään</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => {
+                  setIsRoleSelectionModalVisible(false);
+                  setPendingRegistrationEventId(null);
+                }}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.roleSelectionDescription}>
+              Oletko tänään maalivahti?
+            </Text>
+
+            <View style={styles.roleButtonsContainer}>
+              <TouchableOpacity
+                style={[styles.roleButton, styles.roleButtonNo]}
+                onPress={() => {
+                  // Käytä ensimmäistä kenttäpelaajan positiota tai "H" oletuksena
+                  const fieldPosition =
+                    (currentPlayer as any)?.positions?.find((p: string) =>
+                      ["H", "P"].includes(p)
+                    ) || "H";
+                  handleRoleSelection(fieldPosition);
+                }}
+              >
+                <Text style={styles.roleButtonText}>Ei</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.roleButton, styles.roleButtonYes]}
+                onPress={() => handleRoleSelection("MV")}
+              >
+                <Text style={[styles.roleButtonText, { color: "white" }]}>
+                  Kyllä
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1695,6 +1768,32 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontWeight: "600",
+  },
+  roleButtonsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    marginTop: 16,
+  },
+  roleButton: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  roleButtonNo: {
+    backgroundColor: "#f5f5f5",
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  roleButtonYes: {
+    backgroundColor: "#007AFF",
+  },
+  roleButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
   },
 });
 

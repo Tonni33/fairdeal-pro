@@ -142,6 +142,17 @@ const UserManagementScreen: React.FC = () => {
   const [editPhone, setEditPhone] = useState("");
   const [editPosition, setEditPosition] = useState("H"); // Legacy: primary position
   const [editPositions, setEditPositions] = useState<string[]>(["H"]); // New: array of positions
+  // Kenttäpelaajan taidot
+  const [editFieldCategory, setEditFieldCategory] = useState(1);
+  const [editFieldMultiplier, setEditFieldMultiplier] = useState(1.0);
+  // Maalivahdin taidot
+  const [editGoalkeeperCategory, setEditGoalkeeperCategory] = useState(1);
+  const [editGoalkeeperMultiplier, setEditGoalkeeperMultiplier] = useState(1.0);
+  // Mikä roolin taitoja ollaan muokkaamassa ('field' | 'goalkeeper')
+  const [editSkillsRole, setEditSkillsRole] = useState<"field" | "goalkeeper">(
+    "field"
+  );
+  // Legacy - yhteensopivuus
   const [editCategory, setEditCategory] = useState(1);
   const [editMultiplier, setEditMultiplier] = useState(1.0);
   const [editTeamMember, setEditTeamMember] = useState(true); // Vakiokävijä-status
@@ -161,15 +172,29 @@ const UserManagementScreen: React.FC = () => {
   const categories = [1, 2, 3];
 
   // Kerroin vaihtoehdot kategoriaperusteisesti
-  const getMultiplierOptions = () => {
-    if (editCategory === 1) {
+  const getMultiplierOptions = (category: number) => {
+    if (category === 1) {
       return [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9];
-    } else if (editCategory === 2) {
+    } else if (category === 2) {
       return [2.0, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9];
     } else {
       return [3.0, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9];
     }
   };
+
+  // Nykyisen muokattavan roolin taidot
+  const getCurrentCategory = () =>
+    editSkillsRole === "field" ? editFieldCategory : editGoalkeeperCategory;
+  const getCurrentMultiplier = () =>
+    editSkillsRole === "field" ? editFieldMultiplier : editGoalkeeperMultiplier;
+  const setCurrentCategory = (value: number) =>
+    editSkillsRole === "field"
+      ? setEditFieldCategory(value)
+      : setEditGoalkeeperCategory(value);
+  const setCurrentMultiplier = (value: number) =>
+    editSkillsRole === "field"
+      ? setEditFieldMultiplier(value)
+      : setEditGoalkeeperMultiplier(value);
 
   // Helper function to get team skills with local state fallback
   const getTeamSkillsWithLocal = (playerId: string, teamId: string) => {
@@ -254,8 +279,53 @@ const UserManagementScreen: React.FC = () => {
         setEditPositions(positions);
         setEditPosition(arrayToPosition(positions));
 
+        // Load field player skills (H/P)
+        const fieldCategory =
+          (teamSkills as any)?.field?.category ||
+          teamSkills?.category ||
+          freshPlayer.category;
+        const fieldMultiplier =
+          (teamSkills as any)?.field?.multiplier ||
+          teamSkills?.multiplier ||
+          freshPlayer.multiplier;
+
+        setEditFieldCategory(fieldCategory);
+        setEditFieldMultiplier(fieldMultiplier);
+
+        // Load goalkeeper skills (MV)
+        // If goalkeeper skills exist separately, use them
+        // Otherwise fall back to field skills (legacy data)
+        const goalkeeperCategory =
+          (teamSkills as any)?.goalkeeper?.category || fieldCategory;
+        const goalkeeperMultiplier =
+          (teamSkills as any)?.goalkeeper?.multiplier || fieldMultiplier;
+
+        setEditGoalkeeperCategory(goalkeeperCategory);
+        setEditGoalkeeperMultiplier(goalkeeperMultiplier);
+
+        console.log("📊 Loaded player skills:", {
+          playerId: freshPlayer.id,
+          field: { category: fieldCategory, multiplier: fieldMultiplier },
+          goalkeeper: {
+            category: goalkeeperCategory,
+            multiplier: goalkeeperMultiplier,
+          },
+          teamSkills: teamSkills,
+        });
+
+        // Set initial role to field, switch to goalkeeper if player only has MV
+        setEditSkillsRole(
+          positions.includes("MV") &&
+            !positions.includes("H") &&
+            !positions.includes("P")
+            ? "goalkeeper"
+            : "field"
+        );
+
+        // Legacy fields for backwards compatibility
         setEditCategory(teamSkills?.category || freshPlayer.category);
         setEditMultiplier(teamSkills?.multiplier || freshPlayer.multiplier);
+
         // Aseta vakiokävijä-status valitulle joukkueelle tuoreesta datasta
         setEditTeamMember(freshPlayer.teamMember?.[selectedTeam] ?? true);
 
@@ -420,9 +490,20 @@ const UserManagementScreen: React.FC = () => {
             "Creating default team skills for new team:",
             addedTeamId
           );
+          const defaultCategory = selectedPlayer.category || 2;
+          const defaultMultiplier = selectedPlayer.multiplier || 2.0;
           currentTeamSkillsData[addedTeamId] = {
-            category: selectedPlayer.category || 2,
-            multiplier: selectedPlayer.multiplier || 2.0,
+            field: {
+              category: defaultCategory,
+              multiplier: defaultMultiplier,
+            },
+            goalkeeper: {
+              category: defaultCategory,
+              multiplier: defaultMultiplier,
+            },
+            // Legacy fields
+            category: defaultCategory,
+            multiplier: defaultMultiplier,
             position: selectedPlayer.position || "H",
             updatedAt: new Date(),
           };
@@ -450,28 +531,52 @@ const UserManagementScreen: React.FC = () => {
         const teamMemberChanged = editTeamMember !== currentTeamMember;
 
         // Tarkista onko taidot muuttuneet nykyisistä taidoista (joukkuekohtaisista tai perustaidoista)
-        const currentCategory =
-          currentTeamSkills?.category || selectedPlayer.category;
-        const currentMultiplier =
-          currentTeamSkills?.multiplier || selectedPlayer.multiplier;
+        const currentFieldCategory =
+          (currentTeamSkills as any)?.field?.category ||
+          currentTeamSkills?.category ||
+          selectedPlayer.category;
+        const currentFieldMultiplier =
+          (currentTeamSkills as any)?.field?.multiplier ||
+          currentTeamSkills?.multiplier ||
+          selectedPlayer.multiplier;
+        const currentGoalkeeperCategory =
+          (currentTeamSkills as any)?.goalkeeper?.category ||
+          currentFieldCategory;
+        const currentGoalkeeperMultiplier =
+          (currentTeamSkills as any)?.goalkeeper?.multiplier ||
+          currentFieldMultiplier;
         const currentPosition =
           currentTeamSkills?.position || selectedPlayer.position;
 
         const skillsChanged =
-          editCategory !== currentCategory ||
-          editMultiplier !== currentMultiplier ||
+          editFieldCategory !== currentFieldCategory ||
+          editFieldMultiplier !== currentFieldMultiplier ||
+          editGoalkeeperCategory !== currentGoalkeeperCategory ||
+          editGoalkeeperMultiplier !== currentGoalkeeperMultiplier ||
           editPosition !== currentPosition ||
           teamMemberChanged;
 
         console.log("Skills comparison:", {
           current: {
-            category: currentCategory,
-            multiplier: currentMultiplier,
+            field: {
+              category: currentFieldCategory,
+              multiplier: currentFieldMultiplier,
+            },
+            goalkeeper: {
+              category: currentGoalkeeperCategory,
+              multiplier: currentGoalkeeperMultiplier,
+            },
             position: currentPosition,
           },
           edited: {
-            category: editCategory,
-            multiplier: editMultiplier,
+            field: {
+              category: editFieldCategory,
+              multiplier: editFieldMultiplier,
+            },
+            goalkeeper: {
+              category: editGoalkeeperCategory,
+              multiplier: editGoalkeeperMultiplier,
+            },
             position: editPosition,
           },
           skillsChanged,
@@ -505,8 +610,18 @@ const UserManagementScreen: React.FC = () => {
           const updatedTeamSkills = {
             ...currentTeamSkills,
             [selectedTeam]: {
-              category: editCategory,
-              multiplier: editMultiplier,
+              // New role-based structure
+              field: {
+                category: editFieldCategory,
+                multiplier: editFieldMultiplier,
+              },
+              goalkeeper: {
+                category: editGoalkeeperCategory,
+                multiplier: editGoalkeeperMultiplier,
+              },
+              // Legacy fields for backwards compatibility
+              category: editFieldCategory, // Use field player category as default
+              multiplier: editFieldMultiplier, // Use field player multiplier as default
               position: arrayToPosition(editPositions), // Legacy: computed primary position
               updatedAt: new Date(),
             },
@@ -1153,6 +1268,54 @@ const UserManagementScreen: React.FC = () => {
                 ))}
               </View>
 
+              {/* Role tabs for players with multiple positions including MV */}
+              {editPositions.includes("MV") && (
+                <View style={styles.roleTabsContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.roleTab,
+                      editSkillsRole === "field" && styles.roleTabActive,
+                    ]}
+                    onPress={() => {
+                      console.log("🏃 Switching to field role");
+                      setEditSkillsRole("field");
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.roleTabText,
+                        editSkillsRole === "field" && styles.roleTabTextActive,
+                      ]}
+                    >
+                      Kenttäpelaaja
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.roleTab,
+                      editSkillsRole === "goalkeeper" && styles.roleTabActive,
+                    ]}
+                    onPress={() => {
+                      console.log("🥅 Switching to goalkeeper role", {
+                        currentCategory: editGoalkeeperCategory,
+                        currentMultiplier: editGoalkeeperMultiplier,
+                      });
+                      setEditSkillsRole("goalkeeper");
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.roleTabText,
+                        editSkillsRole === "goalkeeper" &&
+                          styles.roleTabTextActive,
+                      ]}
+                    >
+                      Maalivahti
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
               {/* Category */}
               <View style={styles.editInputGroup}>
                 <Text style={styles.label}>Kategoria</Text>
@@ -1165,7 +1328,7 @@ const UserManagementScreen: React.FC = () => {
                   }
                 >
                   <Text style={styles.selectorText}>
-                    Kategoria {editCategory}
+                    Kategoria {getCurrentCategory()}
                   </Text>
                   <Ionicons name="chevron-down" size={20} color="#666" />
                 </TouchableOpacity>
@@ -1176,12 +1339,18 @@ const UserManagementScreen: React.FC = () => {
                         key={cat}
                         style={styles.dropdownOption}
                         onPress={() => {
-                          handleCategoryChange(cat);
+                          setCurrentCategory(cat);
+                          // Päivitä kerroin automaattisesti uuden kategorian mukaan
+                          const multiplierOptions = getMultiplierOptions(cat);
+                          const currentMult = getCurrentMultiplier();
+                          if (!multiplierOptions.includes(currentMult)) {
+                            setCurrentMultiplier(multiplierOptions[0]);
+                          }
                           setEditDropdown(null);
                         }}
                       >
                         <Text style={styles.optionText}>Kategoria {cat}</Text>
-                        {editCategory === cat && (
+                        {getCurrentCategory() === cat && (
                           <Ionicons
                             name="checkmark"
                             size={20}
@@ -1206,23 +1375,23 @@ const UserManagementScreen: React.FC = () => {
                   }
                 >
                   <Text style={styles.selectorText}>
-                    {editMultiplier.toFixed(1)}
+                    {getCurrentMultiplier().toFixed(1)}
                   </Text>
                   <Ionicons name="chevron-down" size={20} color="#666" />
                 </TouchableOpacity>
                 {editDropdown === "multiplier" && (
                   <View style={styles.dropdownList}>
-                    {getMultiplierOptions().map((mult) => (
+                    {getMultiplierOptions(getCurrentCategory()).map((mult) => (
                       <TouchableOpacity
                         key={mult}
                         style={styles.dropdownOption}
                         onPress={() => {
-                          setEditMultiplier(mult);
+                          setCurrentMultiplier(mult);
                           setEditDropdown(null);
                         }}
                       >
                         <Text style={styles.optionText}>{mult.toFixed(1)}</Text>
-                        {editMultiplier === mult && (
+                        {getCurrentMultiplier() === mult && (
                           <Ionicons
                             name="checkmark"
                             size={20}
@@ -1668,6 +1837,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#333",
     marginLeft: 12,
+  },
+  roleTabsContainer: {
+    flexDirection: "row",
+    marginBottom: 16,
+    backgroundColor: "#f5f5f5",
+    borderRadius: 8,
+    padding: 4,
+  },
+  roleTab: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    alignItems: "center",
+  },
+  roleTabActive: {
+    backgroundColor: "#007AFF",
+  },
+  roleTabText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+  },
+  roleTabTextActive: {
+    color: "#fff",
   },
 });
 

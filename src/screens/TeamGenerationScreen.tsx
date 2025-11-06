@@ -54,8 +54,12 @@ const TeamGenerationScreen: React.FC = () => {
   const { user } = useAuth();
   const { events, players, teams, refreshData } = useApp();
 
-  // Helper function to get player's team-specific skills
-  const getPlayerTeamSkills = (player: Player, teamId?: string) => {
+  // Helper function to get player's team-specific skills based on their role
+  const getPlayerTeamSkills = (
+    player: Player,
+    teamId?: string,
+    playerRole?: string
+  ) => {
     if (!teamId || !player.teamSkills?.[teamId]) {
       // Return default player skills
       return {
@@ -66,13 +70,30 @@ const TeamGenerationScreen: React.FC = () => {
       };
     }
 
-    // Return team-specific skills
     const teamSkills = player.teamSkills[teamId];
+
+    // Determine which role's skills to use
+    // If playerRole is provided (from event registration), use that
+    // Otherwise, use player's default position
+    const roleToUse = playerRole || player.position;
+    const isGoalkeeper = roleToUse === "MV";
+
+    // Use role-specific skills if available, otherwise fall back to legacy fields
+    const roleSkills = isGoalkeeper
+      ? (teamSkills as any).goalkeeper
+      : (teamSkills as any).field;
+
+    const category =
+      roleSkills?.category || teamSkills.category || player.category;
+    const multiplier =
+      roleSkills?.multiplier || teamSkills.multiplier || player.multiplier;
+    const position = teamSkills.position || player.position;
+
     return {
-      category: teamSkills.category,
-      multiplier: teamSkills.multiplier,
-      position: teamSkills.position,
-      points: Math.round(teamSkills.multiplier * 100),
+      category,
+      multiplier,
+      position,
+      points: Math.round(multiplier * 100),
     };
   };
 
@@ -86,17 +107,23 @@ const TeamGenerationScreen: React.FC = () => {
   const [isTeamsSaved, setIsTeamsSaved] = useState(false);
 
   // Helper functions for player counting by position (same as EventsScreen)
-  const getFieldPlayers = (playerIds: string[]) => {
+  const getFieldPlayers = (playerIds: string[], event?: any) => {
     return playerIds.filter((id) => {
       const player = players.find((p) => p.id === id);
-      return player && ["H", "P", "H/P"].includes(player.position);
+      // Check playerRole first, then fall back to position
+      const eventToCheck = event || selectedEvent;
+      const role = eventToCheck?.playerRoles?.[id] || player?.position;
+      return player && ["H", "P", "H/P"].includes(role);
     });
   };
 
-  const getGoalkeepers = (playerIds: string[]) => {
+  const getGoalkeepers = (playerIds: string[], event?: any) => {
     return playerIds.filter((id) => {
       const player = players.find((p) => p.id === id);
-      return player && player.position === "MV";
+      // Check playerRole first, then fall back to position
+      const eventToCheck = event || selectedEvent;
+      const role = eventToCheck?.playerRoles?.[id] || player?.position;
+      return player && role === "MV";
     });
   };
 
@@ -154,13 +181,20 @@ const TeamGenerationScreen: React.FC = () => {
               };
             }
 
-            // Get team-specific skills for this player
-            const teamSkills = getPlayerTeamSkills(player, event.teamId);
+            // Get player's selected role for this event
+            const playerRole = event.playerRoles?.[player.id];
+
+            // Get team-specific skills for this player and role
+            const teamSkills = getPlayerTeamSkills(
+              player,
+              event.teamId,
+              playerRole
+            );
             return {
               ...player,
               category: teamSkills.category,
               multiplier: teamSkills.multiplier,
-              position: teamSkills.position,
+              position: playerRole || teamSkills.position, // Use selected role if available
               points: teamSkills.points,
             };
           });
@@ -209,13 +243,20 @@ const TeamGenerationScreen: React.FC = () => {
     return players
       .filter((player) => selectedEvent.registeredPlayers?.includes(player.id))
       .map((player) => {
-        // Apply team-specific skills for this event's team
-        const teamSkills = getPlayerTeamSkills(player, selectedEvent.teamId);
+        // Get player's selected role for this event (from playerRoles field)
+        const playerRole = selectedEvent.playerRoles?.[player.id];
+
+        // Apply team-specific skills for this event's team and role
+        const teamSkills = getPlayerTeamSkills(
+          player,
+          selectedEvent.teamId,
+          playerRole
+        );
         return {
           ...player,
           category: teamSkills.category,
           multiplier: teamSkills.multiplier,
-          position: teamSkills.position,
+          position: playerRole || teamSkills.position, // Use selected role if available
           points: teamSkills.points,
         };
       });
@@ -593,13 +634,17 @@ const TeamGenerationScreen: React.FC = () => {
                 </Text>
                 <View style={styles.eventPlayersContainer}>
                   <Text style={styles.eventPlayers}>
-                    {getFieldPlayers(event.registeredPlayers || []).length}{" "}
+                    {
+                      getFieldPlayers(event.registeredPlayers || [], event)
+                        .length
+                    }{" "}
                     pelaajaa
                     {event.maxGoalkeepers && event.maxGoalkeepers > 0 && (
                       <Text style={{ color: "#ff9800" }}>
                         {" • "}
                         {
-                          getGoalkeepers(event.registeredPlayers || []).length
+                          getGoalkeepers(event.registeredPlayers || [], event)
+                            .length
                         }{" "}
                         MV
                       </Text>
