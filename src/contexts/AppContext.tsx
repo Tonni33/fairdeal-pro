@@ -228,6 +228,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
               category: data.category || "Intermediate",
               multiplier: data.multiplier || 1,
               position: normalizedPosition,
+              positions: data.positions || undefined, // New: array of positions for multi-position support
               image: data.image || "",
               isAdmin: data.isAdmin || false,
               teamIds: data.teamIds || [],
@@ -399,6 +400,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
               category: data.category || 2,
               multiplier: data.multiplier || 1.0,
               position: data.position || "H",
+              positions: data.positions || undefined, // New: array of positions for multi-position support
               isActive: data.isActive !== false,
               joinedAt: data.joinedAt?.toDate
                 ? data.joinedAt.toDate()
