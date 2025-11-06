@@ -102,6 +102,7 @@ export interface License {
   price?: number; // Price in euros (0 for trial, 69 for half-season, 99 for season)
   isUsed: boolean; // Whether the license has been used
   usedByTeamId?: string; // Which team used this license
+  teamName?: string; // Name of the team that used this license (for easier identification)
   createdAt: Date;
   createdBy?: string; // Who created the license
   usedAt?: Date;

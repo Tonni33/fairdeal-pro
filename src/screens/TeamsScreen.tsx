@@ -712,10 +712,6 @@ const TeamsScreen: React.FC = () => {
       <Text style={styles.emptyStateText}>
         Admin voi luoda joukkueita tapahtumille Admin-valikosta
       </Text>
-      <Text style={styles.debugText}>
-        Debug: {events.length} tapahtumaa löytyi, {eventsWithTeams.length}{" "}
-        niistä sisältää joukkueita
-      </Text>
     </View>
   );
 

@@ -324,8 +324,13 @@ const MasterAdminScreen: React.FC = () => {
         createdAt: now,
         createdBy: user?.uid || "system",
         usedByTeamId: request.teamId,
+        teamName: request.teamName, // Add team name for easier identification
         isUsed: true,
         usedAt: now,
+        expiresAt: expiresAt,
+        seasonEndDate: expiresAt,
+        status: "active",
+        country: "FI", // Default to Finland
       };
 
       const licenseRef = await addDoc(collection(db, "licenses"), newLicense);

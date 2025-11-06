@@ -543,6 +543,12 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
         return;
       }
 
+      // Fetch team data to get team name
+      const teamRef = doc(db, "teams", teamId);
+      const teamSnap = await getDoc(teamRef);
+      const teamData = teamSnap.data();
+      const teamName = teamData?.name || "Unknown Team";
+
       const now = new Date();
       const expiresAt = new Date(
         now.getTime() + availableLicense.duration * 24 * 60 * 60 * 1000
@@ -551,11 +557,12 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
       const licenseRef = doc(db, "licenses", availableLicense.id);
       await updateDoc(licenseRef, {
         usedByTeamId: teamId,
+        teamName: teamName, // Add team name for easier identification
         isUsed: true,
         usedAt: now,
       });
 
-      const teamRef = doc(db, "teams", teamId);
+      // teamRef is already defined above, no need to redeclare
       await updateDoc(teamRef, {
         licenseId: availableLicense.id,
         licenceCode: availableLicense.code,
