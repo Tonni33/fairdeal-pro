@@ -80,11 +80,15 @@ const TeamsScreen: React.FC = () => {
     // Otherwise, create and save a new shuffle
     const playerIds = team.playerIds || [];
     const shuffled = [...playerIds];
+    // First, separate goalkeepers (prioritize MV position)
     const goalkeepers = shuffled.filter((id) => {
       const player = getPlayerById(id);
       return player && player.positions.includes("MV");
     });
+    // Then get field players (exclude those already in goalkeepers to avoid duplicates)
+    const goalkeeperIds = new Set(goalkeepers);
     const fieldPlayers = shuffled.filter((id) => {
+      if (goalkeeperIds.has(id)) return false; // Skip if already a goalkeeper
       const player = getPlayerById(id);
       return (
         player &&
@@ -625,7 +629,7 @@ const TeamsScreen: React.FC = () => {
 
               <View style={styles.teamsContainer}>
                 {teams.map((team, index) => (
-                  <View key={index} style={styles.teamContainer}>
+                  <View key={`team-${index}`} style={styles.teamContainer}>
                     <View style={styles.teamHeader}>
                       <Text style={styles.teamName}>{team.name}</Text>
                     </View>
@@ -639,7 +643,7 @@ const TeamsScreen: React.FC = () => {
                           const isGoalkeeper = player.positions.includes("MV");
                           return (
                             <View
-                              key={playerId}
+                              key={`team-${index}-player-${playerId}`}
                               style={[
                                 styles.playerItem,
                                 isGoalkeeper && {
