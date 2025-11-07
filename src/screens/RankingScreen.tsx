@@ -245,14 +245,32 @@ const RankingScreen: React.FC = () => {
     <View style={styles.container}>
       {/* Team Filter */}
       <TouchableOpacity
-        style={styles.filterButton}
+        style={[
+          styles.filterButton,
+          selectedTeam?.color && {
+            borderColor: selectedTeam.color,
+          },
+        ]}
         onPress={() => setIsTeamModalVisible(true)}
       >
-        <Ionicons name="filter" size={20} color="#007AFF" />
-        <Text style={styles.filterText}>
+        <Ionicons
+          name="filter"
+          size={20}
+          color={selectedTeam?.color || "#007AFF"}
+        />
+        <Text
+          style={[
+            styles.filterText,
+            selectedTeam?.color && { color: selectedTeam.color },
+          ]}
+        >
           {selectedTeam ? selectedTeam.name : "Valitse joukkue"}
         </Text>
-        <Ionicons name="chevron-down" size={20} color="#007AFF" />
+        <Ionicons
+          name="chevron-down"
+          size={20}
+          color={selectedTeam?.color || "#007AFF"}
+        />
       </TouchableOpacity>
 
       {/* Players List */}
@@ -329,12 +347,25 @@ const RankingScreen: React.FC = () => {
                   style={[
                     styles.teamOption,
                     selectedTeamId === item.id && styles.teamOptionSelected,
+                    selectedTeamId === item.id &&
+                      item.color && {
+                        borderLeftWidth: 4,
+                        borderLeftColor: item.color,
+                      },
                   ]}
                   onPress={() => {
                     setSelectedTeamId(item.id);
                     setIsTeamModalVisible(false);
                   }}
                 >
+                  {item.color && (
+                    <View
+                      style={[
+                        styles.teamColorDot,
+                        { backgroundColor: item.color },
+                      ]}
+                    />
+                  )}
                   <Text
                     style={[
                       styles.teamOptionText,
@@ -345,7 +376,11 @@ const RankingScreen: React.FC = () => {
                     {item.name}
                   </Text>
                   {selectedTeamId === item.id && (
-                    <Ionicons name="checkmark" size={24} color="#007AFF" />
+                    <Ionicons
+                      name="checkmark"
+                      size={24}
+                      color={item.color || "#007AFF"}
+                    />
                   )}
                 </TouchableOpacity>
               )}
@@ -467,13 +502,16 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-end",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
   },
   modalContent: {
     backgroundColor: "#fff",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderRadius: 12,
     maxHeight: "80%",
+    width: "100%",
+    maxWidth: 400,
   },
   modalHeader: {
     flexDirection: "row",
@@ -498,11 +536,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#f0f0f0",
   },
+  teamColorDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 12,
+  },
   teamOptionSelected: {
     backgroundColor: "#f0f8ff",
   },
   teamOptionText: {
     fontSize: 16,
+    flex: 1,
   },
   teamOptionTextSelected: {
     fontWeight: "600",
