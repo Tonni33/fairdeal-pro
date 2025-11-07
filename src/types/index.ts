@@ -234,6 +234,7 @@ export interface TeamGenerationOptions {
   goalkeepersPerTeam: number;
   balanceMethod: "skillLevel" | "points" | "hybrid";
   allowPartialTeams: boolean;
+  distributionMethod?: "skill-based" | "position-based"; // New: Choose distribution strategy
 }
 
 // Team type for team generation with enriched players

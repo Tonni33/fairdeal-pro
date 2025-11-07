@@ -141,6 +141,9 @@ const PlayersScreen: React.FC = () => {
         return;
       }
 
+      // Tyhjennä välimuisti ennen uutta latausta, jotta päivitetyt tiedot haetaan
+      playerCache.clear();
+
       // Lataa kaikki pelaajat rinnakkain Promise.all:lla - PALJON nopeampaa!
       const enriched = await Promise.all(
         players.map((player) => findPlayerByAnyId(player.id))

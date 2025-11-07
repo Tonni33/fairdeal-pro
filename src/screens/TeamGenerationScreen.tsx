@@ -43,6 +43,7 @@ interface EnrichedPlayer extends Player {
   multiplier: number; // Computed from teamSkills
   position: string; // Primary position for this event
   points: number; // Computed: multiplier * 100
+  assignedRole?: "defender" | "attacker"; // Role assigned during team generation
 }
 
 interface GeneratedTeam {
@@ -97,7 +98,16 @@ const TeamGenerationScreen: React.FC = () => {
 
     const category = roleSkills.category;
     const multiplier = roleSkills.multiplier;
-    const position = roleToUse;
+
+    // Determine position: Check if player has both H and P positions (hybrid player)
+    let position = roleToUse;
+    if (
+      !isGoalkeeper &&
+      player.positions.includes("H") &&
+      player.positions.includes("P")
+    ) {
+      position = "H/P";
+    }
 
     return {
       category,
@@ -115,6 +125,12 @@ const TeamGenerationScreen: React.FC = () => {
   const [existingTeams, setExistingTeams] = useState<GeneratedTeam[]>([]);
   const [hasExistingShuffle, setHasExistingShuffle] = useState(false);
   const [isTeamsSaved, setIsTeamsSaved] = useState(false);
+  const [distributionMethod, setDistributionMethod] = useState<
+    "skill-based" | "position-based"
+  >("position-based"); // Default to position-based
+  const [savedDistributionMethod, setSavedDistributionMethod] = useState<
+    "skill-based" | "position-based" | null
+  >(null); // Method used for saved teams
 
   // Helper functions for player counting by position (same as EventsScreen)
   const getFieldPlayers = (playerIds: string[], event?: any) => {
@@ -177,6 +193,17 @@ const TeamGenerationScreen: React.FC = () => {
     setGeneratedTeams([]);
   }, [selectedEventId]);
 
+  // Auto-hide warnings after 5 seconds
+  useEffect(() => {
+    if (warnings.length > 0) {
+      const timer = setTimeout(() => {
+        setWarnings([]);
+      }, 5000); // 5 seconds
+
+      return () => clearTimeout(timer); // Cleanup on unmount or warnings change
+    }
+  }, [warnings]);
+
   // Load existing generated teams when event is selected
   useEffect(() => {
     const loadExistingTeams = () => {
@@ -189,7 +216,13 @@ const TeamGenerationScreen: React.FC = () => {
       const event = events.find((e) => e.id === selectedEventId);
       if (event && event.generatedTeams && event.generatedTeams.teams) {
         const teams = event.generatedTeams.teams.map((team: any) => {
-          const teamPlayers = team.playerIds.map((id: string) => {
+          // Use new players array if available (with assignedRole), otherwise fall back to playerIds
+          const teamPlayerData =
+            team.players || team.playerIds.map((id: string) => ({ id }));
+
+          const teamPlayers = teamPlayerData.map((playerData: any) => {
+            const id =
+              typeof playerData === "string" ? playerData : playerData.id;
             const player = players.find((p) => p.id === id);
             if (!player) {
               return {
@@ -210,13 +243,18 @@ const TeamGenerationScreen: React.FC = () => {
               event.teamId,
               playerRole
             );
-            return {
+
+            // Create enriched player with assignedRole if available
+            const enrichedPlayer: EnrichedPlayer = {
               ...player,
               category: teamSkills.category,
               multiplier: teamSkills.multiplier,
               position: playerRole || teamSkills.position, // Use selected role if available
               points: teamSkills.points,
+              assignedRole: playerData.assignedRole, // Restore assignedRole from Firebase
             };
+
+            return enrichedPlayer;
           });
 
           return {
@@ -236,6 +274,9 @@ const TeamGenerationScreen: React.FC = () => {
         });
 
         setExistingTeams(teams);
+        setSavedDistributionMethod(
+          (event.generatedTeams as any).distributionMethod || null
+        );
         setHasExistingShuffle(
           event.generatedTeams.teams.some(
             (team: any) =>
@@ -244,6 +285,7 @@ const TeamGenerationScreen: React.FC = () => {
         );
       } else {
         setExistingTeams([]);
+        setSavedDistributionMethod(null);
         setHasExistingShuffle(false);
       }
     };
@@ -336,7 +378,11 @@ const TeamGenerationScreen: React.FC = () => {
         considerPositions: true,
         balanceMethod: "points" as const,
         allowPartialTeams: false,
+        distributionMethod: distributionMethod, // Use selected distribution method
       };
+
+      console.log("🎲 Using distribution method:", distributionMethod);
+      console.log("⚙️ Options:", JSON.stringify(options, null, 2));
 
       const result = TeamBalancer.generateBalancedTeams(
         registeredPlayers,
@@ -393,6 +439,21 @@ const TeamGenerationScreen: React.FC = () => {
       console.log("🔄 Updated state:", {
         newBalanceScore: result.balanceScore,
         teamsGenerated: newGeneratedTeams.length,
+      });
+
+      // Debug: Log generated teams with positions and assigned roles
+      newGeneratedTeams.forEach((team) => {
+        console.log(`\n👥 ${team.name} (${team.totalPoints} pts):`);
+        team.players.forEach((player) => {
+          const roleInfo = player.assignedRole
+            ? ` [assigned: ${player.assignedRole}]`
+            : "";
+          console.log(
+            `  - ${player.name}: ${player.position}${roleInfo} (${Math.round(
+              player.points
+            )}p)`
+          );
+        });
       });
 
       // Clear existing teams when generating new ones
@@ -488,13 +549,23 @@ const TeamGenerationScreen: React.FC = () => {
         eventId: selectedEvent.id,
         teams: teamsToSave.map((team: GeneratedTeam) => ({
           name: team.name,
-          playerIds: team.players.map((p: Player) => p.id),
+          players: team.players.map((p: Player) => {
+            const enrichedPlayer = p as EnrichedPlayer;
+            const playerData: any = { id: p.id };
+            // Only include assignedRole if it's defined (to avoid Firebase undefined error)
+            if (enrichedPlayer.assignedRole) {
+              playerData.assignedRole = enrichedPlayer.assignedRole;
+            }
+            return playerData;
+          }),
+          playerIds: team.players.map((p: Player) => p.id), // Keep for backwards compatibility
           totalPoints: team.totalPoints,
           color: team.color,
         })),
         generatedAt: new Date(),
         generatedBy: user?.email || "",
         balanceScore: scoreToSave, // Use the passed score instead of state
+        distributionMethod: distributionMethod, // Save the distribution method used
       };
 
       console.log("📋 Teams data to save:", teamsData);
@@ -520,8 +591,8 @@ const TeamGenerationScreen: React.FC = () => {
         {
           text: "OK",
           onPress: () => {
-            // Navigate to Teams screen to see the saved teams
-            navigation.navigate("Teams" as never);
+            // Stay on the current screen to see the saved teams
+            console.log("✅ Teams saved, staying on current screen");
           },
         },
       ]);
@@ -723,6 +794,57 @@ const TeamGenerationScreen: React.FC = () => {
               })}
             </View>
 
+            {/* Distribution Method Selection */}
+            <View style={styles.distributionMethodContainer}>
+              <Text style={styles.distributionMethodTitle}>Arvontatapa:</Text>
+
+              <TouchableOpacity
+                style={[
+                  styles.radioOption,
+                  distributionMethod === "skill-based" &&
+                    styles.radioOptionSelected,
+                ]}
+                onPress={() => setDistributionMethod("skill-based")}
+              >
+                <View style={styles.radioCircle}>
+                  {distributionMethod === "skill-based" && (
+                    <View style={styles.radioCircleSelected} />
+                  )}
+                </View>
+                <View style={styles.radioTextContainer}>
+                  <Text style={styles.radioLabel}>
+                    Tasapaino taitotason mukaan
+                  </Text>
+                  <Text style={styles.radioDescription}>
+                    Jakaa pelaajat kategorisoiden taitotason mukaan
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.radioOption,
+                  distributionMethod === "position-based" &&
+                    styles.radioOptionSelected,
+                ]}
+                onPress={() => setDistributionMethod("position-based")}
+              >
+                <View style={styles.radioCircle}>
+                  {distributionMethod === "position-based" && (
+                    <View style={styles.radioCircleSelected} />
+                  )}
+                </View>
+                <View style={styles.radioTextContainer}>
+                  <Text style={styles.radioLabel}>
+                    Tasapaino pelipaikkojen mukaan
+                  </Text>
+                  <Text style={styles.radioDescription}>
+                    Priorisoi puolustajien tasainen jakautuminen
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+
             <TouchableOpacity
               style={[
                 styles.generateButton,
@@ -783,12 +905,29 @@ const TeamGenerationScreen: React.FC = () => {
                 <View style={styles.teamPlayers}>
                   {team.players.map((player) => {
                     const isGoalkeeper = player.position === "MV";
+                    // Use assignedRole if available, otherwise fallback to position
+                    const usePositionBasedColors =
+                      savedDistributionMethod === "position-based";
+                    const hasAssignedRole = !!player.assignedRole;
+
+                    const isDefender =
+                      (hasAssignedRole && player.assignedRole === "defender") ||
+                      (!hasAssignedRole && player.position === "P") ||
+                      (!hasAssignedRole &&
+                        usePositionBasedColors &&
+                        player.position === "H/P"); // H/P defaults to defender only in position-based
+                    const isAttacker =
+                      (hasAssignedRole && player.assignedRole === "attacker") ||
+                      (!hasAssignedRole && player.position === "H");
+
                     return (
                       <View
                         key={player.id}
                         style={[
                           styles.teamPlayerItem,
                           isGoalkeeper && styles.teamGoalkeeperItem,
+                          isDefender && styles.teamDefenderItem,
+                          isAttacker && styles.teamAttackerItem,
                         ]}
                       >
                         <Text
@@ -802,7 +941,10 @@ const TeamGenerationScreen: React.FC = () => {
                         </Text>
                         <Text style={styles.teamPlayerPoints}>
                           {Math.round(player.points || player.multiplier * 100)}
-                          p
+                          p{" • "}
+                          <Text style={styles.teamPlayerPosition}>
+                            {player.position}
+                          </Text>
                         </Text>
                       </View>
                     );
@@ -853,12 +995,29 @@ const TeamGenerationScreen: React.FC = () => {
                 <View style={styles.teamPlayers}>
                   {team.players.map((player) => {
                     const isGoalkeeper = player.position === "MV";
+                    // Use assignedRole if available, otherwise fallback to position
+                    const usePositionBasedColors =
+                      distributionMethod === "position-based";
+                    const hasAssignedRole = !!player.assignedRole;
+
+                    const isDefender =
+                      (hasAssignedRole && player.assignedRole === "defender") ||
+                      (!hasAssignedRole && player.position === "P") ||
+                      (!hasAssignedRole &&
+                        usePositionBasedColors &&
+                        player.position === "H/P"); // H/P defaults to defender only in position-based
+                    const isAttacker =
+                      (hasAssignedRole && player.assignedRole === "attacker") ||
+                      (!hasAssignedRole && player.position === "H");
+
                     return (
                       <View
                         key={player.id}
                         style={[
                           styles.teamPlayerItem,
                           isGoalkeeper && styles.teamGoalkeeperItem,
+                          isDefender && styles.teamDefenderItem,
+                          isAttacker && styles.teamAttackerItem,
                         ]}
                       >
                         <Text
@@ -872,7 +1031,10 @@ const TeamGenerationScreen: React.FC = () => {
                         </Text>
                         <Text style={styles.teamPlayerPoints}>
                           {Math.round(player.points || player.multiplier * 100)}
-                          p
+                          p{" • "}
+                          <Text style={styles.teamPlayerPosition}>
+                            {player.position}
+                          </Text>
                         </Text>
                       </View>
                     );
@@ -1135,6 +1297,12 @@ const styles = StyleSheet.create({
   teamGoalkeeperItem: {
     backgroundColor: "#fff8e1",
   },
+  teamDefenderItem: {
+    backgroundColor: "#e8f5e9", // Vaalean vihreä
+  },
+  teamAttackerItem: {
+    backgroundColor: "#e3f2fd", // Vaalean sininen
+  },
   teamPlayerName: {
     fontSize: 14,
     color: "#333",
@@ -1147,6 +1315,11 @@ const styles = StyleSheet.create({
   teamPlayerPoints: {
     fontSize: 12,
     color: "#666",
+  },
+  teamPlayerPosition: {
+    fontSize: 11,
+    color: "#999",
+    fontWeight: "500",
   },
   actionButtons: {
     flexDirection: "row",
@@ -1224,6 +1397,64 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
     marginRight: 8,
+  },
+  distributionMethodContainer: {
+    marginTop: 16,
+    marginBottom: 16,
+    padding: 16,
+    backgroundColor: "white",
+    borderRadius: 12,
+  },
+  distributionMethodTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 12,
+  },
+  radioOption: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: "#e0e0e0",
+    marginBottom: 12,
+    backgroundColor: "#f8f9fa",
+  },
+  radioOptionSelected: {
+    borderColor: "#1976d2",
+    backgroundColor: "#e3f2fd",
+  },
+  radioCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#999",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+    marginTop: 2,
+  },
+  radioCircleSelected: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#1976d2",
+  },
+  radioTextContainer: {
+    flex: 1,
+  },
+  radioLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 4,
+  },
+  radioDescription: {
+    fontSize: 13,
+    color: "#666",
+    lineHeight: 18,
   },
 });
 

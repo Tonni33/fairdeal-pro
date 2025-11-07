@@ -20,6 +20,31 @@ export class TeamBalancer {
     teamAName: string = "Joukkue A",
     teamBName: string = "Joukkue B"
   ): TeamBalanceResult {
+    console.log(
+      "🎲 TEAMBALANCER: Starting team generation with method:",
+      options.distributionMethod || "skill-based (default)"
+    );
+
+    // Check distribution method
+    if (options.distributionMethod === "position-based") {
+      console.log("✅ Using POSITION-BASED distribution");
+      return this.generateByPosition(players, options, teamAName, teamBName);
+    }
+
+    // Default: skill-based distribution
+    console.log("✅ Using SKILL-BASED distribution");
+    return this.generateBySkill(players, options, teamAName, teamBName);
+  }
+
+  /**
+   * Generate balanced teams using SKILL-BASED distribution (original method)
+   */
+  private static generateBySkill(
+    players: EnrichedPlayer[],
+    options: TeamGenerationOptions,
+    teamAName: string,
+    teamBName: string
+  ): TeamBalanceResult {
     // All players passed to this function are already filtered to be active
     const activePlayers = players;
 
@@ -429,6 +454,320 @@ export class TeamBalancer {
     console.log("🎯 Final balance score:", Math.round(balanceScore));
 
     return Math.round(balanceScore);
+  }
+
+  /**
+   * Generate balanced teams using POSITION-BASED distribution
+   * Prioritizes defensive position balance, then distributes attackers
+   */
+  private static generateByPosition(
+    players: EnrichedPlayer[],
+    options: TeamGenerationOptions,
+    teamAName: string,
+    teamBName: string
+  ): TeamBalanceResult {
+    const activePlayers = players;
+
+    if (activePlayers.length === 0) {
+      return {
+        teams: [],
+        balanceScore: 0,
+        unusedPlayers: [],
+        warnings: ["No active players available"],
+      };
+    }
+
+    console.log("🎯 Position-based team generation starting");
+
+    // Separate players by position
+    const goalkeepers = activePlayers.filter((p) => p.position === "MV");
+    const pureDefenders = activePlayers.filter((p) => p.position === "P");
+    const hybridPlayers = activePlayers.filter((p) => p.position === "H/P");
+    const pureAttackers = activePlayers.filter((p) => p.position === "H");
+
+    console.log("📊 Position distribution:", {
+      goalkeepers: goalkeepers.length,
+      pureDefenders: pureDefenders.length,
+      hybridPlayers: hybridPlayers.length,
+      pureAttackers: pureAttackers.length,
+    });
+
+    // Create teams
+    const teams: GeneratedTeamData[] = [
+      {
+        id: "team-A",
+        name: teamAName,
+        adminId: "",
+        adminIds: [],
+        createdAt: new Date(),
+        players: [],
+        totalPoints: 0,
+        goalkeepers: [],
+        fieldPlayers: [],
+      },
+      {
+        id: "team-B",
+        name: teamBName,
+        adminId: "",
+        adminIds: [],
+        createdAt: new Date(),
+        players: [],
+        totalPoints: 0,
+        goalkeepers: [],
+        fieldPlayers: [],
+      },
+    ];
+
+    const warnings: string[] = [];
+
+    // Calculate defenders needed per team (approximately 2/5 or 40% of field players)
+    const totalFieldPlayers = activePlayers.length - goalkeepers.length;
+    const totalDefendersNeeded = Math.round(totalFieldPlayers * 0.4);
+    const defendersPerTeam = Math.ceil(totalDefendersNeeded / 2);
+
+    console.log(
+      `🛡️ Defenders calculation: ${totalFieldPlayers} field players * 0.4 = ${totalDefendersNeeded} total defenders → ${defendersPerTeam} per team`
+    );
+
+    // Step 1: Distribute pure defenders (P) with controlled randomness
+    const usedHybrids = this.distributeDefendersWithBalance(
+      teams,
+      pureDefenders,
+      hybridPlayers,
+      defendersPerTeam,
+      warnings
+    );
+
+    // Step 2: Distribute remaining field players (H and remaining H/P)
+    const remainingHybrids = hybridPlayers.filter(
+      (p) => !usedHybrids.has(p.id)
+    );
+
+    // Mark remaining H/P players as attackers
+    remainingHybrids.forEach((player) => {
+      (player as any).assignedRole = "attacker";
+    });
+
+    const remainingFieldPlayers = [...pureAttackers, ...remainingHybrids];
+
+    console.log(
+      `⚽ Distributing ${remainingFieldPlayers.length} attackers and remaining hybrids (${remainingHybrids.length} H/P as attackers)`
+    );
+
+    this.distributePlayersByCategory(teams, remainingFieldPlayers, warnings);
+
+    // Step 3: Distribute goalkeepers
+    this.distributeGoalkeepersByBalance(teams, goalkeepers, warnings);
+
+    // Calculate final team stats
+    teams.forEach((team) => {
+      team.totalPoints = team.players.reduce(
+        (sum, player) => sum + (player.points || 0),
+        0
+      );
+    });
+
+    const balanceScore = this.calculateBalanceScore(teams);
+
+    const usedPlayerIds = new Set(
+      teams.flatMap((team) => team.players.map((p) => p.id))
+    );
+    const unusedPlayers = activePlayers.filter((p) => !usedPlayerIds.has(p.id));
+
+    console.log("✅ Position-based generation complete");
+
+    return {
+      teams,
+      balanceScore,
+      unusedPlayers,
+      warnings,
+    };
+  }
+
+  /**
+   * Distribute defenders with controlled randomness
+   * Uses tier-based shuffling to maintain balance while adding variation
+   */
+  private static distributeDefendersWithBalance(
+    teams: GeneratedTeamData[],
+    pureDefenders: EnrichedPlayer[],
+    hybridPlayers: EnrichedPlayer[],
+    defendersNeeded: number,
+    warnings: string[]
+  ): Set<string> {
+    const usedHybrids = new Set<string>();
+
+    // Sort defenders from WORST to BEST (highest multiplier first)
+    const sortedDefenders = [...pureDefenders].sort(
+      (a, b) => b.multiplier - a.multiplier
+    );
+
+    console.log(
+      `🛡️ Distributing ${sortedDefenders.length} pure defenders (need ${defendersNeeded} per team)`
+    );
+
+    // Calculate total defenders we can use (pure + hybrids if needed)
+    const totalDefendersAvailable =
+      sortedDefenders.length + hybridPlayers.length;
+    const totalDefendersNeeded = defendersNeeded * 2;
+
+    let defendersToDistribute = sortedDefenders;
+
+    // If not enough pure defenders, add hybrids
+    if (sortedDefenders.length < totalDefendersNeeded) {
+      const hybridDefendersNeeded = Math.min(
+        totalDefendersNeeded - sortedDefenders.length,
+        hybridPlayers.length
+      );
+
+      console.log(
+        `⚠️ Not enough pure defenders, adding ${hybridDefendersNeeded} H/P players`
+      );
+
+      const sortedHybrids = [...hybridPlayers].sort(
+        (a, b) => b.multiplier - a.multiplier
+      );
+      const selectedHybrids = sortedHybrids.slice(0, hybridDefendersNeeded);
+
+      selectedHybrids.forEach((p) => usedHybrids.add(p.id));
+      defendersToDistribute = [...sortedDefenders, ...selectedHybrids];
+
+      // Re-sort all defenders together (P + H/P) to ensure proper skill distribution
+      defendersToDistribute.sort((a, b) => b.multiplier - a.multiplier);
+
+      warnings.push(
+        `Using ${hybridDefendersNeeded} H/P players as defenders (total ${defendersToDistribute.length} defenders)`
+      );
+    }
+
+    console.log("🛡️ Defender order (worst to best):");
+    defendersToDistribute.forEach((d, i) => {
+      console.log(
+        `  ${i + 1}. ${d.name} (${d.position}) - ${d.multiplier.toFixed(2)}`
+      );
+    });
+
+    // Strategy: Ensure two weakest defenders go to different teams,
+    // then shuffle remaining and distribute in pairs with balancing
+    console.log("🎲 Using balanced pair distribution with randomness");
+
+    // Step 1: Assign two weakest defenders to different teams
+    const twoWeakest = defendersToDistribute.slice(0, 2);
+    const remaining = defendersToDistribute.slice(2);
+
+    if (twoWeakest.length >= 2) {
+      console.log(`\n� Distributing 2 weakest defenders to different teams:`);
+
+      // First weakest to team 0
+      if (twoWeakest[0].position === "H/P") {
+        (twoWeakest[0] as any).assignedRole = "defender";
+      }
+      this.addPlayerToTeam(teams[0], twoWeakest[0]);
+      console.log(
+        `  ${twoWeakest[0].name} (${twoWeakest[0].multiplier.toFixed(2)}) → ${
+          teams[0].name
+        }`
+      );
+
+      // Second weakest to team 1
+      if (twoWeakest[1].position === "H/P") {
+        (twoWeakest[1] as any).assignedRole = "defender";
+      }
+      this.addPlayerToTeam(teams[1], twoWeakest[1]);
+      console.log(
+        `  ${twoWeakest[1].name} (${twoWeakest[1].multiplier.toFixed(2)}) → ${
+          teams[1].name
+        }`
+      );
+    } else if (twoWeakest.length === 1) {
+      // Only one defender total, assign to team 0
+      if (twoWeakest[0].position === "H/P") {
+        (twoWeakest[0] as any).assignedRole = "defender";
+      }
+      this.addPlayerToTeam(teams[0], twoWeakest[0]);
+      console.log(
+        `  ${twoWeakest[0].name} (${twoWeakest[0].multiplier.toFixed(2)}) → ${
+          teams[0].name
+        }`
+      );
+    }
+
+    // Step 2: Shuffle remaining defenders for randomness
+    console.log(`\n🔀 Shuffling ${remaining.length} remaining defenders...`);
+    this.shuffleArray(remaining);
+
+    console.log("Shuffled order:");
+    remaining.forEach((d, i) => {
+      console.log(`  ${i + 1}. ${d.name} (${d.multiplier.toFixed(2)})`);
+    });
+
+    // Step 3: Distribute remaining defenders in PAIRS, balancing as we go
+    console.log(`\n⚖️ Distributing in pairs with balance:`);
+
+    // Process defenders in pairs from shuffled list
+    for (let i = 0; i < remaining.length; i += 2) {
+      const defender1 = remaining[i];
+      const defender2 = remaining[i + 1]; // might be undefined if odd number
+
+      // Mark H/P players as defenders
+      if (defender1.position === "H/P") {
+        (defender1 as any).assignedRole = "defender";
+      }
+      if (defender2 && defender2.position === "H/P") {
+        (defender2 as any).assignedRole = "defender";
+      }
+
+      // Calculate current team strengths (total multipliers, higher = weaker)
+      const team0Strength = teams[0].players.reduce(
+        (sum, p) => sum + p.multiplier,
+        0
+      );
+      const team1Strength = teams[1].players.reduce(
+        (sum, p) => sum + p.multiplier,
+        0
+      );
+
+      // Determine which team is weaker (needs better players)
+      const weakerTeam = team0Strength > team1Strength ? teams[0] : teams[1];
+      const strongerTeam = team0Strength > team1Strength ? teams[1] : teams[0];
+
+      if (defender2) {
+        // We have a pair - assign better player (lower multiplier) to weaker team
+        const betterDefender =
+          defender1.multiplier < defender2.multiplier ? defender1 : defender2;
+        const worseDefender =
+          defender1.multiplier < defender2.multiplier ? defender2 : defender1;
+
+        this.addPlayerToTeam(weakerTeam, betterDefender);
+        this.addPlayerToTeam(strongerTeam, worseDefender);
+
+        console.log(
+          `  Pair ${Math.floor(i / 2) + 1}: ${
+            betterDefender.name
+          } (${betterDefender.multiplier.toFixed(2)}) → ${
+            weakerTeam.name
+          } (weaker), ${worseDefender.name} (${worseDefender.multiplier.toFixed(
+            2
+          )}) → ${
+            strongerTeam.name
+          } (stronger) [Before: ${team0Strength.toFixed(
+            1
+          )} vs ${team1Strength.toFixed(1)}]`
+        );
+      } else {
+        // Odd number - assign last defender to weaker team
+        this.addPlayerToTeam(weakerTeam, defender1);
+        console.log(
+          `  Last defender: ${defender1.name} (${defender1.multiplier.toFixed(
+            2
+          )}) → ${weakerTeam.name} [${team0Strength.toFixed(
+            1
+          )} vs ${team1Strength.toFixed(1)}]`
+        );
+      }
+    }
+
+    return usedHybrids;
   }
 
   /**

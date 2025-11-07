@@ -145,3 +145,182 @@ exports.deleteUser = onCall(async (request) => {
     );
   }
 });
+
+/**
+ * Cloud Function to create user accounts with passwords
+ * This allows admins to create users without logging out
+ */
+exports.createUserAccounts = onCall(async (request) => {
+  const data = request.data;
+  const context = request.auth;
+
+  console.log("createUserAccounts called");
+
+  // Verify authentication
+  if (!context) {
+    throw new HttpsError(
+      "unauthenticated",
+      "Käyttäjän tulee olla kirjautunut."
+    );
+  }
+
+  const { users, commonPassword } = data;
+  const callerId = context.uid;
+
+  if (!users || !Array.isArray(users) || users.length === 0) {
+    throw new HttpsError("invalid-argument", "Käyttäjälista puuttuu.");
+  }
+
+  if (!commonPassword || commonPassword.length < 6) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Salasanan tulee olla vähintään 6 merkkiä."
+    );
+  }
+
+  try {
+    // Verify caller is admin
+    const callerDoc = await admin
+      .firestore()
+      .collection("users")
+      .doc(callerId)
+      .get();
+
+    if (!callerDoc.exists) {
+      throw new HttpsError("permission-denied", "Käyttäjätietoja ei löytynyt.");
+    }
+
+    const callerData = callerDoc.data();
+    const isMasterAdmin = callerData.masterAdmin === true;
+
+    // Check if user is team admin
+    const teamsSnapshot = await admin.firestore().collection("teams").get();
+    let isTeamAdmin = false;
+
+    for (const teamDoc of teamsSnapshot.docs) {
+      const teamData = teamDoc.data();
+      if (
+        teamData.adminId === callerId ||
+        (teamData.adminIds && teamData.adminIds.includes(callerId))
+      ) {
+        isTeamAdmin = true;
+        break;
+      }
+    }
+
+    if (!isMasterAdmin && !isTeamAdmin) {
+      throw new HttpsError(
+        "permission-denied",
+        "Vain adminit voivat luoda käyttäjätilejä."
+      );
+    }
+
+    // Create users
+    const results = [];
+    for (const user of users) {
+      try {
+        console.log(`Creating user: ${user.email}`);
+
+        // Create Firebase Auth user
+        const userRecord = await admin.auth().createUser({
+          email: user.email,
+          password: commonPassword,
+          displayName: user.displayName,
+        });
+
+        console.log(`Auth user created: ${userRecord.uid}`);
+
+        // Check if Firestore user document exists
+        const existingUserDoc = await admin
+          .firestore()
+          .collection("users")
+          .doc(user.id)
+          .get();
+
+        if (existingUserDoc.exists) {
+          // Get existing user data
+          const existingData = existingUserDoc.data();
+
+          // Create new document with Auth UID (copy all existing data)
+          await admin
+            .firestore()
+            .collection("users")
+            .doc(userRecord.uid)
+            .set({
+              ...existingData,
+              uid: userRecord.uid,
+              needsPasswordChange: false,
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedBy: callerData.email || "unknown",
+            });
+          console.log(`Created new user document with UID: ${userRecord.uid}`);
+
+          // Delete old document if it has a different ID
+          if (user.id !== userRecord.uid) {
+            await admin.firestore().collection("users").doc(user.id).delete();
+            console.log(`Deleted old user document: ${user.id}`);
+          }
+        } else {
+          // Create new document
+          await admin
+            .firestore()
+            .collection("users")
+            .doc(userRecord.uid)
+            .set({
+              email: user.email,
+              displayName: user.displayName,
+              name: user.displayName,
+              uid: userRecord.uid,
+              isAdmin: false,
+              playerId: user.id,
+              category: 2,
+              multiplier: 2.0,
+              position: "H",
+              teamIds: [],
+              teams: [],
+              phone: "",
+              image: "",
+              role: "user",
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              needsPasswordChange: false,
+              createdBy: callerData.email || "unknown",
+            });
+          console.log(`Created new user document: ${userRecord.uid}`);
+        }
+
+        results.push({
+          email: user.email,
+          success: true,
+        });
+      } catch (error) {
+        console.error(`Error creating user ${user.email}:`, error);
+        results.push({
+          email: user.email,
+          success: false,
+          error: error.message,
+        });
+      }
+    }
+
+    const successCount = results.filter((r) => r.success).length;
+    const errorCount = results.filter((r) => !r.success).length;
+
+    return {
+      success: true,
+      successCount,
+      errorCount,
+      results,
+    };
+  } catch (error) {
+    console.error("Error in createUserAccounts:", error);
+
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+
+    throw new HttpsError(
+      "internal",
+      `Käyttäjien luominen epäonnistui: ${error.message}`
+    );
+  }
+});

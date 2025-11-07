@@ -24,7 +24,8 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { auth, db } from "../services/firebase";
+import { httpsCallable } from "firebase/functions";
+import { auth, db, functions } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import { useApp, getUserTeams } from "../contexts/AppContext";
 
@@ -487,101 +488,67 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
       }
 
       setCreatingPasswords(true);
-      let successCount = 0;
-      let errorCount = 0;
-      const errors: string[] = [];
 
-      for (const userToCreate of selectedUsers) {
-        try {
-          console.log(`Creating user: ${userToCreate.email}`);
+      try {
+        // Call Cloud Function to create users (this keeps admin logged in)
+        const createUserAccounts = httpsCallable(
+          functions,
+          "createUserAccounts"
+        );
+        const result = await createUserAccounts({
+          users: selectedUsers,
+          commonPassword: commonPassword,
+        });
 
-          // Validate email format
-          if (!userToCreate.email || !userToCreate.email.includes("@")) {
-            console.error(`Invalid email: ${userToCreate.email}`);
-            errors.push(`Virheellinen sähköpostiosoite: ${userToCreate.email}`);
-            errorCount++;
-            continue;
-          }
+        const data = result.data as any;
 
-          // Create Firebase Auth user
-          const userCredential = await createUserWithEmailAndPassword(
-            auth,
-            userToCreate.email,
-            commonPassword
-          );
-
-          console.log(`Auth user created for: ${userToCreate.email}`);
-
-          // Create user document in Firestore
-          await setDoc(doc(db, "users", userCredential.user.uid), {
-            email: userToCreate.email,
-            displayName: userToCreate.displayName,
-            name: userToCreate.displayName,
-            uid: userCredential.user.uid,
-            isAdmin: false,
-            playerId: userToCreate.id,
-            // Oletusarvot uudelle pelaajalle
-            category: 2, // Keskitaso
-            multiplier: 2.0, // Keskitason kerroin
-            position: "H", // Hyökkääjä
-            teamIds: [], // Ei joukkueita aluksi
-            teams: [], // Ei joukkueita aluksi
-            phone: "", // Tyhjä puhelinnumero
-            image: "", // Ei profiilikuvaa
-            role: "user", // Peruskäyttäjä
-            createdAt: new Date(),
-            needsPasswordChange: false, // Password has been created, so no change needed
-            createdBy: user?.email || "unknown",
-          });
-
-          console.log(`Firestore document created for: ${userToCreate.email}`);
-          successCount++;
-        } catch (error: any) {
-          console.error(`Error creating user ${userToCreate.email}:`, error);
-          const errorMessage = error?.message || "Tuntematon virhe";
-          errors.push(`${userToCreate.email}: ${errorMessage}`);
-          errorCount++;
+        let message = "";
+        if (data.successCount > 0) {
+          message += `✅ ${data.successCount} käyttäjätiliä luotu onnistuneesti.\n`;
         }
-      }
-
-      // Show detailed result
-      let message = "";
-      if (successCount > 0) {
-        message += `✅ ${successCount} käyttäjätiliä luotu onnistuneesti.\n`;
-      }
-      if (errorCount > 0) {
-        message += `❌ ${errorCount} käyttäjätiliä ei voitu luoda.\n`;
-        if (errors.length > 0) {
-          message += `\nVirheet:\n${errors.slice(0, 3).join("\n")}`;
-          if (errors.length > 3) {
-            message += `\n... ja ${errors.length - 3} muuta virhettä`;
+        if (data.errorCount > 0) {
+          message += `❌ ${data.errorCount} käyttäjätiliä ei voitu luoda.\n`;
+          const errors = data.results
+            .filter((r: any) => !r.success)
+            .map((r: any) => `${r.email}: ${r.error}`);
+          if (errors.length > 0) {
+            message += `\nVirheet:\n${errors.slice(0, 3).join("\n")}`;
+            if (errors.length > 3) {
+              message += `\n... ja ${errors.length - 3} muuta virhettä`;
+            }
           }
         }
+
+        if (data.successCount > 0) {
+          message += `\n\n🔑 Yleissalasana: ${commonPassword}\n\n⚠️ Jaa tämä salasana käyttäjille turvallisesti.`;
+        }
+
+        Alert.alert("Salasanojen luonti", message);
+
+        // Refresh the list only if we had some success
+        if (data.successCount > 0) {
+          await loadUsersWithoutPassword();
+        }
+
+        setPasswordModalVisible(false);
+        setCommonPassword("FairDeal2025!");
+      } catch (error: any) {
+        console.error("Error calling createUserAccounts:", error);
+        Alert.alert(
+          "Virhe",
+          `Salasanojen luominen epäonnistui: ${
+            error.message || "Tuntematon virhe"
+          }`
+        );
+      } finally {
+        setCreatingPasswords(false);
       }
-
-      if (successCount > 0) {
-        message += `\n\n🔑 Yleissalasana: ${commonPassword}\n\n⚠️ Jaa tämä salasana käyttäjille turvallisesti.`;
-      }
-
-      Alert.alert("Salasanojen luonti", message);
-
-      // Refresh the list only if we had some success
-      if (successCount > 0) {
-        await loadUsersWithoutPassword();
-      }
-
-      setPasswordModalVisible(false);
-      setCommonPassword("FairDeal2025!");
     } catch (error: any) {
       console.error("Critical error in password creation:", error);
       Alert.alert(
-        "Kriittinen virhe",
-        `Salasanojen luominen epäonnistui: ${
-          error?.message || "Tuntematon virhe"
-        }`
+        "Virhe",
+        `Kriittinen virhe: ${error.message || "Tuntematon virhe"}`
       );
-    } finally {
-      setCreatingPasswords(false);
     }
   };
 
@@ -1003,7 +970,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
                 style={{ marginRight: 8 }}
               />
               <Text style={styles.createPasswordsText}>
-                Luo salasanat valituille (
+                Luo salasana valituille (
                 {usersWithoutPassword.filter((u) => u.selected).length})
               </Text>
             </TouchableOpacity>
@@ -1092,7 +1059,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
                     <Text style={styles.createButtonText}>Luodaan...</Text>
                   </View>
                 ) : (
-                  <Text style={styles.createButtonText}>Luo salasanat</Text>
+                  <Text style={styles.createButtonText}>Luo</Text>
                 )}
               </TouchableOpacity>
             </View>
