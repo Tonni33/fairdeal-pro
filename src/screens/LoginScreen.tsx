@@ -499,6 +499,7 @@ const styles = StyleSheet.create({
     height: 120,
     width: 120,
     marginBottom: 20,
+    borderRadius: 20,
   },
 });
 
