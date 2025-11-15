@@ -71,7 +71,7 @@ const TeamsScreen: React.FC = () => {
   };
 
   // Function to get shuffled players for display (stable version)
-  const getShuffledPlayersForDisplay = (team: any, eventId: string) => {
+  const getShuffledPlayersForDisplay = (team: any, event: Event) => {
     // If we have a saved shuffle for this team, use it
     if (team.shuffledPlayerIds && Array.isArray(team.shuffledPlayerIds)) {
       return team.shuffledPlayerIds;
@@ -80,20 +80,30 @@ const TeamsScreen: React.FC = () => {
     // Otherwise, create and save a new shuffle
     const playerIds = team.playerIds || [];
     const shuffled = [...playerIds];
-    // First, separate goalkeepers (prioritize MV position)
+
+    // First, separate goalkeepers using event-specific roles
     const goalkeepers = shuffled.filter((id) => {
       const player = getPlayerById(id);
-      return player && player.positions.includes("MV");
+      if (!player) return false;
+
+      // Check event-specific role first, then fall back to positions
+      const playerRole = event.playerRoles?.[id];
+      return playerRole ? playerRole === "MV" : player.positions.includes("MV");
     });
+
     // Then get field players (exclude those already in goalkeepers to avoid duplicates)
     const goalkeeperIds = new Set(goalkeepers);
     const fieldPlayers = shuffled.filter((id) => {
       if (goalkeeperIds.has(id)) return false; // Skip if already a goalkeeper
       const player = getPlayerById(id);
-      return (
-        player &&
-        player.positions.some((pos) => ["H", "P", "H/P"].includes(pos))
-      );
+      if (!player) return false;
+
+      // Check event-specific role first, then fall back to positions
+      const playerRole = event.playerRoles?.[id];
+      if (playerRole) {
+        return ["H", "P"].includes(playerRole);
+      }
+      return player.positions.some((pos) => ["H", "P", "H/P"].includes(pos));
     });
 
     // Shuffle field players
@@ -109,7 +119,7 @@ const TeamsScreen: React.FC = () => {
     team.shuffledPlayerIds = shuffledResult;
 
     // Save to database asynchronously
-    saveShuffleToDatabase(eventId, team);
+    saveShuffleToDatabase(event.id, team);
 
     return shuffledResult;
   };
@@ -159,7 +169,7 @@ const TeamsScreen: React.FC = () => {
                   // Remove existing shuffle
                   delete team.shuffledPlayerIds;
                   // Create new shuffle
-                  getShuffledPlayersForDisplay(team, selectedEvent.id);
+                  getShuffledPlayersForDisplay(team, selectedEvent);
                   return team;
                 }
               );
@@ -210,13 +220,17 @@ const TeamsScreen: React.FC = () => {
 
         const shuffledPlayers = getShuffledPlayersForDisplay(
           team,
-          selectedEvent.id
+          selectedEvent
         );
 
         shuffledPlayers.forEach((playerId: string) => {
           const player = getPlayerById(playerId);
           if (player) {
-            const isGoalkeeper = player.positions.includes("MV");
+            // Check event-specific role first, then fall back to positions
+            const playerRole = selectedEvent.playerRoles?.[playerId];
+            const isGoalkeeper = playerRole
+              ? playerRole === "MV"
+              : player.positions.includes("MV");
             textToCopy += `- ${player.name}`;
             if (isGoalkeeper) {
               textToCopy += " 🥅";
@@ -257,13 +271,17 @@ const TeamsScreen: React.FC = () => {
 
         const shuffledPlayers = getShuffledPlayersForDisplay(
           team,
-          selectedEvent.id
+          selectedEvent
         );
 
         shuffledPlayers.forEach((playerId: string) => {
           const player = getPlayerById(playerId);
           if (player) {
-            const isGoalkeeper = player.positions.includes("MV");
+            // Check event-specific role first, then fall back to positions
+            const playerRole = selectedEvent.playerRoles?.[playerId];
+            const isGoalkeeper = playerRole
+              ? playerRole === "MV"
+              : player.positions.includes("MV");
             message += `• ${player.name}`;
             if (isGoalkeeper) {
               message += " 🥅";
@@ -635,12 +653,17 @@ const TeamsScreen: React.FC = () => {
                     </View>
 
                     <View style={styles.playersList}>
-                      {getShuffledPlayersForDisplay(team, selectedEvent.id).map(
+                      {getShuffledPlayersForDisplay(team, selectedEvent).map(
                         (playerId: string, playerIndex: number) => {
                           const player = getPlayerById(playerId);
                           if (!player) return null;
 
-                          const isGoalkeeper = player.positions.includes("MV");
+                          // Check event-specific role first, then fall back to positions
+                          const playerRole =
+                            selectedEvent.playerRoles?.[playerId];
+                          const isGoalkeeper = playerRole
+                            ? playerRole === "MV"
+                            : player.positions.includes("MV");
                           return (
                             <View
                               key={`team-${index}-player-${playerId}`}

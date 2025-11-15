@@ -176,12 +176,42 @@ const EventManagementScreen: React.FC = () => {
 
   // Helper function to get player style based on position
   const getPlayerIconColor = (player: any, teamId?: string) => {
-    // Check playerRole first, then fall back to player's primary position
-    const role =
-      selectedEvent?.playerRoles?.[player?.id] || player?.positions?.[0];
-    if (role === "MV") {
-      return "#ff9800"; // Orange for goalkeepers
+    // Debug logging
+    console.log(
+      `[getPlayerIconColor] Player: ${player?.name}, ID: ${player?.id}`
+    );
+    console.log(`[getPlayerIconColor] Positions:`, player?.positions);
+    console.log(
+      `[getPlayerIconColor] Has MV:`,
+      player?.positions?.includes("MV")
+    );
+
+    // Check if player is actually registered to the event
+    const isRegistered =
+      selectedEvent?.registeredPlayers?.includes(player?.id) ||
+      selectedEvent?.reservePlayers?.includes(player?.id);
+
+    // Only use eventRole if player is actually registered to the event
+    const eventRole = isRegistered
+      ? selectedEvent?.playerRoles?.[player?.id]
+      : null;
+
+    if (eventRole) {
+      console.log(`[getPlayerIconColor] Event role found: ${eventRole}`);
+      if (eventRole === "MV") {
+        return "#ff9800"; // Orange for goalkeepers
+      }
+      return "#4CAF50"; // Green for field players
     }
+
+    // If no event role (or not registered), check if player has MV position
+    // (used in "Add players" modal before they're registered)
+    if (player?.positions?.includes("MV")) {
+      console.log(`[getPlayerIconColor] MV position found, returning orange`);
+      return "#ff9800"; // Orange for potential goalkeepers
+    }
+
+    console.log(`[getPlayerIconColor] Returning green (default field player)`);
     return "#4CAF50"; // Green for field players
   };
 
@@ -295,10 +325,26 @@ const EventManagementScreen: React.FC = () => {
   ) => {
     if (!selectedEvent) return;
     setAddingPlayerId(playerId);
+
+    console.log("🚀 handleAddPlayerToEvent CALLED:", {
+      playerId,
+      selectedRole,
+      eventId: selectedEvent.id,
+      currentRegistered: selectedEvent.registeredPlayers || [],
+    });
+
     try {
       const eventRef = doc(db, "events", selectedEvent.id);
       const currentPlayers = selectedEvent.registeredPlayers || [];
+
+      console.log("🔍 Duplicate check:", {
+        playerId,
+        currentPlayers,
+        isAlreadyRegistered: currentPlayers.includes(playerId),
+      });
+
       if (currentPlayers.includes(playerId)) {
+        console.log("⚠️ Player already registered - returning early");
         Alert.alert("Pelaaja on jo lisätty tapahtumaan");
         setAddingPlayerId(null);
         return;
@@ -334,10 +380,23 @@ const EventManagementScreen: React.FC = () => {
             {
               text: "Kenttäpelaaja",
               onPress: () => {
-                const fieldPosition =
-                  player.positions?.find((p: string) =>
-                    ["H", "P"].includes(p)
-                  ) || "H";
+                // Check if player has both H and P positions
+                const hasH = player.positions?.includes("H");
+                const hasP = player.positions?.includes("P");
+
+                let fieldPosition = "H"; // Default
+
+                if (hasH && hasP) {
+                  // If both H and P, use H/P
+                  fieldPosition = "H/P";
+                } else if (hasP) {
+                  // If only P
+                  fieldPosition = "P";
+                } else if (hasH) {
+                  // If only H
+                  fieldPosition = "H";
+                }
+
                 handleAddPlayerToEvent(playerId, fieldPosition);
               },
             },
@@ -353,6 +412,53 @@ const EventManagementScreen: React.FC = () => {
 
       const currentFieldPlayers = getFieldPlayers(currentPlayers);
       const currentGoalkeepers = getGoalkeepers(currentPlayers);
+
+      // Check guest registration threshold (24h rule)
+      const guestRegistrationHours = 24; // Same as HomeScreen
+      const now = new Date();
+      const eventDate = new Date(selectedEvent.date);
+      const hoursUntilEvent =
+        (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+      // Check if player is a team member
+      const teamId = selectedEvent.teamId || "";
+      let isTeamMember = false;
+      if (teamId && playerId) {
+        try {
+          const userRef = doc(db, "users", playerId);
+          const userSnap = await getDoc(userRef);
+          if (userSnap.exists()) {
+            const userData = userSnap.data();
+            const teamMemberValue = userData.teamMember?.[teamId];
+            isTeamMember = teamMemberValue === true;
+            console.log("🔍 EventManagement - TeamMember check:", {
+              playerId,
+              playerName: player.name,
+              teamId,
+              teamMemberValue,
+              isTeamMember,
+              hasTeamMemberField: !!userData.teamMember,
+              allTeamMemberData: userData.teamMember,
+            });
+          } else {
+            console.log("⚠️ Player document not found in Firestore:", playerId);
+          }
+        } catch (error) {
+          console.error("❌ Error fetching teamMember status:", error);
+        }
+      } else {
+        console.log("⚠️ Missing teamId or playerId:", { teamId, playerId });
+      }
+
+      console.log("🎯 Admin adding player - threshold check:", {
+        playerName: player.name,
+        isTeamMember,
+        hoursUntilEvent: hoursUntilEvent.toFixed(1),
+        guestRegistrationHours,
+        shouldRedirectToReserve:
+          !isTeamMember && hoursUntilEvent > guestRegistrationHours,
+        willBlock: !isTeamMember && hoursUntilEvent > guestRegistrationHours,
+      });
 
       // Use selected role or player's primary position
       const playerRole = selectedRole || player.positions[0];
@@ -427,6 +533,44 @@ const EventManagementScreen: React.FC = () => {
         }
       }
 
+      // Check if guest is trying to register before 24h threshold
+      if (!isTeamMember && hoursUntilEvent > guestRegistrationHours) {
+        Alert.alert(
+          "Vakiokävijöillä etuoikeus",
+          `${
+            player.name
+          } ei ole vakiokävijä. Vakiokävijöillä on etuoikeus seuraavat ${Math.round(
+            hoursUntilEvent
+          )} tuntia. Haluatko lisätä pelaajan varallistalle?`,
+          [
+            {
+              text: "Peruuta",
+              style: "cancel",
+              onPress: () => setAddingPlayerId(null),
+            },
+            {
+              text: "Kyllä, varallistalle",
+              onPress: async () => {
+                try {
+                  await updateDoc(eventRef, {
+                    reservePlayers: [
+                      ...(selectedEvent.reservePlayers || []),
+                      playerId,
+                    ],
+                  });
+                  Alert.alert("Onnistui", "Pelaaja lisätty varallistalle");
+                  await fetchEvents();
+                } catch (error) {
+                  Alert.alert("Virhe", "Varalle lisääminen epäonnistui");
+                }
+                setAddingPlayerId(null);
+              },
+            },
+          ]
+        );
+        return;
+      }
+
       // Save player and their selected role
       await updateDoc(eventRef, {
         registeredPlayers: [...currentPlayers, playerId],
@@ -464,6 +608,12 @@ const EventManagementScreen: React.FC = () => {
       const eventRef = doc(db, "events", selectedEvent.id);
       const currentPlayers = selectedEvent.registeredPlayers || [];
 
+      console.log("🚀 handleAddMultiplePlayersToEvent CALLED:", {
+        eventId: selectedEvent.id,
+        selectedPlayerIds,
+        currentRegistered: currentPlayers,
+      });
+
       // Filter out players already in the event
       const playersToAdd = selectedPlayerIds.filter(
         (id) => !currentPlayers.includes(id)
@@ -482,6 +632,11 @@ const EventManagementScreen: React.FC = () => {
       const playersData = playersToAdd
         .map((id) => players.find((p) => p.id === id))
         .filter((p): p is NonNullable<typeof p> => p != null);
+
+      console.log("🔍 handleAddMultiplePlayersToEvent - playersData:", {
+        count: playersData.length,
+        playerIds: playersData.map((p) => p.id),
+      });
 
       const multiPositionPlayers = playersData.filter((p) =>
         needsRoleSelection(p)
@@ -506,8 +661,52 @@ const EventManagementScreen: React.FC = () => {
         p.positions.includes("MV")
       );
 
+      console.log("🔍 handleAddMultiplePlayersToEvent - position split:", {
+        fieldPlayersToAdd: fieldPlayersToAdd.map((p) => p.id),
+        goalkeepersToAdd: goalkeepersToAdd.map((p) => p.id),
+      });
+
       const currentFieldPlayers = getFieldPlayers(currentPlayers);
       const currentGoalkeepers = getGoalkeepers(currentPlayers);
+
+      // Guest 24h rule (same as handleAddPlayerToEvent)
+      const guestRegistrationHours = 24; // Same as HomeScreen
+      const now = new Date();
+      const eventDate = new Date(selectedEvent.date);
+      const hoursUntilEvent =
+        (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+      const teamId = selectedEvent.teamId || "";
+      const teamMemberStatus: Record<string, boolean> = {};
+
+      if (teamId) {
+        for (const p of playersData) {
+          try {
+            const userRef = doc(db, "users", p.id);
+            const userSnap = await getDoc(userRef);
+            if (userSnap.exists()) {
+              const userData = userSnap.data();
+              const teamMemberValue = userData.teamMember?.[teamId];
+              teamMemberStatus[p.id] = teamMemberValue === true;
+            } else {
+              teamMemberStatus[p.id] = false;
+            }
+          } catch (error) {
+            console.error(
+              "❌ Error fetching teamMember status in multi-add:",
+              error
+            );
+            teamMemberStatus[p.id] = false;
+          }
+        }
+      }
+
+      console.log("🎯 handleAddMultiplePlayersToEvent - threshold check:", {
+        hoursUntilEvent: hoursUntilEvent.toFixed(1),
+        guestRegistrationHours,
+        teamId,
+        teamMemberStatus,
+      });
 
       // Separate players into main list and reserves based on limits
       const playersToMainList: string[] = [];
@@ -520,6 +719,16 @@ const EventManagementScreen: React.FC = () => {
         const fieldPlayerIds = fieldPlayersToAdd.map((p) => p.id);
 
         fieldPlayerIds.forEach((id, index) => {
+          const isTeamMember = teamMemberStatus[id] === true;
+          const isGuest = !isTeamMember;
+          const shouldRedirectToReserve =
+            isGuest && hoursUntilEvent > guestRegistrationHours;
+
+          if (shouldRedirectToReserve) {
+            playersToReserve.push(id);
+            return;
+          }
+
           if (index < availableFieldSlots) {
             playersToMainList.push(id);
           } else {
@@ -527,8 +736,19 @@ const EventManagementScreen: React.FC = () => {
           }
         });
       } else {
-        // No limit, add all to main list
-        playersToMainList.push(...fieldPlayersToAdd.map((p) => p.id));
+        // No limit, add all to main list (except guests before threshold)
+        fieldPlayersToAdd.forEach((p) => {
+          const isTeamMember = teamMemberStatus[p.id] === true;
+          const isGuest = !isTeamMember;
+          const shouldRedirectToReserve =
+            isGuest && hoursUntilEvent > guestRegistrationHours;
+
+          if (shouldRedirectToReserve) {
+            playersToReserve.push(p.id);
+          } else {
+            playersToMainList.push(p.id);
+          }
+        });
       }
 
       // Handle goalkeepers
@@ -538,6 +758,16 @@ const EventManagementScreen: React.FC = () => {
         const goalkeeperIds = goalkeepersToAdd.map((p) => p.id);
 
         goalkeeperIds.forEach((id, index) => {
+          const isTeamMember = teamMemberStatus[id] === true;
+          const isGuest = !isTeamMember;
+          const shouldRedirectToReserve =
+            isGuest && hoursUntilEvent > guestRegistrationHours;
+
+          if (shouldRedirectToReserve) {
+            playersToReserve.push(id);
+            return;
+          }
+
           if (index < availableGoalkeeperSlots) {
             playersToMainList.push(id);
           } else {
@@ -545,8 +775,19 @@ const EventManagementScreen: React.FC = () => {
           }
         });
       } else {
-        // No limit, add all to main list
-        playersToMainList.push(...goalkeepersToAdd.map((p) => p.id));
+        // No limit, add all to main list (except guests before threshold)
+        goalkeepersToAdd.forEach((p) => {
+          const isTeamMember = teamMemberStatus[p.id] === true;
+          const isGuest = !isTeamMember;
+          const shouldRedirectToReserve =
+            isGuest && hoursUntilEvent > guestRegistrationHours;
+
+          if (shouldRedirectToReserve) {
+            playersToReserve.push(p.id);
+          } else {
+            playersToMainList.push(p.id);
+          }
+        });
       }
 
       // Show info if some players will be added to reserves
@@ -554,7 +795,7 @@ const EventManagementScreen: React.FC = () => {
         const proceed = await new Promise<boolean>((resolve) => {
           Alert.alert(
             "Lisätään varalle",
-            `${playersToMainList.length} pelaajaa lisätään tapahtumaan ja ${playersToReserve.length} pelaajaa lisätään varallaolioiksi täynnä olevien paikkojen vuoksi. Jatketaanko?`,
+            `${playersToMainList.length} pelaajaa lisätään tapahtumaan ja ${playersToReserve.length} pelaajaa lisätään varalle joko täynnä olevien paikkojen tai vakiokävijöiden etuoikeuden vuoksi. Jatketaanko?`,
             [
               {
                 text: "Peruuta",
@@ -630,9 +871,24 @@ const EventManagementScreen: React.FC = () => {
           {
             text: "Kenttäpelaaja",
             onPress: () => {
-              // Use "H" as default field player position for playerRole
-              // TeamGenerationScreen will use field skills for any non-MV role
-              handleAddPlayerToEvent(player.id, "H");
+              // Check if player has both H and P positions
+              const hasH = player.positions?.includes("H");
+              const hasP = player.positions?.includes("P");
+
+              let fieldPosition = "H"; // Default
+
+              if (hasH && hasP) {
+                // If both H and P, use H/P
+                fieldPosition = "H/P";
+              } else if (hasP) {
+                // If only P
+                fieldPosition = "P";
+              } else if (hasH) {
+                // If only H
+                fieldPosition = "H";
+              }
+
+              handleAddPlayerToEvent(player.id, fieldPosition);
             },
           },
           {

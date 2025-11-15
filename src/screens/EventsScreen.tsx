@@ -291,23 +291,33 @@ const EventsScreen: React.FC = () => {
   const currentPlayer = useMemo(() => {
     if (!user) return null;
 
-    // Prioritize Firebase Auth user ID for registration
-    const playerIdToUse = user.uid;
+    // Find player by email (users collection document)
+    const playerData = players.find((p) => p.email === user.email);
+
+    if (!playerData) {
+      console.log(
+        "DEBUG - EventsScreen: Player not found for email:",
+        user.email
+      );
+      return null;
+    }
+
     console.log(
-      "DEBUG - EventsScreen currentPlayer using Firebase Auth ID:",
-      playerIdToUse
+      "DEBUG - EventsScreen currentPlayer using Firestore document ID:",
+      playerData.id
     );
 
-    // Find the actual player data from players array to get teamMember status
-    const playerData = players.find((p) => p.id === playerIdToUse);
-
     return {
-      ...playerData, // Include all player data if found
-      id: playerIdToUse,
-      name: user.displayName || user.email?.split("@")[0] || "Käyttäjä",
-      email: user.email || "",
-      positions: playerData?.positions || ["H"], // Default to field player
-      teamIds: playerData?.teamIds || [],
+      ...playerData,
+      id: playerData.id, // Use Firestore document ID, not Auth UID
+      name:
+        playerData.name ||
+        user.displayName ||
+        user.email?.split("@")[0] ||
+        "Käyttäjä",
+      email: playerData.email || user.email || "",
+      positions: playerData.positions || ["H"],
+      teamIds: playerData.teamIds || [],
       teamSkills: playerData?.teamSkills || {},
       teamMember: playerData?.teamMember || {},
     } as Player;

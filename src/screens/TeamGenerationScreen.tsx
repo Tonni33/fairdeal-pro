@@ -70,15 +70,23 @@ const TeamGenerationScreen: React.FC = () => {
     playerRole?: string
   ) => {
     // teamSkills is now required in Player type, so we can rely on it being present
-    if (!teamId || !player.teamSkills[teamId]) {
+    if (!teamId || !player.teamSkills || !player.teamSkills[teamId]) {
       // This shouldn't happen with proper data, but provide safe defaults
       console.warn(
         `Missing team skills for player ${player.name} in team ${teamId}`
       );
+
+      // Determine position from playerRole or player's default positions
+      const defaultPosition =
+        playerRole ||
+        (player.positions?.includes("MV")
+          ? "MV"
+          : player.positions?.[0] || "H");
+
       return {
         category: 2,
         multiplier: 2.0,
-        position: playerRole || (player.positions.includes("MV") ? "MV" : "H"),
+        position: defaultPosition,
         points: 200,
       };
     }
@@ -90,11 +98,27 @@ const TeamGenerationScreen: React.FC = () => {
     // Otherwise, determine from player's positions array
     const roleToUse =
       playerRole ||
-      (player.positions.includes("MV") ? "MV" : player.positions[0]);
+      (player.positions?.includes("MV") ? "MV" : player.positions?.[0] || "H");
     const isGoalkeeper = roleToUse === "MV";
 
-    // Use role-specific skills
+    // Use role-specific skills with safety checks
     const roleSkills = isGoalkeeper ? teamSkills.goalkeeper : teamSkills.field;
+
+    if (
+      !roleSkills ||
+      typeof roleSkills.category === "undefined" ||
+      typeof roleSkills.multiplier === "undefined"
+    ) {
+      console.warn(
+        `Missing or invalid role skills for player ${player.name} (${roleToUse}) in team ${teamId}`
+      );
+      return {
+        category: 2,
+        multiplier: 2.0,
+        position: roleToUse,
+        points: 200,
+      };
+    }
 
     const category = roleSkills.category;
     const multiplier = roleSkills.multiplier;
@@ -214,7 +238,12 @@ const TeamGenerationScreen: React.FC = () => {
       }
 
       const event = events.find((e) => e.id === selectedEventId);
-      if (event && event.generatedTeams && event.generatedTeams.teams) {
+      if (
+        event &&
+        event.generatedTeams &&
+        event.generatedTeams.teams &&
+        event.teamId
+      ) {
         const teams = event.generatedTeams.teams.map((team: any) => {
           // Use new players array if available (with assignedRole), otherwise fall back to playerIds
           const teamPlayerData =
@@ -300,7 +329,13 @@ const TeamGenerationScreen: React.FC = () => {
 
   // Get registered players for selected event
   const registeredPlayers = useMemo(() => {
-    if (!selectedEvent || !selectedEvent.registeredPlayers) return [];
+    if (
+      !selectedEvent ||
+      !selectedEvent.registeredPlayers ||
+      !selectedEvent.teamId
+    ) {
+      return [];
+    }
 
     return players
       .filter((player) => selectedEvent.registeredPlayers?.includes(player.id))
@@ -321,6 +356,31 @@ const TeamGenerationScreen: React.FC = () => {
           position: playerRole || teamSkills.position, // Use selected role if available
           points: teamSkills.points,
         };
+      });
+  }, [selectedEvent, players]);
+
+  // Check for players with missing teamSkills
+  const playersWithMissingSkills = useMemo(() => {
+    if (
+      !selectedEvent ||
+      !selectedEvent.registeredPlayers ||
+      !selectedEvent.teamId
+    ) {
+      return [];
+    }
+
+    return players
+      .filter((player) => selectedEvent.registeredPlayers?.includes(player.id))
+      .filter((player) => {
+        if (!selectedEvent.teamId) return false;
+
+        const hasTeamSkills =
+          player.teamSkills &&
+          player.teamSkills[selectedEvent.teamId] &&
+          player.teamSkills[selectedEvent.teamId].field &&
+          typeof player.teamSkills[selectedEvent.teamId].field.category !==
+            "undefined";
+        return !hasTeamSkills;
       });
   }, [selectedEvent, players]);
 
@@ -752,6 +812,31 @@ const TeamGenerationScreen: React.FC = () => {
         {selectedEvent && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Ilmoittautuneet pelaajat</Text>
+
+            {/* Warning for players with missing teamSkills */}
+            {playersWithMissingSkills.length > 0 && (
+              <View style={styles.missingSkillsWarning}>
+                <Ionicons
+                  name="warning"
+                  size={20}
+                  color="#f44336"
+                  style={{ marginRight: 8 }}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.missingSkillsWarningTitle}>
+                    Puuttuvat taitotasot
+                  </Text>
+                  <Text style={styles.missingSkillsWarningText}>
+                    Seuraavilla pelaajilla puuttuu taitotasot tälle joukkueelle:{" "}
+                    {playersWithMissingSkills.map((p) => p.name).join(", ")}
+                  </Text>
+                  <Text style={styles.missingSkillsWarningAction}>
+                    Määritä taitotasot ensin Käyttäjät-sivulla.
+                  </Text>
+                </View>
+              </View>
+            )}
+
             <View style={styles.playersContainer}>
               <View style={styles.playersHeader}>
                 <Text style={styles.playersCount}>
@@ -848,10 +933,11 @@ const TeamGenerationScreen: React.FC = () => {
             <TouchableOpacity
               style={[
                 styles.generateButton,
-                isGenerating && styles.disabledButton,
+                (isGenerating || playersWithMissingSkills.length > 0) &&
+                  styles.disabledButton,
               ]}
               onPress={handleGenerateTeams}
-              disabled={isGenerating}
+              disabled={isGenerating || playersWithMissingSkills.length > 0}
             >
               {isGenerating ? (
                 <ActivityIndicator color="white" size="small" />
@@ -859,7 +945,11 @@ const TeamGenerationScreen: React.FC = () => {
                 <Ionicons name="shuffle" size={20} color="white" />
               )}
               <Text style={styles.buttonText}>
-                {isGenerating ? "Luodaan..." : "Arvo joukkueet"}
+                {isGenerating
+                  ? "Luodaan..."
+                  : playersWithMissingSkills.length > 0
+                  ? "Määritä taitotasot ensin"
+                  : "Arvo joukkueet"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1455,6 +1545,33 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#666",
     lineHeight: 18,
+  },
+  missingSkillsWarning: {
+    flexDirection: "row",
+    backgroundColor: "#ffebee",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: "#f44336",
+  },
+  missingSkillsWarningTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#c62828",
+    marginBottom: 4,
+  },
+  missingSkillsWarningText: {
+    fontSize: 14,
+    color: "#d32f2f",
+    marginBottom: 4,
+    lineHeight: 20,
+  },
+  missingSkillsWarningAction: {
+    fontSize: 13,
+    color: "#d32f2f",
+    fontWeight: "500",
+    marginTop: 4,
   },
 });
 

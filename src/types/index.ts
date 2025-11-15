@@ -61,6 +61,7 @@ export interface EnrichedPlayer extends Player {
   multiplier: number; // Computed from teamSkills for this event
   position: string; // Primary position for this event (H/P/MV)
   points: number; // Computed: multiplier * 100
+  assignedRole?: "defender" | "attacker"; // Role assigned during position-based team generation
 }
 
 // Team types (from teams collection)

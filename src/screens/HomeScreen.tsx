@@ -393,8 +393,8 @@ const HomeScreen: React.FC = () => {
   const handleRegistration = async () => {
     if (!nextEvent || !currentPlayer || !user) return;
 
-    // Käytä aina Firebase user ID:tä ilmoittautumisessa johdonmukaisuuden vuoksi
-    const playerIdToUse = user.id;
+    // Käytä currentPlayer.id (Firestore document ID) eikä user.id (Auth UID)
+    const playerIdToUse = currentPlayer.id;
     console.log("HomeScreen: Registration - using player ID:", playerIdToUse);
 
     setRegistrationLoading(true);
@@ -420,17 +420,35 @@ const HomeScreen: React.FC = () => {
           const userSnap = await getDoc(userRef);
           if (userSnap.exists()) {
             const userData = userSnap.data();
-            isTeamMember = userData.teamMember?.[teamId] === true;
+            const teamMemberValue = userData.teamMember?.[teamId];
+            isTeamMember = teamMemberValue === true;
             console.log(
-              `TeamMember check for ${playerIdToUse} in team ${teamId}:`,
-              isTeamMember
+              `🔍 TeamMember check for ${playerIdToUse} (${currentPlayer.name}) in team ${teamId}:`,
+              {
+                teamMemberValue,
+                isTeamMember,
+                hasTeamMemberField: !!userData.teamMember,
+                allTeamMemberData: userData.teamMember,
+              }
             );
+          } else {
+            console.log("⚠️ User document not found:", playerIdToUse);
           }
         } catch (error) {
           console.error("Error fetching teamMember status:", error);
-          // Fallback to local data
-          isTeamMember = currentPlayer.teamMember?.[teamId] === true;
+          // Fallback to local data - explicitly check for true value
+          const localTeamMemberValue = currentPlayer.teamMember?.[teamId];
+          isTeamMember = localTeamMemberValue === true;
+          console.log("Using fallback teamMember:", {
+            localTeamMemberValue,
+            isTeamMember,
+          });
         }
+      } else {
+        console.log("⚠️ Missing teamId or playerIdToUse:", {
+          teamId,
+          playerIdToUse,
+        });
       }
 
       if (isRegistered) {
@@ -537,6 +555,16 @@ const HomeScreen: React.FC = () => {
             currentGoalkeepers.length >= nextEvent.maxGoalkeepers
           : currentFieldPlayers.length >= nextEvent.maxPlayers;
 
+        console.log("🎯 Registration decision factors:", {
+          playerName: currentPlayer.name,
+          isTeamMember,
+          isEventFull,
+          hoursUntilEvent: hoursUntilEvent.toFixed(1),
+          guestRegistrationHours,
+          canRegisterNormally:
+            isTeamMember || hoursUntilEvent <= guestRegistrationHours,
+        });
+
         // Check if guest is trying to register to main list before threshold
         if (
           !isEventFull &&
@@ -544,6 +572,9 @@ const HomeScreen: React.FC = () => {
           hoursUntilEvent > guestRegistrationHours
         ) {
           // Guest trying to register too early - redirect to waitlist
+          console.log(
+            "❌ Blocking guest registration - redirecting to waitlist"
+          );
           Alert.alert(
             "Vakiokävijöillä etuoikeus",
             `Vakiokävijöillä on etuoikeus seuraavat ${Math.round(
@@ -623,7 +654,7 @@ const HomeScreen: React.FC = () => {
             ]
           );
         } else if (isEventFull) {
-          // Event is full, offer reserve position with priority queue logic
+          // Event is full - offer reserve position
           Alert.alert(
             "Tapahtuma on täynnä",
             "Haluatko ilmoittautua varalla olevaksi? Saat paikan jos joku luopuu.",
@@ -706,8 +737,9 @@ const HomeScreen: React.FC = () => {
               },
             ]
           );
-        } else {
-          // Register normally (event not full and either team member or after threshold)
+        } else if (isTeamMember || hoursUntilEvent <= guestRegistrationHours) {
+          // Register normally: event not full AND (team member OR after threshold)
+          console.log("✅ Allowing normal registration");
           // Check if player needs role selection
           if (needsRoleSelection(currentPlayer)) {
             // Show role selection modal
@@ -721,6 +753,17 @@ const HomeScreen: React.FC = () => {
             setIsRegistered(true);
             Alert.alert("Onnistui", "Ilmoittautuminen tallennettu");
           }
+        } else {
+          // Shouldn't reach here, but handle as safety: guest before threshold with spots available
+          console.log("⚠️ Unexpected registration scenario:", {
+            isTeamMember,
+            isEventFull,
+            hoursUntilEvent,
+          });
+          Alert.alert(
+            "Virhe",
+            "Odottamaton tilanne ilmoittautumisessa. Yritä uudelleen."
+          );
         }
       }
     } catch (error) {
@@ -738,7 +781,7 @@ const HomeScreen: React.FC = () => {
     }
 
     console.log("🎯 HomeScreen handleRoleSelection:", {
-      playerId: user.id,
+      playerId: currentPlayer.id,
       playerName: currentPlayer.name,
       selectedRole: role,
       eventId: pendingRegistrationEventId,
@@ -749,7 +792,7 @@ const HomeScreen: React.FC = () => {
 
     try {
       const eventRef = doc(db, "events", pendingRegistrationEventId);
-      const playerIdToUse = user.id;
+      const playerIdToUse = currentPlayer.id;
 
       // Register player and save their selected role
       await updateDoc(eventRef, {
@@ -1385,11 +1428,23 @@ const HomeScreen: React.FC = () => {
               <TouchableOpacity
                 style={[styles.roleButton, styles.roleButtonNo]}
                 onPress={() => {
-                  // Käytä ensimmäistä kenttäpelaajan positiota tai "H" oletuksena
-                  const fieldPosition =
-                    currentPlayer?.positions?.find((p) =>
-                      ["H", "P"].includes(p)
-                    ) || "H";
+                  // Tarkista onko pelaajalla sekä H että P positiot
+                  const hasH = currentPlayer?.positions?.includes("H");
+                  const hasP = currentPlayer?.positions?.includes("P");
+
+                  let fieldPosition = "H"; // Default
+
+                  if (hasH && hasP) {
+                    // Jos molemmmat, käytä H/P
+                    fieldPosition = "H/P";
+                  } else if (hasP) {
+                    // Jos vain P
+                    fieldPosition = "P";
+                  } else if (hasH) {
+                    // Jos vain H
+                    fieldPosition = "H";
+                  }
+
                   handleRoleSelection(fieldPosition);
                 }}
               >

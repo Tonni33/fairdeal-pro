@@ -18,7 +18,7 @@
       "soccer"
     ],
     "privacy": "public",
-    "platforms": ["ios", "android"],
+    "platforms": ["ios", "android", "web"],
     "githubUrl": "https://github.com/yourusername/FairDealPro",
     "splash": {
       "image": "./assets/fairdealLogo.png",
