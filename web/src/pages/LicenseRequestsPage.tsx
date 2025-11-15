@@ -276,6 +276,75 @@ export default function LicenseRequestsPage() {
           licenseDuration: duration,
         });
 
+        // Link requesting admin to team as member + admin
+        // Try to find user by requestedBy (user id) first, then by adminEmail
+        let userIdToLink: string | null = null;
+
+        if (selectedRequest.requestedBy) {
+          const requestedByRef = doc(db, "users", selectedRequest.requestedBy);
+          const requestedBySnap = await getDoc(requestedByRef);
+          if (requestedBySnap.exists()) {
+            userIdToLink = requestedBySnap.id;
+          }
+        }
+
+        if (!userIdToLink && selectedRequest.adminEmail) {
+          const usersSnapshot = await getDocs(collection(db, "users"));
+          const matchingUser = usersSnapshot.docs.find((u) => {
+            const data = u.data();
+            return (
+              data.email &&
+              typeof data.email === "string" &&
+              data.email.toLowerCase() ===
+                selectedRequest.adminEmail.toLowerCase()
+            );
+          });
+          if (matchingUser) {
+            userIdToLink = matchingUser.id;
+          }
+        }
+
+        if (userIdToLink) {
+          const userRef = doc(db, "users", userIdToLink);
+          const userSnap = await getDoc(userRef);
+          const userData = userSnap.data() || {};
+
+          const currentTeamIds: string[] = userData.teamIds || [];
+          const currentTeamMember = userData.teamMember || {};
+          const currentTeamsNames: string[] = userData.teams || [];
+
+          const updatedTeamIds = currentTeamIds.includes(selectedRequest.teamId)
+            ? currentTeamIds
+            : [...currentTeamIds, selectedRequest.teamId];
+
+          const updatedTeamMember = {
+            ...currentTeamMember,
+            [selectedRequest.teamId]: true,
+          };
+
+          const updatedTeamsNames = currentTeamsNames.includes(teamName)
+            ? currentTeamsNames
+            : [...currentTeamsNames, teamName];
+
+          await updateDoc(userRef, {
+            teamIds: updatedTeamIds,
+            teamMember: updatedTeamMember,
+            teams: updatedTeamsNames,
+            isAdmin: true,
+          });
+
+          // Ensure team.adminIds contains this user
+          const freshTeamSnap = await getDoc(teamRef);
+          const freshTeamData = freshTeamSnap.data() || {};
+          const currentAdminIds: string[] = freshTeamData.adminIds || [];
+
+          if (!currentAdminIds.includes(userIdToLink)) {
+            await updateDoc(teamRef, {
+              adminIds: [...currentAdminIds, userIdToLink],
+            });
+          }
+        }
+
         // Update request status
         const requestRef = doc(db, "licenseRequests", selectedRequest.id);
         await updateDoc(requestRef, {

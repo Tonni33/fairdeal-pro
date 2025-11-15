@@ -998,11 +998,11 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
   const getLicenseTypeText = (type: string): string => {
     switch (type) {
       case "trial":
-        return "Kokeilu (60pv)";
+        return "Kokeilu 60 päivää (0€)";
       case "half-season":
-        return "Puolikausi (183pv)";
+        return "Puolikausi (69€)";
       case "season":
-        return "Kausi (365pv)";
+        return "Kausikortti (99€)";
       default:
         return type;
     }
@@ -2247,8 +2247,29 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
 
             <ScrollView style={styles.scrollContent}>
               <Text style={styles.requestDescription}>
-                Anna joukkueen tiedot, jotta MasterAdmin voi käsitellä pyyntösi.
+                Valitse sinulle sopiva lisenssi ja anna joukkueen tiedot, jotta
+                MasterAdmin voi käsitellä pyyntösi.
               </Text>
+
+              <View
+                style={{
+                  backgroundColor: "#e3f2fd",
+                  padding: 10,
+                  borderRadius: 8,
+                  marginTop: 8,
+                  marginBottom: 12,
+                }}
+              >
+                <Text style={{ fontSize: 13, color: "#0d47a1" }}>
+                  • Kokeilu 60 päivää: 0€
+                </Text>
+                <Text style={{ fontSize: 13, color: "#0d47a1", marginTop: 2 }}>
+                  • Puolikausi: 69€ / joukkue
+                </Text>
+                <Text style={{ fontSize: 13, color: "#0d47a1", marginTop: 2 }}>
+                  • Kausikortti: 99€ / joukkue
+                </Text>
+              </View>
 
               {/* License Type Selection */}
               <View style={styles.modalInputContainer}>
@@ -2305,7 +2326,7 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
                     <View style={styles.licenseTypeTextContainer}>
                       <Text style={styles.licenseTypeTitle}>Puolikausi</Text>
                       <Text style={styles.licenseTypeSubtitle}>
-                        183 päivää - 69€
+                        69€ / joukkue
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -2332,7 +2353,7 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
                     <View style={styles.licenseTypeTextContainer}>
                       <Text style={styles.licenseTypeTitle}>Kausikortti</Text>
                       <Text style={styles.licenseTypeSubtitle}>
-                        365 päivää - 99€
+                        99€ / joukkue
                       </Text>
                     </View>
                   </TouchableOpacity>

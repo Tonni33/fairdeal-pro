@@ -33,6 +33,7 @@ import {
   addDoc,
   deleteDoc,
   getDocs,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "../services/firebase";
 
@@ -347,6 +348,74 @@ const MasterAdminScreen: React.FC = () => {
         licenseActivatedAt: now,
         licenseDuration: duration,
       });
+
+      // Link requesting admin to team as member + admin
+      // Try to find user by requestedBy (user id) first, then by adminEmail
+      let userIdToLink: string | null = null;
+
+      if (request.requestedBy) {
+        const requestedByRef = doc(db, "users", request.requestedBy);
+        const requestedBySnap = await getDoc(requestedByRef);
+        if (requestedBySnap.exists()) {
+          userIdToLink = requestedBySnap.id;
+        }
+      }
+
+      if (!userIdToLink && request.adminEmail) {
+        const usersSnapshot = await getDocs(collection(db, "users"));
+        const matchingUser = usersSnapshot.docs.find((u) => {
+          const data = u.data() as any;
+          return (
+            data.email &&
+            typeof data.email === "string" &&
+            data.email.toLowerCase() === request.adminEmail!.toLowerCase()
+          );
+        });
+        if (matchingUser) {
+          userIdToLink = matchingUser.id;
+        }
+      }
+
+      if (userIdToLink) {
+        const userRef = doc(db, "users", userIdToLink);
+        const userSnap = await getDoc(userRef);
+        const userData = (userSnap.data() || {}) as any;
+
+        const currentTeamIds: string[] = userData.teamIds || [];
+        const currentTeamMember = userData.teamMember || {};
+        const currentTeamsNames: string[] = userData.teams || [];
+
+        const updatedTeamIds = currentTeamIds.includes(request.teamId)
+          ? currentTeamIds
+          : [...currentTeamIds, request.teamId];
+
+        const updatedTeamMember = {
+          ...currentTeamMember,
+          [request.teamId]: true,
+        };
+
+        const updatedTeamsNames = currentTeamsNames.includes(request.teamName)
+          ? currentTeamsNames
+          : [...currentTeamsNames, request.teamName];
+
+        await updateDoc(userRef, {
+          teamIds: updatedTeamIds,
+          teamMember: updatedTeamMember,
+          teams: updatedTeamsNames,
+          isAdmin: true,
+        });
+
+        // Ensure team.adminIds contains this user
+        const freshTeamSnap = await getDoc(teamRef);
+        const freshTeamData = (freshTeamSnap.data() || {}) as any;
+        const currentAdminIds: string[] = freshTeamData.adminIds || [];
+
+        if (!currentAdminIds.includes(userIdToLink)) {
+          await updateDoc(teamRef, {
+            adminIds: [...currentAdminIds, userIdToLink],
+          });
+        }
+      }
 
       // Update request as approved
       const requestRef = doc(db, "licenseRequests", request.id);
