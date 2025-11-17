@@ -70,23 +70,34 @@ const TeamClubSelector: React.FC<TeamClubSelectorProps> = ({
 
     const unsubscribe = onSnapshot(
       teamClubsQuery,
-      (snapshot) => {
+      async (snapshot) => {
         const teamClubs: TeamClub[] = [];
+
+        // Get user's teamIds from their player document to check membership
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        const userTeamIds = userDoc.exists()
+          ? userDoc.data().teamIds || []
+          : [];
+
         snapshot.forEach((doc) => {
           const data = doc.data();
           console.log(
             "TeamClubSelector: Checking team:",
             data.name,
-            "members:",
-            data.members,
-            "adminId:",
-            data.adminId,
+            "user.teamIds:",
+            userTeamIds,
+            "adminIds:",
+            data.adminIds,
             "user.uid:",
             user.uid
           );
 
-          // Check if user is member or admin
-          if (data.members?.includes(user.uid) || data.adminId === user.uid) {
+          // Check if user is member (via player.teamIds) or admin (via team.adminIds)
+          const isMember = userTeamIds.includes(doc.id);
+          const isAdmin =
+            data.adminIds?.includes(user.uid) || data.adminId === user.uid;
+
+          if (isMember || isAdmin) {
             console.log(
               "TeamClubSelector: User is member/admin of:",
               data.name
@@ -102,8 +113,8 @@ const TeamClubSelector: React.FC<TeamClubSelectorProps> = ({
                 skillLevels: ["1", "2", "3", "4", "5"],
                 positions: ["goalkeeper", "field", "both"],
               },
-              admins: data.adminId ? [data.adminId] : [],
-              members: data.members || [],
+              admins: data.adminIds || (data.adminId ? [data.adminId] : []),
+              members: [], // Deprecated field, no longer populated
               isActive: data.isActive !== false,
               createdBy: data.createdBy,
               createdAt: data.createdAt?.toDate?.() || new Date(),
@@ -165,7 +176,7 @@ const TeamClubSelector: React.FC<TeamClubSelectorProps> = ({
           <Text style={styles.teamClubDescription}>{item.description}</Text>
         )}
         <Text style={styles.teamClubMembers}>
-          {item.members.length + item.admins.length} jäsentä
+          {item.admins.length} {item.admins.length === 1 ? "admin" : "adminia"}
         </Text>
       </View>
       {selectedTeamClub?.id === item.id && (

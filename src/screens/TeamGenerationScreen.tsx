@@ -611,14 +611,28 @@ const TeamGenerationScreen: React.FC = () => {
           name: team.name,
           players: team.players.map((p: Player) => {
             const enrichedPlayer = p as EnrichedPlayer;
-            const playerData: any = { id: p.id };
+            const playerId = p.id || (p as any).playerId;
+
+            if (!playerId) {
+              console.warn(
+                "handleSaveTeamsWithData: Missing player id when serializing team",
+                {
+                  name: p.name,
+                  email: p.email,
+                }
+              );
+            }
+
+            const playerData: any = { id: playerId };
             // Only include assignedRole if it's defined (to avoid Firebase undefined error)
             if (enrichedPlayer.assignedRole) {
               playerData.assignedRole = enrichedPlayer.assignedRole;
             }
             return playerData;
           }),
-          playerIds: team.players.map((p: Player) => p.id), // Keep for backwards compatibility
+          playerIds: team.players
+            .map((p: Player) => p.id || (p as any).playerId)
+            .filter((id): id is string => Boolean(id)), // Keep for backwards compatibility
           totalPoints: team.totalPoints,
           color: team.color,
         })),

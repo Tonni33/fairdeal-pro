@@ -50,7 +50,19 @@ const TeamsScreen: React.FC = () => {
 
   // Helper functions for player data
   const getPlayerById = (playerId: string) => {
-    return players.find((p) => p.id === playerId);
+    const player = players.find((p) => p.id === playerId);
+
+    if (!player) {
+      console.log("TeamsScreen:getPlayerById - player not found", {
+        playerId,
+        playersCount: players.length,
+        sampleIds: players
+          .slice(0, 5)
+          .map((p) => ({ id: p.id, email: p.email, name: p.name })),
+      });
+    }
+
+    return player;
   };
 
   const getFieldPlayers = (playerIds: string[]) => {
@@ -72,48 +84,99 @@ const TeamsScreen: React.FC = () => {
 
   // Function to get shuffled players for display (stable version)
   const getShuffledPlayersForDisplay = (team: any, event: Event) => {
-    // If we have a saved shuffle for this team, use it
-    if (team.shuffledPlayerIds && Array.isArray(team.shuffledPlayerIds)) {
+    const playerIds = team.playerIds || [];
+
+    // Check if we have a saved shuffle and if it contains all players
+    const hasSavedShuffle =
+      team.shuffledPlayerIds && Array.isArray(team.shuffledPlayerIds);
+    const savedShuffleIds = hasSavedShuffle
+      ? new Set(team.shuffledPlayerIds)
+      : new Set();
+    const allPlayersIncluded = playerIds.every((id: string) =>
+      savedShuffleIds.has(id)
+    );
+
+    // If saved shuffle exists and contains all players, use it
+    if (
+      hasSavedShuffle &&
+      allPlayersIncluded &&
+      savedShuffleIds.size === playerIds.length
+    ) {
+      console.log("✅ Using existing shuffle - all players present");
       return team.shuffledPlayerIds;
     }
 
-    // Otherwise, create and save a new shuffle
-    const playerIds = team.playerIds || [];
+    // Log if shuffle needs regeneration
+    if (hasSavedShuffle && !allPlayersIncluded) {
+      const missingIds = playerIds.filter(
+        (id: string) => !savedShuffleIds.has(id)
+      );
+      console.warn("⚠️ Regenerating shuffle - missing players:", {
+        missingCount: missingIds.length,
+        missingIds,
+        savedCount: team.shuffledPlayerIds.length,
+        totalCount: playerIds.length,
+      });
+    }
+
+    // Create a new shuffle from all playerIds
     const shuffled = [...playerIds];
 
-    // First, separate goalkeepers using event-specific roles
-    const goalkeepers = shuffled.filter((id) => {
+    // Separate into goalkeepers and field players using event-specific roles
+    const goalkeepers: string[] = [];
+    const fieldPlayers: string[] = [];
+
+    shuffled.forEach((id) => {
       const player = getPlayerById(id);
-      if (!player) return false;
-
-      // Check event-specific role first, then fall back to positions
-      const playerRole = event.playerRoles?.[id];
-      return playerRole ? playerRole === "MV" : player.positions.includes("MV");
-    });
-
-    // Then get field players (exclude those already in goalkeepers to avoid duplicates)
-    const goalkeeperIds = new Set(goalkeepers);
-    const fieldPlayers = shuffled.filter((id) => {
-      if (goalkeeperIds.has(id)) return false; // Skip if already a goalkeeper
-      const player = getPlayerById(id);
-      if (!player) return false;
-
-      // Check event-specific role first, then fall back to positions
-      const playerRole = event.playerRoles?.[id];
-      if (playerRole) {
-        return ["H", "P"].includes(playerRole);
+      if (!player) {
+        console.warn(`⚠️ Player not found for ID: ${id}`);
+        // Still include the ID in field players to avoid losing data
+        fieldPlayers.push(id);
+        return;
       }
-      return player.positions.some((pos) => ["H", "P", "H/P"].includes(pos));
+
+      // Check event-specific role first, then fall back to positions
+      const playerRole = event.playerRoles?.[id];
+
+      // Determine if player is a goalkeeper
+      const isGoalkeeper = playerRole
+        ? playerRole === "MV"
+        : player.positions.includes("MV");
+
+      // If player is ONLY a goalkeeper (no field positions), add to goalkeepers
+      // Otherwise add to field players (even if they can play MV)
+      if (isGoalkeeper) {
+        const hasFieldPositions = playerRole
+          ? ["H", "P"].includes(playerRole)
+          : player.positions.some((pos) => ["H", "P", "H/P"].includes(pos));
+
+        if (hasFieldPositions) {
+          fieldPlayers.push(id);
+        } else {
+          goalkeepers.push(id);
+        }
+      } else {
+        fieldPlayers.push(id);
+      }
     });
 
-    // Shuffle field players
+    // Shuffle field players using Fisher-Yates
     for (let i = fieldPlayers.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [fieldPlayers[i], fieldPlayers[j]] = [fieldPlayers[j], fieldPlayers[i]];
     }
 
-    // Always put goalkeepers last
+    // Always put pure goalkeepers last
     const shuffledResult = [...fieldPlayers, ...goalkeepers];
+
+    console.log("🔀 Created new shuffle:", {
+      totalPlayers: shuffledResult.length,
+      fieldPlayers: fieldPlayers.length,
+      goalkeepers: goalkeepers.length,
+      allIdsIncluded: playerIds.every((id: string) =>
+        shuffledResult.includes(id)
+      ),
+    });
 
     // Save the shuffled result back to the team
     team.shuffledPlayerIds = shuffledResult;

@@ -180,9 +180,14 @@ const UserProfileEditor: React.FC<UserProfileEditorProps> = ({
         // Käytä licenceCode tulosta jos löytyy
         const teamData = licenceSnapshot.docs[0].data() as Team;
         const teamRef = doc(db, "teams", licenceSnapshot.docs[0].id);
+        const teamId = licenceSnapshot.docs[0].id;
 
-        await updateDoc(teamRef, {
-          members: arrayUnion(player.id),
+        // Note: No need to update team.members - player.teamIds is the single source of truth
+        // Just update player's teamIds
+        const playerRef = doc(db, "users", player.id);
+        await updateDoc(playerRef, {
+          teamIds: arrayUnion(teamId),
+          teams: arrayUnion(teamData.name),
         });
 
         Alert.alert("Onnistui", `Liityit joukkueeseen: ${teamData.name}`);

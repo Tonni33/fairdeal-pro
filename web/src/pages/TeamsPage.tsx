@@ -20,14 +20,9 @@ import {
 } from "@mui/material";
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import { Add, Refresh, Edit, Delete } from "@mui/icons-material";
-import {
-  collection,
-  getDocs,
-  doc,
-  updateDoc,
-  deleteDoc,
-} from "firebase/firestore";
-import { db } from "../services/firebase";
+import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
+import { getFunctions, httpsCallable } from "firebase/functions";
+import app, { db } from "../services/firebase";
 import type { Team, User } from "../types";
 import ColumnSelector from "../components/ColumnSelector";
 
@@ -205,14 +200,20 @@ export default function TeamsPage() {
 
     try {
       setError("");
-      await deleteDoc(doc(db, "teams", selectedTeam.id));
-      setSuccess("Joukkue poistettu onnistuneesti!");
+      const functions = getFunctions(app);
+      const deleteTeamFn = httpsCallable(functions, "deleteTeam");
+      await deleteTeamFn({ teamId: selectedTeam.id });
+      setSuccess(
+        "Joukkue poistettu onnistuneesti ja käyttäjien tiedot päivitetty!"
+      );
       setDeleteOpen(false);
       loadTeams();
       setTimeout(() => setSuccess(""), 3000);
     } catch (err) {
-      console.error("Error deleting team:", err);
-      setError("Virhe joukkueen poistamisessa");
+      console.error("Error deleting team via Cloud Function:", err);
+      setError(
+        "Virhe joukkueen poistamisessa. Tarkista oikeudet ja yritä uudelleen."
+      );
     }
   };
 

@@ -12,13 +12,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
-import {
-  collection,
-  addDoc,
-  doc,
-  updateDoc,
-  arrayUnion,
-} from "firebase/firestore";
+import { collection, addDoc } from "firebase/firestore";
 
 import { RootStackParamList, Team } from "../types";
 import { db } from "../services/firebase";
@@ -202,13 +196,8 @@ const CreatePlayerScreen: React.FC = () => {
       // Luo käyttäjä users kokoelmaan
       const userDocRef = await addDoc(collection(db, "users"), playerData);
 
-      // Päivitä valittujen joukkueiden members-listat
-      for (const teamId of selectedTeams) {
-        const teamRef = doc(db, "teams", teamId);
-        await updateDoc(teamRef, {
-          members: arrayUnion(userDocRef.id),
-        });
-      }
+      // Note: No need to update team.members - player.teamIds is the single source of truth
+      // Team membership is tracked via player.teamIds field only
 
       Alert.alert("Onnistui", "Pelaaja luotu onnistuneesti", [
         {

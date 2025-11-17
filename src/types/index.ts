@@ -132,7 +132,7 @@ export interface TeamClub {
     positions: string[];
   };
   admins: string[]; // User IDs
-  members: string[]; // User IDs
+  members: string[]; // Deprecated - no longer used, kept for type compatibility
   isActive: boolean;
   createdBy: string;
   createdAt: Date;

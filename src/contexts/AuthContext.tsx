@@ -23,6 +23,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { auth, db } from "../services/firebase";
 import { AuthContextType, User } from "../types";
 import { SecureStorage } from "../utils/secureStorage";
+import ChangePasswordModal from "../components/ChangePasswordModal";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -34,6 +35,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [initializing, setInitializing] = useState(true);
+  const [needsPasswordChange, setNeedsPasswordChange] = useState(false);
+  const [tempPassword, setTempPassword] = useState<string>("");
 
   useEffect(() => {
     let isComponentMounted = true;
@@ -65,6 +68,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             console.log("isAdmin field value:", userData.isAdmin);
             console.log("isMasterAdmin field value:", userData.isMasterAdmin);
             console.log("role field value:", userData.role);
+            console.log(
+              "needsPasswordChange field value:",
+              userData.needsPasswordChange
+            );
+
+            // Check if user needs to change password
+            if (userData.needsPasswordChange === true) {
+              console.log("User needs to change password - showing modal");
+              setNeedsPasswordChange(true);
+              // We'll need the temp password later for re-authentication
+              // Store it from the last sign-in attempt
+            }
 
             // Check if user is admin of any team
             let isTeamAdmin = false;
@@ -194,6 +209,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const signIn = async (email: string, password: string): Promise<void> => {
     try {
       await signInWithEmailAndPassword(auth, email, password);
+      // Store the password temporarily in case user needs to change it
+      // (needed for re-authentication when changing password)
+      setTempPassword(password);
     } catch (error: any) {
       throw new Error(error.message);
     }
@@ -347,7 +365,48 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     deleteAccount,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  const handlePasswordChanged = async () => {
+    console.log(
+      "Password changed successfully, clearing needsPasswordChange state"
+    );
+    setNeedsPasswordChange(false);
+    setTempPassword("");
+
+    // Reload user data to get updated needsPasswordChange: false from Firestore
+    if (auth.currentUser) {
+      try {
+        const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          console.log("Reloaded user data after password change:", userData);
+
+          // Update user state with fresh data
+          if (user) {
+            setUser({
+              ...user,
+              // needsPasswordChange should now be false in Firestore
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Error reloading user data:", error);
+      }
+    }
+  };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      {!loading && needsPasswordChange && user && tempPassword && (
+        <ChangePasswordModal
+          visible={needsPasswordChange}
+          userEmail={user.email}
+          currentPassword={tempPassword}
+          onPasswordChanged={handlePasswordChanged}
+        />
+      )}
+    </AuthContext.Provider>
+  );
 };
 
 export const useAuth = (): AuthContextType => {

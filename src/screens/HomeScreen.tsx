@@ -73,11 +73,13 @@ const HomeScreen: React.FC = () => {
 
       // Check if player has selected a specific role for this event
       const eventRole = event?.playerRoles?.[id];
-      if (eventRole) {
-        return ["H", "P"].includes(eventRole);
+      if (eventRole !== undefined) {
+        // If player selected a role, use ONLY that
+        return ["H", "P", "H/P"].includes(eventRole);
       }
 
       // Fall back to player's positions array
+      // If player has BOTH field and MV positions, count as field player
       return player.positions.some((pos) => ["H", "P", "H/P"].includes(pos));
     });
   };
@@ -89,12 +91,18 @@ const HomeScreen: React.FC = () => {
 
       // Check if player has selected a specific role for this event
       const eventRole = event?.playerRoles?.[id];
-      if (eventRole) {
+      if (eventRole !== undefined) {
+        // If player selected a role, use ONLY that
         return eventRole === "MV";
       }
 
       // Fall back to player's positions array
-      return player.positions.includes("MV");
+      // Count as goalkeeper ONLY if they ONLY have MV position (no field positions)
+      const hasMV = player.positions.includes("MV");
+      const hasFieldPosition = player.positions.some((pos) =>
+        ["H", "P", "H/P"].includes(pos)
+      );
+      return hasMV && !hasFieldPosition;
     });
   };
 
@@ -1144,7 +1152,7 @@ const HomeScreen: React.FC = () => {
                         nextEvent
                       ).length
                     }{" "}
-                    / {nextEvent.maxPlayers} pelaajaa
+                    / {nextEvent.maxPlayers} KP
                     {nextEvent.maxGoalkeepers &&
                       nextEvent.maxGoalkeepers > 0 && (
                         <Text style={{ color: "#ff9800", fontWeight: "500" }}>
@@ -1165,11 +1173,16 @@ const HomeScreen: React.FC = () => {
                         styles.capacityFill,
                         {
                           width: `${Math.min(
-                            (getFieldPlayers(
+                            ((getFieldPlayers(
                               nextEvent.registeredPlayers || [],
                               nextEvent
-                            ).length /
-                              nextEvent.maxPlayers) *
+                            ).length +
+                              getGoalkeepers(
+                                nextEvent.registeredPlayers || [],
+                                nextEvent
+                              ).length) /
+                              (nextEvent.maxPlayers +
+                                (nextEvent.maxGoalkeepers || 0))) *
                               100,
                             100
                           )}%`,
@@ -1177,13 +1190,24 @@ const HomeScreen: React.FC = () => {
                             getFieldPlayers(
                               nextEvent.registeredPlayers || [],
                               nextEvent
-                            ).length >= nextEvent.maxPlayers
+                            ).length +
+                              getGoalkeepers(
+                                nextEvent.registeredPlayers || [],
+                                nextEvent
+                              ).length >=
+                            nextEvent.maxPlayers +
+                              (nextEvent.maxGoalkeepers || 0)
                               ? "#f44336"
-                              : getFieldPlayers(
+                              : (getFieldPlayers(
                                   nextEvent.registeredPlayers || [],
                                   nextEvent
-                                ).length /
-                                  nextEvent.maxPlayers >
+                                ).length +
+                                  getGoalkeepers(
+                                    nextEvent.registeredPlayers || [],
+                                    nextEvent
+                                  ).length) /
+                                  (nextEvent.maxPlayers +
+                                    (nextEvent.maxGoalkeepers || 0)) >
                                 0.8
                               ? "#ff9800"
                               : "#4caf50",
@@ -1322,7 +1346,7 @@ const HomeScreen: React.FC = () => {
                               nextEvent
                             ).length
                           }{" "}
-                          pelaajaa
+                          / {nextEvent.maxPlayers} KP
                           {nextEvent.maxGoalkeepers &&
                             nextEvent.maxGoalkeepers > 0 && (
                               <Text
@@ -1335,7 +1359,7 @@ const HomeScreen: React.FC = () => {
                                     nextEvent
                                   ).length
                                 }{" "}
-                                MV
+                                / {nextEvent.maxGoalkeepers} MV
                               </Text>
                             )}
                           {nextEvent.reservePlayers &&

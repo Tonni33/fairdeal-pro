@@ -621,20 +621,11 @@ const UserManagementScreen: React.FC = () => {
             );
           }
 
-          // Poista members:stä jos löytyy (cast to any for legacy field)
-          const teamDataAny = teamData as any;
-          if (teamDataAny.members?.includes(selectedPlayer.id)) {
-            teamUpdates.members = teamDataAny.members.filter(
-              (id: string) => id !== selectedPlayer.id
-            );
-            console.log(
-              "✅ Removing user from team members for removed team:",
-              removedTeamId
-            );
-          }
+          // Note: team.members field is deprecated - player.teamIds is now the source of truth
+          // No need to update team.members as it's no longer used
 
           // Päivitä joukkue vain jos on muutoksia
-          if (teamUpdates.adminIds || teamUpdates.members) {
+          if (teamUpdates.adminIds) {
             await updateDoc(teamRef, teamUpdates);
             console.log(
               "✅ Team document updated for removed team:",

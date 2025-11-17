@@ -97,5 +97,45 @@ node scripts/migrateToNewPlayerFields.js
 - `fixTeamsField.js` - Korjaa teams-kentän käyttämään nimiä ID:iden sijaan
 - `checkTeamsField.js` - Tarkistaa teams-kentän johdonmukaisuuden
 - `addNoTeamToKuntokiekkoilijat.js` - Lisää NO_TEAM pelaajat joukkueeseen
-- `removeMembersField.js` - Poistaa members-kentän teams-kokoelmasta
+- `removeMembersField.js` - Poistaa members-kentän teams-kokoelmasta (DEPRECATED - käytä cleanupTeamMembers.js)
+- `cleanupTeamMembers.js` - **SUOSITELTU:** Poistaa team.members ja lisää team.memberCount (laskettu player.teamIds:stä)
 - `addTeamMemberField.js` - Lisää teamMember-kentän kaikille käyttäjille (vakiokävijä-status joukkueittain)
+
+### cleanupTeamMembers.js - Modernisoi joukkueiden jäsenyysdata
+
+**Tarkoitus:**
+
+- Poistaa vanhentunut `team.members` kenttä kaikista joukkueista
+- **player.teamIds on nyt ainoa lähde joukkuejäsenyyksille**
+
+**Käyttö:**
+
+```bash
+node scripts/cleanupTeamMembers.js CONFIRM
+```
+
+**Mitä tapahtuu:**
+
+1. Hakee kaikki joukkueet teams-kokoelmasta
+2. Jokaiselle joukkueelle:
+   - Poistaa `members` kentän (jos olemassa)
+3. Raportoi päivitykset
+
+**Miksi tämä skripti:**
+
+- Kun admin luo käyttäjälle väliaikaisen salasanan, käyttäjän ID saattaa vaihtua
+- Vanha `team.members` lista ei päivity automaattisesti → jää vanhoja ID:itä
+- `player.teamIds` on ainoa lähde joka päivittyy oikein
+- Jäsenmäärä lasketaan dynaamisesti UI:ssa suoraan pelaajien `teamIds`:stä
+
+**Turvallisuus:**
+
+- Vaatii CONFIRM parametrin suoritukseen
+- Ei muuta player-dataa
+- Ei riko olemassa olevia team-dokumentteja
+
+**Huomioita:**
+
+- Aja tämä kerran kun otat player.teamIds-mallin käyttöön
+- Koodi on jo päivitetty käyttämään player.teamIds:tä
+- team.members ei enää päivity missään koodin osassa

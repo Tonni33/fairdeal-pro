@@ -28,6 +28,7 @@ import {
   getDoc,
   updateDoc,
   deleteDoc,
+  addDoc,
 } from "firebase/firestore";
 import { db } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
@@ -42,6 +43,7 @@ export default function UsersPage() {
   const [selectedTeam, setSelectedTeam] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
@@ -90,6 +92,22 @@ export default function UsersPage() {
     teamSkills: {} as User["teamSkills"],
     teamMember: {} as User["teamMember"],
   });
+
+  const [addForm, setAddForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    positions: [] as string[],
+    category: 2,
+    multiplier: 2.0,
+    isAdmin: false,
+    isRegularMember: true,
+    teamIds: [] as string[],
+    teamAdminIds: [] as string[], // Which teams user is admin in
+    teamSkills: {} as User["teamSkills"],
+    teamMember: {} as User["teamMember"],
+  });
+
   const [error, setError] = useState("");
 
   const loadTeams = async () => {
@@ -259,6 +277,118 @@ export default function UsersPage() {
     } catch (err) {
       console.error("Error updating user:", err);
       setError("Käyttäjän päivitys epäonnistui");
+    }
+  };
+
+  const handleAddUser = async () => {
+    setError("");
+
+    // Validation
+    if (!addForm.name.trim()) {
+      setError("Nimi on pakollinen");
+      return;
+    }
+
+    if (!addForm.email.trim()) {
+      setError("Sähköposti on pakollinen");
+      return;
+    }
+
+    if (addForm.positions.length === 0) {
+      setError("Valitse vähintään yksi pelipaikka");
+      return;
+    }
+
+    if (addForm.teamIds.length === 0) {
+      setError("Valitse vähintään yksi joukkue");
+      return;
+    }
+
+    try {
+      // Build teams array (team names)
+      const teamNames = addForm.teamIds
+        .map((teamId) => {
+          const team = teams.find((t) => t.id === teamId);
+          return team?.name;
+        })
+        .filter((name): name is string => name !== undefined);
+
+      // Build teamSkills object - use current category and multiplier for all teams
+      const teamSkills: User["teamSkills"] = {};
+      addForm.teamIds.forEach((teamId) => {
+        teamSkills[teamId] = {
+          field: {
+            category: addForm.category,
+            multiplier: addForm.multiplier,
+          },
+          goalkeeper: {
+            category: addForm.category,
+            multiplier: addForm.multiplier,
+          },
+        };
+      });
+
+      // Build teamMember object for selected teams
+      const teamMemberStatus: { [teamId: string]: boolean } = {};
+      addForm.teamIds.forEach((teamId) => {
+        teamMemberStatus[teamId] = addForm.isRegularMember;
+      });
+
+      // Compute primary position (legacy field)
+      const position = addForm.positions.includes("MV")
+        ? "MV"
+        : addForm.positions.includes("P")
+        ? "P"
+        : "H";
+
+      const playerData = {
+        name: addForm.name.trim(),
+        displayName: addForm.name.trim(),
+        email: addForm.email.trim().toLowerCase(),
+        phone: addForm.phone.trim(),
+        teamIds: addForm.teamIds,
+        teams: teamNames,
+        positions: addForm.positions,
+        position: position,
+        category: addForm.category,
+        multiplier: addForm.multiplier,
+        teamSkills: teamSkills,
+        isAdmin: addForm.isAdmin,
+        teamMember: teamMemberStatus,
+        createdAt: new Date(),
+        createdBy: userData?.id,
+        needsPasswordChange: addForm.email.trim() ? true : false,
+      };
+
+      // Create user in Firestore
+      await addDoc(collection(db, "users"), playerData);
+
+      // Note: Team adminIds assignment is not done during user creation
+      // Admin can update this later through the edit dialog
+
+      await loadUsers();
+      setAddDialogOpen(false);
+
+      // Reset form
+      setAddForm({
+        name: "",
+        email: "",
+        phone: "",
+        positions: [],
+        category: 2,
+        multiplier: 2.0,
+        isAdmin: false,
+        isRegularMember: true,
+        teamIds: [],
+        teamAdminIds: [],
+        teamSkills: {},
+        teamMember: {},
+      });
+
+      alert("Käyttäjä luotu onnistuneesti!");
+    } catch (err) {
+      console.error("Error creating user:", err);
+      setError("Käyttäjän luominen epäonnistui");
     }
   };
 
@@ -507,7 +637,7 @@ export default function UsersPage() {
           <Button
             variant="contained"
             startIcon={<Add />}
-            onClick={() => alert("Lisää käyttäjä -toiminto tulossa pian!")}
+            onClick={() => setAddDialogOpen(true)}
           >
             Lisää käyttäjä
           </Button>
@@ -580,6 +710,253 @@ export default function UsersPage() {
         />
       </Paper>
 
+      {/* Add User Dialog */}
+      <Dialog
+        open={addDialogOpen}
+        onClose={() => setAddDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Lisää käyttäjä</DialogTitle>
+        <DialogContent>
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 2,
+              mt: 1,
+            }}
+          >
+            <TextField
+              fullWidth
+              label="Nimi *"
+              value={addForm.name}
+              onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
+            />
+            <TextField
+              fullWidth
+              label="Sähköposti *"
+              type="email"
+              value={addForm.email}
+              onChange={(e) =>
+                setAddForm({ ...addForm, email: e.target.value })
+              }
+            />
+            <TextField
+              fullWidth
+              label="Puhelinnumero"
+              value={addForm.phone}
+              onChange={(e) =>
+                setAddForm({ ...addForm, phone: e.target.value })
+              }
+            />
+          </Box>
+
+          <Box sx={{ mt: 3 }}>
+            <Typography variant="subtitle2" gutterBottom>
+              Joukkueet *
+            </Typography>
+            <Box
+              sx={{
+                p: 2,
+                border: "1px solid",
+                borderColor: "divider",
+                borderRadius: 1,
+                bgcolor: "background.paper",
+                maxHeight: 200,
+                overflowY: "auto",
+              }}
+            >
+              {teams.map((team) => (
+                <Box
+                  key={team.id}
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                    mb: 1,
+                  }}
+                >
+                  <Checkbox
+                    checked={addForm.teamIds.includes(team.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setAddForm({
+                          ...addForm,
+                          teamIds: [...addForm.teamIds, team.id],
+                        });
+                      } else {
+                        setAddForm({
+                          ...addForm,
+                          teamIds: addForm.teamIds.filter(
+                            (id) => id !== team.id
+                          ),
+                          teamAdminIds: addForm.teamAdminIds.filter(
+                            (id) => id !== team.id
+                          ),
+                        });
+                      }
+                    }}
+                  />
+                  <Box
+                    sx={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: "50%",
+                      bgcolor: team.color || "#1976d2",
+                    }}
+                  />
+                  <Typography>{team.name}</Typography>
+                </Box>
+              ))}
+            </Box>
+          </Box>
+
+          <Box sx={{ mt: 3 }}>
+            <Typography variant="subtitle2" gutterBottom>
+              Pelipaikat *
+            </Typography>
+            <Box
+              sx={{
+                p: 2,
+                border: "1px solid",
+                borderColor: "divider",
+                borderRadius: 1,
+                bgcolor: "background.paper",
+              }}
+            >
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, auto)",
+                  gap: 6,
+                  justifyContent: "start",
+                }}
+              >
+                {["H", "P", "MV"].map((position) => (
+                  <Box
+                    key={position}
+                    sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}
+                  >
+                    <Typography
+                      variant="body2"
+                      fontWeight={600}
+                      sx={{ textAlign: "center" }}
+                    >
+                      {position}
+                    </Typography>
+                    <Checkbox
+                      checked={addForm.positions.includes(position)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setAddForm({
+                            ...addForm,
+                            positions: [...addForm.positions, position],
+                          });
+                        } else {
+                          setAddForm({
+                            ...addForm,
+                            positions: addForm.positions.filter(
+                              (p) => p !== position
+                            ),
+                          });
+                        }
+                      }}
+                      sx={{ p: 0 }}
+                    />
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          </Box>
+
+          <Box sx={{ mt: 3 }}>
+            <Typography variant="subtitle2" gutterBottom>
+              Taitotaso
+            </Typography>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 2,
+              }}
+            >
+              <TextField
+                size="small"
+                type="number"
+                label="Category"
+                value={addForm.category}
+                onChange={(e) =>
+                  setAddForm({
+                    ...addForm,
+                    category: Number(e.target.value),
+                  })
+                }
+              />
+              <TextField
+                size="small"
+                type="number"
+                label="Multiplier"
+                value={addForm.multiplier}
+                inputProps={{ step: 0.1 }}
+                onChange={(e) =>
+                  setAddForm({
+                    ...addForm,
+                    multiplier: Number(e.target.value),
+                  })
+                }
+              />
+            </Box>
+          </Box>
+
+          <Box sx={{ mt: 3 }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={addForm.isRegularMember}
+                  onChange={(e) =>
+                    setAddForm({
+                      ...addForm,
+                      isRegularMember: e.target.checked,
+                    })
+                  }
+                />
+              }
+              label="Vakiokävijä kaikissa valituissa joukkueissa"
+            />
+          </Box>
+
+          <Box sx={{ mt: 2 }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={addForm.isAdmin}
+                  onChange={(e) =>
+                    setAddForm({
+                      ...addForm,
+                      isAdmin: e.target.checked,
+                    })
+                  }
+                />
+              }
+              label="Admin-oikeudet"
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddDialogOpen(false)}>Peruuta</Button>
+          <Button onClick={handleAddUser} variant="contained">
+            Luo käyttäjä
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Edit Dialog */}
       <Dialog
         open={editDialogOpen}
@@ -649,6 +1026,76 @@ export default function UsersPage() {
               }
             />
           </Box>
+
+          {/* Team Selection for Admins */}
+          {userData &&
+            teams.filter((t) => t.adminIds?.includes(userData.id)).length >
+              0 && (
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Joukkueet (voit lisätä joukkueisiin joissa olet admin)
+                </Typography>
+                <Box
+                  sx={{
+                    p: 2,
+                    border: "1px solid",
+                    borderColor: "divider",
+                    borderRadius: 1,
+                    bgcolor: "background.paper",
+                    maxHeight: 200,
+                    overflowY: "auto",
+                  }}
+                >
+                  {teams
+                    .filter((team) => team.adminIds?.includes(userData.id))
+                    .map((team) => (
+                      <Box
+                        key={team.id}
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 1,
+                          mb: 1,
+                        }}
+                      >
+                        <Checkbox
+                          checked={editForm.teamIds.includes(team.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setEditForm({
+                                ...editForm,
+                                teamIds: [...editForm.teamIds, team.id],
+                              });
+                            } else {
+                              const newTeamMember = { ...editForm.teamMember };
+                              delete newTeamMember[team.id];
+                              setEditForm({
+                                ...editForm,
+                                teamIds: editForm.teamIds.filter(
+                                  (id) => id !== team.id
+                                ),
+                                teamAdminIds: editForm.teamAdminIds.filter(
+                                  (id) => id !== team.id
+                                ),
+                                teamMember: newTeamMember,
+                              });
+                            }
+                          }}
+                        />
+                        <Box
+                          sx={{
+                            width: 12,
+                            height: 12,
+                            borderRadius: "50%",
+                            bgcolor: team.color || "#1976d2",
+                          }}
+                        />
+                        <Typography>{team.name}</Typography>
+                      </Box>
+                    ))}
+                </Box>
+              </Box>
+            )}
 
           {selectedTeam && (
             <>

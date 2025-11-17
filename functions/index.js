@@ -147,6 +147,172 @@ exports.deleteUser = onCall(async (request) => {
 });
 
 /**
+ * Cloud Function to delete a team and clean related references
+ * - Verifies caller is master admin or admin of the team
+ * - Deletes the team document
+ * - Removes team references from users (teamIds, teamMember, teams)
+ * - Deletes associated license document if present
+ * - Deletes events that belong to the team
+ * - Deletes license requests for the team
+ */
+exports.deleteTeam = onCall(async (request) => {
+  const data = request.data;
+  const context = request.auth;
+
+  console.log("deleteTeam called with data:", JSON.stringify(data));
+  console.log("context:", context ? "present" : "MISSING");
+
+  if (!context) {
+    throw new HttpsError(
+      "unauthenticated",
+      "Käyttäjän tulee olla kirjautunut."
+    );
+  }
+
+  const { teamId } = data;
+  const callerId = context.uid;
+
+  if (!teamId) {
+    throw new HttpsError("invalid-argument", "Joukkueen ID puuttuu.");
+  }
+
+  try {
+    const db = admin.firestore();
+
+    // Load caller user document
+    const callerDoc = await db.collection("users").doc(callerId).get();
+    if (!callerDoc.exists) {
+      throw new HttpsError("permission-denied", "Käyttäjätietoja ei löytynyt.");
+    }
+    const callerData = callerDoc.data();
+    const isMasterAdmin = callerData.masterAdmin === true;
+
+    // Load team
+    const teamRef = db.collection("teams").doc(teamId);
+    const teamDoc = await teamRef.get();
+    if (!teamDoc.exists) {
+      throw new HttpsError("not-found", "Joukkuetta ei löytynyt.");
+    }
+    const teamData = teamDoc.data();
+
+    const isTeamAdmin = Boolean(
+      teamData.adminId === callerId ||
+        (Array.isArray(teamData.adminIds) &&
+          teamData.adminIds.includes(callerId))
+    );
+
+    console.log("deleteTeam permission check", {
+      callerId,
+      callerName: callerData.name,
+      isMasterAdmin,
+      isTeamAdmin,
+    });
+
+    if (!isMasterAdmin && !isTeamAdmin) {
+      throw new HttpsError(
+        "permission-denied",
+        "Vain joukkueen admin tai master admin voi poistaa joukkueen."
+      );
+    }
+
+    const batch = db.batch();
+
+    // Remove team references from users
+    const usersSnapshot = await db
+      .collection("users")
+      .where("teamIds", "array-contains", teamId)
+      .get();
+
+    console.log("Users in team to clean:", usersSnapshot.size);
+
+    usersSnapshot.forEach((userDoc) => {
+      const userData = userDoc.data();
+      const userRef = userDoc.ref;
+
+      const teamIds = Array.isArray(userData.teamIds) ? userData.teamIds : [];
+      const updatedTeamIds = teamIds.filter((id) => id !== teamId);
+
+      const teamMember = userData.teamMember || {};
+      if (
+        teamMember &&
+        Object.prototype.hasOwnProperty.call(teamMember, teamId)
+      ) {
+        delete teamMember[teamId];
+      }
+
+      const teams = Array.isArray(userData.teams) ? userData.teams : [];
+      const updatedTeams = teams.filter((name) => name !== teamData.name);
+
+      batch.update(userRef, {
+        teamIds: updatedTeamIds,
+        teamMember,
+        teams: updatedTeams,
+      });
+    });
+
+    // Delete events that belong to this team
+    const eventsSnapshot = await db
+      .collection("events")
+      .where("teamId", "==", teamId)
+      .get();
+
+    console.log("Events to delete for team:", eventsSnapshot.size);
+
+    eventsSnapshot.forEach((eventDoc) => {
+      batch.delete(eventDoc.ref);
+    });
+
+    // Delete license requests for this team
+    const licenseRequestsSnapshot = await db
+      .collection("licenseRequests")
+      .where("teamId", "==", teamId)
+      .get();
+
+    console.log(
+      "License requests to delete for team:",
+      licenseRequestsSnapshot.size
+    );
+
+    licenseRequestsSnapshot.forEach((reqDoc) => {
+      batch.delete(reqDoc.ref);
+    });
+
+    // Delete associated license if present
+    if (teamData.licenseId) {
+      const licenseRef = db.collection("licenses").doc(teamData.licenseId);
+      batch.delete(licenseRef);
+      console.log("Will delete license", teamData.licenseId);
+    }
+
+    // Finally delete team document
+    batch.delete(teamRef);
+
+    await batch.commit();
+
+    console.log("Team deleted successfully with cleaned user references", {
+      teamId,
+      teamName: teamData.name,
+    });
+
+    return {
+      success: true,
+      message: `Joukkue ${teamData.name || teamId} poistettu onnistuneesti.`,
+    };
+  } catch (error) {
+    console.error("Error deleting team:", error);
+
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+
+    throw new HttpsError(
+      "internal",
+      `Joukkueen poistaminen epäonnistui: ${error.message}`
+    );
+  }
+});
+
+/**
  * Cloud Function to create user accounts with passwords
  * This allows admins to create users without logging out
  */
@@ -249,7 +415,7 @@ exports.createUserAccounts = onCall(async (request) => {
             .set({
               ...existingData,
               uid: userRecord.uid,
-              needsPasswordChange: false,
+              needsPasswordChange: true,
               updatedAt: admin.firestore.FieldValue.serverTimestamp(),
               updatedBy: callerData.email || "unknown",
             });
@@ -282,7 +448,7 @@ exports.createUserAccounts = onCall(async (request) => {
               image: "",
               role: "user",
               createdAt: admin.firestore.FieldValue.serverTimestamp(),
-              needsPasswordChange: false,
+              needsPasswordChange: true,
               createdBy: callerData.email || "unknown",
             });
           console.log(`Created new user document: ${userRecord.uid}`);

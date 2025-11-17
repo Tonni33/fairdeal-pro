@@ -55,25 +55,15 @@ const EventsScreen: React.FC = () => {
 
       // Check if player has selected a specific role for this event
       const eventRole = event?.playerRoles?.[id];
-      if (eventRole) {
-        console.log(
-          `🔍 Player ${
-            player.name
-          } has event role: ${eventRole}, isFieldPlayer: ${["H", "P"].includes(
-            eventRole
-          )}`
-        );
-        return ["H", "P"].includes(eventRole);
+      if (eventRole !== undefined) {
+        // If player selected a role, use ONLY that
+        return ["H", "P", "H/P"].includes(eventRole);
       }
 
       // Fall back to player's positions array
+      // If player has BOTH field and MV positions, count as field player
       const hasFieldPosition = player.positions.some((pos) =>
         ["H", "P", "H/P"].includes(pos)
-      );
-      console.log(
-        `🔍 Player ${player.name} using positions: ${player.positions.join(
-          ", "
-        )}, isFieldPlayer: ${hasFieldPosition}`
       );
       return hasFieldPosition;
     });
@@ -86,23 +76,18 @@ const EventsScreen: React.FC = () => {
 
       // Check if player has selected a specific role for this event
       const eventRole = event?.playerRoles?.[id];
-      if (eventRole) {
-        console.log(
-          `🥅 Player ${
-            player.name
-          } has event role: ${eventRole}, isGoalkeeper: ${eventRole === "MV"}`
-        );
+      if (eventRole !== undefined) {
+        // If player selected a role, use ONLY that
         return eventRole === "MV";
       }
 
       // Fall back to player's positions array
-      const isGoalkeeper = player.positions.includes("MV");
-      console.log(
-        `🥅 Player ${player.name} using positions: ${player.positions.join(
-          ", "
-        )}, isGoalkeeper: ${isGoalkeeper}`
+      // Count as goalkeeper ONLY if they ONLY have MV position (no field positions)
+      const hasMV = player.positions.includes("MV");
+      const hasFieldPosition = player.positions.some((pos) =>
+        ["H", "P", "H/P"].includes(pos)
       );
-      return isGoalkeeper;
+      return hasMV && !hasFieldPosition;
     });
   }; // Helper function to sort players - goalkeepers at the end
   const sortPlayersByPosition = (playerData: any[], event?: any) => {
@@ -808,6 +793,7 @@ const EventsScreen: React.FC = () => {
     const registeredPlayerIds = item.registeredPlayers || [];
     const fieldPlayerCount = getFieldPlayers(registeredPlayerIds, item).length;
     const goalkeeperCount = getGoalkeepers(registeredPlayerIds, item).length;
+    const totalParticipants = fieldPlayerCount + goalkeeperCount;
 
     // Hae joukkueen väri
     const team = teams.find((t) => t.id === item.teamId);
@@ -861,7 +847,7 @@ const EventsScreen: React.FC = () => {
               style={{ marginRight: 4 }}
             />
             <Text style={styles.participantCount}>
-              {fieldPlayerCount} / {item.maxPlayers || "∞"}
+              {fieldPlayerCount}/{item.maxPlayers || "∞"} KP
               {item.maxGoalkeepers && item.maxGoalkeepers > 0 && (
                 <Text style={{ color: "#ff9800", fontWeight: "500" }}>
                   {" • "}
@@ -1097,16 +1083,18 @@ const EventsScreen: React.FC = () => {
                       style={{ marginRight: 6 }}
                     />
                     <Text style={styles.participantText}>
-                      {
-                        getFieldPlayers(
+                      {getFieldPlayers(
+                        selectedEvent.registeredPlayers || [],
+                        selectedEvent
+                      ).length +
+                        getGoalkeepers(
                           selectedEvent.registeredPlayers || [],
                           selectedEvent
-                        ).length
-                      }{" "}
-                      / {selectedEvent.maxPlayers} pelaajaa
+                        ).length}{" "}
+                      ilmoittautunut
                       {selectedEvent.maxGoalkeepers &&
                         selectedEvent.maxGoalkeepers > 0 && (
-                          <Text style={{ color: "#ff9800", fontWeight: "500" }}>
+                          <Text style={{ color: "#999", fontWeight: "400" }}>
                             {" • "}
                             {
                               getGoalkeepers(
@@ -1114,7 +1102,7 @@ const EventsScreen: React.FC = () => {
                                 selectedEvent
                               ).length
                             }{" "}
-                            / {selectedEvent.maxGoalkeepers} MV
+                            MV
                           </Text>
                         )}
                     </Text>

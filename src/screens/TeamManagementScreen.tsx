@@ -21,13 +21,13 @@ import {
   collection,
   addDoc,
   updateDoc,
-  deleteDoc,
   doc,
   onSnapshot,
   query,
   orderBy,
 } from "firebase/firestore";
-import { db } from "../services/firebase";
+import { db, functions } from "../services/firebase";
+import { httpsCallable } from "firebase/functions";
 
 const TeamManagementScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -177,23 +177,12 @@ const TeamManagementScreen: React.FC = () => {
           style: "destructive",
           onPress: async () => {
             try {
-              // Delete the team
-              await deleteDoc(doc(db, "teams", team.id));
-
-              // Delete associated license if it exists
-              if (team.licenseId) {
-                try {
-                  await deleteDoc(doc(db, "licenses", team.licenseId));
-                  console.log(
-                    `Deleted license ${team.licenseId} for team ${team.name}`
-                  );
-                } catch (licenseError) {
-                  console.error("Error deleting license:", licenseError);
-                  // Continue even if license deletion fails
-                }
-              }
-
-              Alert.alert("Onnistui", "Joukkue ja lisenssi poistettu");
+              const deleteTeamFn = httpsCallable(functions, "deleteTeam");
+              await deleteTeamFn({ teamId: team.id });
+              Alert.alert(
+                "Onnistui",
+                "Joukkue poistettu ja käyttäjien tiedot päivitetty"
+              );
             } catch (error) {
               console.error("Error deleting team:", error);
               Alert.alert("Virhe", "Joukkueen poisto epäonnistui");
