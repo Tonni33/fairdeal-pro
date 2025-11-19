@@ -97,6 +97,9 @@ export class TeamBalancer {
     // Distribute goalkeepers to weaker team
     this.distributeGoalkeepersByBalance(teams, goalkeepers, warnings);
 
+    // Ensure final category 1 counts are within 1 between teams
+    this.rebalanceCategory1Players(teams);
+
     // Calculate final team stats
     teams.forEach((team) => {
       team.totalPoints = team.players.reduce(
@@ -528,6 +531,80 @@ export class TeamBalancer {
   }
 
   /**
+   * Rebalance category 1 players so that counts differ by at most 1
+   * Prefers swapping cat1 ↔ non-cat1 to keep team sizes equal
+   */
+  private static rebalanceCategory1Players(teams: GeneratedTeamData[]): void {
+    if (teams.length !== 2) return;
+
+    let teamA = teams[0];
+    let teamB = teams[1];
+
+    // Safety loop to avoid infinite adjustments
+    for (let i = 0; i < 10; i++) {
+      const cat1A = this.countCategory1Players(teamA);
+      const cat1B = this.countCategory1Players(teamB);
+
+      const diff = Math.abs(cat1A - cat1B);
+      if (diff <= 1) {
+        return;
+      }
+
+      // Identify source (has more cat1) and target (has fewer cat1)
+      const source = cat1A > cat1B ? teamA : teamB;
+      const target = cat1A > cat1B ? teamB : teamA;
+
+      const sourceCat1 = source.players.filter((p) => p.category === 1);
+      const targetNonCat1 = target.players.filter((p) => p.category !== 1);
+
+      if (sourceCat1.length === 0) {
+        return;
+      }
+
+      // Prefer swap: move one cat1 from source and one non-cat1 from target
+      const cat1ToMove = sourceCat1[0];
+      const nonCat1ToMove = targetNonCat1[0];
+
+      const removeFromTeam = (team: GeneratedTeamData, playerId: string) => {
+        team.players = team.players.filter((p) => p.id !== playerId);
+        if (team.fieldPlayers) {
+          team.fieldPlayers = team.fieldPlayers.filter(
+            (p) => p.id !== playerId
+          );
+        }
+        if (team.goalkeepers) {
+          team.goalkeepers = team.goalkeepers.filter((p) => p.id !== playerId);
+        }
+      };
+
+      if (nonCat1ToMove) {
+        // Swap cat1 ↔ non-cat1
+        console.log(
+          `♻️ Rebalancing cat1: swapping ${cat1ToMove.name} (cat1) from ${source.name} with ${nonCat1ToMove.name} (non-cat1) from ${target.name}`
+        );
+
+        removeFromTeam(source, cat1ToMove.id);
+        removeFromTeam(target, nonCat1ToMove.id);
+
+        this.addPlayerToTeam(source, nonCat1ToMove as EnrichedPlayer);
+        this.addPlayerToTeam(target, cat1ToMove as EnrichedPlayer);
+      } else {
+        // Fallback: just move cat1 player to target (sizes may differ by 1)
+        console.log(
+          `♻️ Rebalancing cat1: moving ${cat1ToMove.name} (cat1) from ${source.name} to ${target.name}`
+        );
+
+        removeFromTeam(source, cat1ToMove.id);
+        this.addPlayerToTeam(target, cat1ToMove as EnrichedPlayer);
+      }
+
+      // Refresh references in case arrays were reassigned
+      teamA = teams[0];
+      teamB = teams[1];
+    }
+  }
+
+  /**
    * Generate balanced teams using POSITION-BASED distribution
    * Prioritizes defensive position balance, then distributes attackers
    */
@@ -600,6 +677,28 @@ export class TeamBalancer {
       `🛡️ Defenders calculation: ${totalFieldPlayers} field players * 0.4 = ${totalDefendersNeeded} total defenders → ${defendersPerTeam} per team`
     );
 
+    // NEW: ensure category 1 defenders count is even by pulling one H/P as defender if needed
+    const cat1PureDefenders = pureDefenders.filter((p) => p.category === 1);
+    const cat1HybridCandidates = hybridPlayers.filter((p) => p.category === 1);
+
+    if (cat1PureDefenders.length % 2 === 1 && cat1HybridCandidates.length > 0) {
+      // Randomly pick one cat1 H/P to become defender candidate
+      const randomIndex = Math.floor(
+        Math.random() * cat1HybridCandidates.length
+      );
+      const selected = cat1HybridCandidates[randomIndex];
+      console.log(
+        `🛡️ Balancing cat1 defenders: adding H/P ${selected.name} as defender candidate to make cat1 defender count even (${cat1PureDefenders.length} + 1)`
+      );
+
+      // Remove from hybrid list and push into pureDefenders as defender candidate
+      const hybridIndex = hybridPlayers.findIndex((p) => p.id === selected.id);
+      if (hybridIndex !== -1) {
+        hybridPlayers.splice(hybridIndex, 1);
+      }
+      pureDefenders.push(selected);
+    }
+
     // Step 1: Distribute pure defenders (P) with controlled randomness
     const usedHybrids = this.distributeDefendersWithBalance(
       teams,
@@ -629,6 +728,9 @@ export class TeamBalancer {
 
     // Step 3: Distribute goalkeepers
     this.distributeGoalkeepersByBalance(teams, goalkeepers, warnings);
+
+    // Ensure final category 1 counts are within 1 between teams
+    this.rebalanceCategory1Players(teams);
 
     // Calculate final team stats
     teams.forEach((team) => {
