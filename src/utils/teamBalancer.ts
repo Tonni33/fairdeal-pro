@@ -788,19 +788,39 @@ export class TeamBalancer {
         (defender2 as any).assignedRole = "defender";
       }
 
-      // Calculate current team strengths (total multipliers, higher = weaker)
-      const team0Strength = teams[0].players.reduce(
-        (sum, p) => sum + p.multiplier,
-        0
-      );
-      const team1Strength = teams[1].players.reduce(
-        (sum, p) => sum + p.multiplier,
-        0
-      );
+      // Check if both defenders are category 1
+      const bothCat1 = defender1.category === 1 && defender2?.category === 1;
 
-      // Determine which team is weaker (needs better players)
-      const weakerTeam = team0Strength > team1Strength ? teams[0] : teams[1];
-      const strongerTeam = team0Strength > team1Strength ? teams[1] : teams[0];
+      let weakerTeam: GeneratedTeamData;
+      let strongerTeam: GeneratedTeamData;
+
+      if (bothCat1) {
+        // For category 1 defenders, prioritize balancing cat1 COUNT
+        const team0Cat1Count = this.countCategory1Players(teams[0]);
+        const team1Cat1Count = this.countCategory1Players(teams[1]);
+
+        console.log(
+          `  Both defenders are Cat 1. Team counts: ${teams[0].name}=${team0Cat1Count}, ${teams[1].name}=${team1Cat1Count}`
+        );
+
+        if (team0Cat1Count !== team1Cat1Count) {
+          // Assign better cat1 to team with fewer cat1 players
+          weakerTeam = team0Cat1Count < team1Cat1Count ? teams[0] : teams[1];
+          strongerTeam = team0Cat1Count < team1Cat1Count ? teams[1] : teams[0];
+        } else {
+          // If cat1 counts equal, use team strength
+          const team0Strength = this.getTeamAverage(teams[0]);
+          const team1Strength = this.getTeamAverage(teams[1]);
+          weakerTeam = team0Strength > team1Strength ? teams[0] : teams[1];
+          strongerTeam = team0Strength > team1Strength ? teams[1] : teams[0];
+        }
+      } else {
+        // For non-cat1 or mixed categories, use team strength
+        const team0Strength = this.getTeamAverage(teams[0]);
+        const team1Strength = this.getTeamAverage(teams[1]);
+        weakerTeam = team0Strength > team1Strength ? teams[0] : teams[1];
+        strongerTeam = team0Strength > team1Strength ? teams[1] : teams[0];
+      }
 
       if (defender2) {
         // We have a pair - assign better player (lower multiplier) to weaker team
@@ -812,6 +832,10 @@ export class TeamBalancer {
         this.addPlayerToTeam(weakerTeam, betterDefender);
         this.addPlayerToTeam(strongerTeam, worseDefender);
 
+        // Get current strengths for logging
+        const team0Strength = this.getTeamAverage(teams[0]);
+        const team1Strength = this.getTeamAverage(teams[1]);
+
         console.log(
           `  Pair ${Math.floor(i / 2) + 1}: ${
             betterDefender.name
@@ -819,15 +843,17 @@ export class TeamBalancer {
             weakerTeam.name
           } (weaker), ${worseDefender.name} (${worseDefender.multiplier.toFixed(
             2
-          )}) → ${
-            strongerTeam.name
-          } (stronger) [Before: ${team0Strength.toFixed(
+          )}) → ${strongerTeam.name} (stronger) [After: ${team0Strength.toFixed(
             1
           )} vs ${team1Strength.toFixed(1)}]`
         );
       } else {
         // Odd number - assign last defender to weaker team
         this.addPlayerToTeam(weakerTeam, defender1);
+
+        const team0Strength = this.getTeamAverage(teams[0]);
+        const team1Strength = this.getTeamAverage(teams[1]);
+
         console.log(
           `  Last defender: ${defender1.name} (${defender1.multiplier.toFixed(
             2
