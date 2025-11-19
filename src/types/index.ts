@@ -31,18 +31,23 @@ export interface Player {
   teams: string[]; // Array of team names
   createdAt: Date;
   // Team-specific skills stored in the user document
+  // Only stores relevant position data: field for H/P players, goalkeeper for MV players
   teamSkills: {
     [teamId: string]: {
-      field: {
-        // Kenttäpelaaja (H tai P)
+      field?: {
+        // Kenttäpelaaja (H tai P) - only present if player has H or P position
         category: number;
         multiplier: number;
       };
-      goalkeeper: {
-        // Maalivahti (MV)
+      goalkeeper?: {
+        // Maalivahti (MV) - only present if player has MV position
         category: number;
         multiplier: number;
       };
+      // Legacy fields for backwards compatibility
+      category?: number;
+      multiplier?: number;
+      position?: string;
       updatedAt?: Date;
     };
   };

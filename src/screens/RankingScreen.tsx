@@ -60,28 +60,45 @@ const RankingScreen: React.FC = () => {
       return p.teamIds?.includes(selectedTeamId);
     });
 
-    // Get team-specific multipliers from teamSkills
-    const playersWithTeamMultipliers = teamPlayers.map((player) => {
+    const goalkeepers: (Player & {
+      multiplier: number;
+      category: number;
+      displayRole: string;
+    })[] = [];
+    const fieldPlayers: (Player & {
+      multiplier: number;
+      category: number;
+      displayRole: string;
+    })[] = [];
+
+    // Process each player - they can appear in both lists if they have both roles
+    teamPlayers.forEach((player) => {
       const teamSkill = player.teamSkills?.[selectedTeamId];
-      const isGoalkeeper = player.positions.includes("MV");
+      const hasFieldPosition = player.positions.some(
+        (p) => p === "H" || p === "P"
+      );
+      const hasGoalkeeperPosition = player.positions.includes("MV");
 
-      // Get skills based on player's role
-      const skills = isGoalkeeper ? teamSkill?.goalkeeper : teamSkill?.field;
+      // Add as field player if they have H or P position AND field skills exist
+      if (hasFieldPosition && teamSkill?.field) {
+        fieldPlayers.push({
+          ...player,
+          multiplier: teamSkill.field.multiplier || 1,
+          category: teamSkill.field.category || 1,
+          displayRole: "field",
+        });
+      }
 
-      return {
-        ...player,
-        multiplier: skills?.multiplier || 1,
-        category: skills?.category || 1,
-      };
+      // Add as goalkeeper if they have MV position AND goalkeeper skills exist
+      if (hasGoalkeeperPosition && teamSkill?.goalkeeper) {
+        goalkeepers.push({
+          ...player,
+          multiplier: teamSkill.goalkeeper.multiplier || 1,
+          category: teamSkill.goalkeeper.category || 1,
+          displayRole: "goalkeeper",
+        });
+      }
     });
-
-    // Separate goalkeepers and field players
-    const goalkeepers = playersWithTeamMultipliers.filter((p) =>
-      p.positions.includes("MV")
-    );
-    const fieldPlayers = playersWithTeamMultipliers.filter(
-      (p) => !p.positions.includes("MV")
-    );
 
     // Sort by multiplier (ascending - smallest first)
     const sortedGoalkeepers = [...goalkeepers].sort(
@@ -98,7 +115,7 @@ const RankingScreen: React.FC = () => {
   }, [players, teams, selectedTeamId]);
 
   const handleUpdatePlayer = async (
-    player: Player,
+    player: Player & { displayRole?: string },
     category: number,
     multiplier: number
   ) => {
@@ -107,9 +124,9 @@ const RankingScreen: React.FC = () => {
     try {
       const playerRef = doc(db, "users", player.id);
 
-      // Determine if this is a goalkeeper or field player
-      const isGoalkeeper = player.positions.includes("MV");
-      const skillType = isGoalkeeper ? "goalkeeper" : "field";
+      // Use displayRole to determine which skills to update
+      const skillType =
+        player.displayRole === "goalkeeper" ? "goalkeeper" : "field";
 
       // Update team-specific skills (field or goalkeeper)
       await updateDoc(playerRef, {
@@ -124,10 +141,12 @@ const RankingScreen: React.FC = () => {
     }
   };
 
-  const PlayerRow: React.FC<{ item: Player }> = ({ item }) => {
-    const isGoalkeeper = item.positions.includes("MV");
+  const PlayerRow: React.FC<{ item: Player & { displayRole: string } }> = ({
+    item,
+  }) => {
+    const isGoalkeeper = item.displayRole === "goalkeeper";
 
-    // Get team-specific values
+    // Get team-specific values based on display role
     const teamSkill = selectedTeamId ? item.teamSkills?.[selectedTeamId] : null;
     const skills = isGoalkeeper ? teamSkill?.goalkeeper : teamSkill?.field;
     const category = skills?.category || 1;
@@ -229,7 +248,11 @@ const RankingScreen: React.FC = () => {
     );
   };
 
-  const renderPlayerItem = ({ item }: { item: Player }) => {
+  const renderPlayerItem = ({
+    item,
+  }: {
+    item: Player & { displayRole: string };
+  }) => {
     return <PlayerRow item={item} />;
   };
 
@@ -285,7 +308,7 @@ const RankingScreen: React.FC = () => {
                   rankedPlayers.fieldPlayers.length
                 )}
                 {rankedPlayers.fieldPlayers.map((player) => (
-                  <View key={player.id}>
+                  <View key={`${player.id}-field`}>
                     {renderPlayerItem({ item: player })}
                   </View>
                 ))}
@@ -298,7 +321,7 @@ const RankingScreen: React.FC = () => {
                   rankedPlayers.goalkeepers.length
                 )}
                 {rankedPlayers.goalkeepers.map((player) => (
-                  <View key={player.id}>
+                  <View key={`${player.id}-goalkeeper`}>
                     {renderPlayerItem({ item: player })}
                   </View>
                 ))}

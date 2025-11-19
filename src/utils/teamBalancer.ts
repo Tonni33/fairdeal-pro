@@ -216,39 +216,103 @@ export class TeamBalancer {
       const betterPlayer = player1Better ? player1 : player2;
       const worsePlayer = player1Better ? player2 : player1;
 
-      // Get team averages to determine which team is weaker
-      const teamA_avg = this.getTeamAverage(teams[0]);
-      const teamB_avg = this.getTeamAverage(teams[1]);
+      // For category 1 players, prioritize balancing the COUNT of cat1 players
+      // For other categories, use team average
+      let targetTeamForBetter: GeneratedTeamData;
+      let targetTeamForWorse: GeneratedTeamData;
 
-      if (teamA_avg >= teamB_avg) {
-        // Team A is weaker (higher average), give them the better player
-        this.addPlayerToTeam(teams[0], betterPlayer);
-        this.addPlayerToTeam(teams[1], worsePlayer);
+      if (categoryNum === 1) {
+        // Category 1: Balance by COUNT of category 1 players
+        const teamA_cat1Count = this.countCategory1Players(teams[0]);
+        const teamB_cat1Count = this.countCategory1Players(teams[1]);
+
         console.log(
-          `Category ${categoryNum}: Better player (${betterPlayer.name}) → Team A (weaker), Worse player (${worsePlayer.name}) → Team B`
+          `Category 1 balance check: Team A has ${teamA_cat1Count} cat1, Team B has ${teamB_cat1Count} cat1`
         );
+
+        if (teamA_cat1Count > teamB_cat1Count) {
+          // Team A has more cat1 players, give better player to Team B
+          targetTeamForBetter = teams[1];
+          targetTeamForWorse = teams[0];
+          console.log(
+            `Category ${categoryNum}: Better player (${betterPlayer.name}) → Team B (fewer cat1: ${teamB_cat1Count} vs ${teamA_cat1Count}), Worse player (${worsePlayer.name}) → Team A`
+          );
+        } else if (teamB_cat1Count > teamA_cat1Count) {
+          // Team B has more cat1 players, give better player to Team A
+          targetTeamForBetter = teams[0];
+          targetTeamForWorse = teams[1];
+          console.log(
+            `Category ${categoryNum}: Better player (${betterPlayer.name}) → Team A (fewer cat1: ${teamA_cat1Count} vs ${teamB_cat1Count}), Worse player (${worsePlayer.name}) → Team B`
+          );
+        } else {
+          // Equal cat1 count, use team average as tiebreaker
+          const teamA_avg = this.getTeamAverage(teams[0]);
+          const teamB_avg = this.getTeamAverage(teams[1]);
+
+          if (teamA_avg >= teamB_avg) {
+            targetTeamForBetter = teams[0];
+            targetTeamForWorse = teams[1];
+            console.log(
+              `Category ${categoryNum}: Equal cat1 count (${teamA_cat1Count}), using avg - Better player (${betterPlayer.name}) → Team A (weaker avg), Worse player (${worsePlayer.name}) → Team B`
+            );
+          } else {
+            targetTeamForBetter = teams[1];
+            targetTeamForWorse = teams[0];
+            console.log(
+              `Category ${categoryNum}: Equal cat1 count (${teamA_cat1Count}), using avg - Better player (${betterPlayer.name}) → Team B (weaker avg), Worse player (${worsePlayer.name}) → Team A`
+            );
+          }
+        }
       } else {
-        // Team B is weaker, give them the better player
-        this.addPlayerToTeam(teams[1], betterPlayer);
-        this.addPlayerToTeam(teams[0], worsePlayer);
-        console.log(
-          `Category ${categoryNum}: Better player (${betterPlayer.name}) → Team B (weaker), Worse player (${worsePlayer.name}) → Team A`
-        );
+        // Categories 2 and 3: Use team average as before
+        const teamA_avg = this.getTeamAverage(teams[0]);
+        const teamB_avg = this.getTeamAverage(teams[1]);
+
+        if (teamA_avg >= teamB_avg) {
+          targetTeamForBetter = teams[0];
+          targetTeamForWorse = teams[1];
+          console.log(
+            `Category ${categoryNum}: Better player (${betterPlayer.name}) → Team A (weaker), Worse player (${worsePlayer.name}) → Team B`
+          );
+        } else {
+          targetTeamForBetter = teams[1];
+          targetTeamForWorse = teams[0];
+          console.log(
+            `Category ${categoryNum}: Better player (${betterPlayer.name}) → Team B (weaker), Worse player (${worsePlayer.name}) → Team A`
+          );
+        }
       }
+
+      this.addPlayerToTeam(targetTeamForBetter, betterPlayer);
+      this.addPlayerToTeam(targetTeamForWorse, worsePlayer);
     }
 
     // Handle any remaining single player (shouldn't happen with our logic, but just in case)
     if (playersToProcess.length === 1) {
       const remainingPlayer = playersToProcess[0];
-      const teamA_avg = this.getTeamAverage(teams[0]);
-      const teamB_avg = this.getTeamAverage(teams[1]);
 
-      // Give remaining player to weaker team
-      const weakerTeam = teamA_avg >= teamB_avg ? teams[0] : teams[1];
-      this.addPlayerToTeam(weakerTeam, remainingPlayer);
-      console.log(
-        `Category ${categoryNum}: Remaining player (${remainingPlayer.name}) → ${weakerTeam.name} (weaker team)`
-      );
+      // For category 1, prioritize balancing count
+      if (categoryNum === 1) {
+        const teamA_cat1Count = this.countCategory1Players(teams[0]);
+        const teamB_cat1Count = this.countCategory1Players(teams[1]);
+
+        const weakerTeam =
+          teamA_cat1Count > teamB_cat1Count ? teams[1] : teams[0];
+        this.addPlayerToTeam(weakerTeam, remainingPlayer);
+        console.log(
+          `Category ${categoryNum}: Remaining player (${remainingPlayer.name}) → ${weakerTeam.name} (fewer cat1 players)`
+        );
+      } else {
+        // For other categories, use team average
+        const teamA_avg = this.getTeamAverage(teams[0]);
+        const teamB_avg = this.getTeamAverage(teams[1]);
+
+        const weakerTeam = teamA_avg >= teamB_avg ? teams[0] : teams[1];
+        this.addPlayerToTeam(weakerTeam, remainingPlayer);
+        console.log(
+          `Category ${categoryNum}: Remaining player (${remainingPlayer.name}) → ${weakerTeam.name} (weaker team)`
+        );
+      }
     }
 
     return remainingNextCategory;
@@ -305,6 +369,13 @@ export class TeamBalancer {
       0
     );
     return totalMultiplier / team.players.length;
+  }
+
+  /**
+   * Count category 1 players in a team
+   */
+  private static countCategory1Players(team: GeneratedTeamData): number {
+    return team.players.filter((p) => p.category === 1).length;
   }
 
   /**

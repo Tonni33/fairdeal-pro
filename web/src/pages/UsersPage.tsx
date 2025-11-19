@@ -313,19 +313,31 @@ export default function UsersPage() {
         })
         .filter((name): name is string => name !== undefined);
 
-      // Build teamSkills object - use current category and multiplier for all teams
+      // Build teamSkills object - save only relevant position data
+      const hasFieldPosition = addForm.positions.some(
+        (p) => p === "H" || p === "P"
+      );
+      const hasGoalkeeperPosition = addForm.positions.includes("MV");
+
       const teamSkills: User["teamSkills"] = {};
       addForm.teamIds.forEach((teamId) => {
-        teamSkills[teamId] = {
-          field: {
+        teamSkills[teamId] = {};
+
+        // Only save field skills if player has H or P position
+        if (hasFieldPosition) {
+          teamSkills[teamId].field = {
             category: addForm.category,
             multiplier: addForm.multiplier,
-          },
-          goalkeeper: {
+          };
+        }
+
+        // Only save goalkeeper skills if player has MV position
+        if (hasGoalkeeperPosition) {
+          teamSkills[teamId].goalkeeper = {
             category: addForm.category,
             multiplier: addForm.multiplier,
-          },
-        };
+          };
+        }
       });
 
       // Build teamMember object for selected teams

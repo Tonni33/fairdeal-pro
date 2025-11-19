@@ -558,27 +558,41 @@ const UserManagementScreen: React.FC = () => {
       // Luo kopio teamSkills datasta muokkauksia varten
       const currentTeamSkillsData = { ...selectedPlayer.teamSkills };
 
-      // Luo teamSkills data uusille joukkueille
+      // Luo teamSkills data uusille joukkueille - vain relevantit pelipaikan taidot
+      const hasFieldPosition = editPositions.some(
+        (p) => p === "H" || p === "P"
+      );
+      const hasGoalkeeperPosition = editPositions.includes("MV");
+
       for (const addedTeamId of addedTeams) {
         if (!currentTeamSkillsData[addedTeamId]) {
           console.log(
             "Creating default team skills for new team:",
-            addedTeamId
+            addedTeamId,
+            "(positions:",
+            editPositions,
+            ")"
           );
-          // Use current edit values as defaults for new teams
-          const defaultCategory = editFieldCategory || 2;
-          const defaultMultiplier = editFieldMultiplier || 2.0;
+
           currentTeamSkillsData[addedTeamId] = {
-            field: {
-              category: defaultCategory,
-              multiplier: defaultMultiplier,
-            },
-            goalkeeper: {
-              category: editGoalkeeperCategory || defaultCategory,
-              multiplier: editGoalkeeperMultiplier || defaultMultiplier,
-            },
             updatedAt: new Date(),
           };
+
+          // Tallenna vain field-taidot jos pelaajalla on H tai P positio
+          if (hasFieldPosition) {
+            currentTeamSkillsData[addedTeamId].field = {
+              category: editFieldCategory || 2,
+              multiplier: editFieldMultiplier || 2.0,
+            };
+          }
+
+          // Tallenna vain goalkeeper-taidot jos pelaajalla on MV positio
+          if (hasGoalkeeperPosition) {
+            currentTeamSkillsData[addedTeamId].goalkeeper = {
+              category: editGoalkeeperCategory || 2,
+              multiplier: editGoalkeeperMultiplier || 2.0,
+            };
+          }
         }
       }
 
@@ -715,27 +729,41 @@ const UserManagementScreen: React.FC = () => {
           // Käytä teamSkills kenttää jossa avaimena on teamId
           // Note: positions array is saved to player's basic data, not in teamSkills
           const currentTeamSkills = selectedPlayer.teamSkills || {};
-          const updatedTeamSkills = skillsChanged
-            ? {
-                ...currentTeamSkills,
-                [selectedTeam]: {
-                  // New role-based structure
-                  field: {
-                    category: editFieldCategory,
-                    multiplier: editFieldMultiplier,
-                  },
-                  goalkeeper: {
-                    category: editGoalkeeperCategory,
-                    multiplier: editGoalkeeperMultiplier,
-                  },
-                  // Legacy fields for backwards compatibility
-                  category: editFieldCategory, // Use field player category as default
-                  multiplier: editFieldMultiplier, // Use field player multiplier as default
-                  position: arrayToPosition(editPositions), // Legacy: computed primary position
-                  updatedAt: new Date(),
-                },
-              }
-            : currentTeamSkills;
+          let updatedTeamSkills = currentTeamSkills;
+
+          if (skillsChanged) {
+            const hasFieldPosition = editPositions.some(
+              (p) => p === "H" || p === "P"
+            );
+            const hasGoalkeeperPosition = editPositions.includes("MV");
+
+            updatedTeamSkills = {
+              ...currentTeamSkills,
+              [selectedTeam]: {
+                // Legacy fields for backwards compatibility
+                category: editFieldCategory, // Use field player category as default
+                multiplier: editFieldMultiplier, // Use field player multiplier as default
+                position: arrayToPosition(editPositions), // Legacy: computed primary position
+                updatedAt: new Date(),
+              },
+            };
+
+            // Tallenna vain field-taidot jos pelaajalla on H tai P positio
+            if (hasFieldPosition) {
+              updatedTeamSkills[selectedTeam].field = {
+                category: editFieldCategory,
+                multiplier: editFieldMultiplier,
+              };
+            }
+
+            // Tallenna vain goalkeeper-taidot jos pelaajalla on MV positio
+            if (hasGoalkeeperPosition) {
+              updatedTeamSkills[selectedTeam].goalkeeper = {
+                category: editGoalkeeperCategory,
+                multiplier: editGoalkeeperMultiplier,
+              };
+            }
+          }
 
           // Päivitä myös teamMember-status
           // Lue ensin tuorein data Firestoresta varmistaaksemme ettei muiden joukkueiden dataa ylikirjoiteta
@@ -1507,141 +1535,161 @@ const UserManagementScreen: React.FC = () => {
                 ))}
               </View>
 
-              {/* Role tabs for players with multiple positions including MV */}
-              {editPositions.includes("MV") && (
-                <View style={styles.roleTabsContainer}>
-                  <TouchableOpacity
-                    style={[
-                      styles.roleTab,
-                      editSkillsRole === "field" && styles.roleTabActive,
-                    ]}
-                    onPress={() => {
-                      console.log("🏃 Switching to field role");
-                      setEditSkillsRole("field");
-                    }}
-                  >
-                    <Text
+              {/* Role tabs for players with both field and goalkeeper positions */}
+              {editPositions.includes("MV") &&
+                (editPositions.includes("H") ||
+                  editPositions.includes("P")) && (
+                  <View style={styles.roleTabsContainer}>
+                    <TouchableOpacity
                       style={[
-                        styles.roleTabText,
-                        editSkillsRole === "field" && styles.roleTabTextActive,
+                        styles.roleTab,
+                        editSkillsRole === "field" && styles.roleTabActive,
                       ]}
+                      onPress={() => {
+                        setEditSkillsRole("field");
+                      }}
                     >
-                      H/P
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.roleTab,
-                      editSkillsRole === "goalkeeper" && styles.roleTabActive,
-                    ]}
-                    onPress={() => {
-                      console.log("🥅 Switching to goalkeeper role", {
-                        currentCategory: editGoalkeeperCategory,
-                        currentMultiplier: editGoalkeeperMultiplier,
-                      });
-                      setEditSkillsRole("goalkeeper");
-                    }}
-                  >
-                    <Text
+                      <Text
+                        style={[
+                          styles.roleTabText,
+                          editSkillsRole === "field" &&
+                            styles.roleTabTextActive,
+                        ]}
+                      >
+                        H/P Taidot
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
                       style={[
-                        styles.roleTabText,
-                        editSkillsRole === "goalkeeper" &&
-                          styles.roleTabTextActive,
+                        styles.roleTab,
+                        editSkillsRole === "goalkeeper" && styles.roleTabActive,
                       ]}
+                      onPress={() => {
+                        setEditSkillsRole("goalkeeper");
+                      }}
                     >
-                      MV
+                      <Text
+                        style={[
+                          styles.roleTabText,
+                          editSkillsRole === "goalkeeper" &&
+                            styles.roleTabTextActive,
+                        ]}
+                      >
+                        MV Taidot
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+              {/* Category - only show when editing relevant role */}
+              {((editPositions.includes("H") || editPositions.includes("P")) &&
+                (!editPositions.includes("MV") ||
+                  editSkillsRole === "field")) ||
+              (editPositions.includes("MV") &&
+                !editPositions.includes("H") &&
+                !editPositions.includes("P")) ||
+              (editPositions.includes("MV") &&
+                editSkillsRole === "goalkeeper") ? (
+                <View style={styles.editInputGroup}>
+                  <Text style={styles.label}>Kategoria</Text>
+                  <TouchableOpacity
+                    style={styles.selector}
+                    onPress={() =>
+                      setEditDropdown(
+                        editDropdown === "category" ? null : "category"
+                      )
+                    }
+                  >
+                    <Text style={styles.selectorText}>
+                      Kategoria {getCurrentCategory()}
                     </Text>
+                    <Ionicons name="chevron-down" size={20} color="#666" />
                   </TouchableOpacity>
+                  {editDropdown === "category" && (
+                    <View style={styles.dropdownList}>
+                      {categories.map((cat) => (
+                        <TouchableOpacity
+                          key={cat}
+                          style={styles.dropdownOption}
+                          onPress={() => {
+                            setCurrentCategory(cat);
+                            // Päivitä kerroin automaattisesti uuden kategorian mukaan
+                            const multiplierOptions = getMultiplierOptions(cat);
+                            const currentMult = getCurrentMultiplier();
+                            if (!multiplierOptions.includes(currentMult)) {
+                              setCurrentMultiplier(multiplierOptions[0]);
+                            }
+                            setEditDropdown(null);
+                          }}
+                        >
+                          <Text style={styles.optionText}>Kategoria {cat}</Text>
+                          {getCurrentCategory() === cat && (
+                            <Ionicons
+                              name="checkmark"
+                              size={20}
+                              color="#007AFF"
+                            />
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
                 </View>
-              )}
+              ) : null}
 
-              {/* Category */}
-              <View style={styles.editInputGroup}>
-                <Text style={styles.label}>Kategoria</Text>
-                <TouchableOpacity
-                  style={styles.selector}
-                  onPress={() =>
-                    setEditDropdown(
-                      editDropdown === "category" ? null : "category"
-                    )
-                  }
-                >
-                  <Text style={styles.selectorText}>
-                    Kategoria {getCurrentCategory()}
-                  </Text>
-                  <Ionicons name="chevron-down" size={20} color="#666" />
-                </TouchableOpacity>
-                {editDropdown === "category" && (
-                  <View style={styles.dropdownList}>
-                    {categories.map((cat) => (
-                      <TouchableOpacity
-                        key={cat}
-                        style={styles.dropdownOption}
-                        onPress={() => {
-                          setCurrentCategory(cat);
-                          // Päivitä kerroin automaattisesti uuden kategorian mukaan
-                          const multiplierOptions = getMultiplierOptions(cat);
-                          const currentMult = getCurrentMultiplier();
-                          if (!multiplierOptions.includes(currentMult)) {
-                            setCurrentMultiplier(multiplierOptions[0]);
-                          }
-                          setEditDropdown(null);
-                        }}
-                      >
-                        <Text style={styles.optionText}>Kategoria {cat}</Text>
-                        {getCurrentCategory() === cat && (
-                          <Ionicons
-                            name="checkmark"
-                            size={20}
-                            color="#007AFF"
-                          />
-                        )}
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              </View>
-
-              {/* Multiplier */}
-              <View style={styles.editInputGroup}>
-                <Text style={styles.label}>Kerroin</Text>
-                <TouchableOpacity
-                  style={styles.selector}
-                  onPress={() =>
-                    setEditDropdown(
-                      editDropdown === "multiplier" ? null : "multiplier"
-                    )
-                  }
-                >
-                  <Text style={styles.selectorText}>
-                    {getCurrentMultiplier().toFixed(1)}
-                  </Text>
-                  <Ionicons name="chevron-down" size={20} color="#666" />
-                </TouchableOpacity>
-                {editDropdown === "multiplier" && (
-                  <View style={styles.dropdownList}>
-                    {getMultiplierOptions(getCurrentCategory()).map((mult) => (
-                      <TouchableOpacity
-                        key={mult}
-                        style={styles.dropdownOption}
-                        onPress={() => {
-                          setCurrentMultiplier(mult);
-                          setEditDropdown(null);
-                        }}
-                      >
-                        <Text style={styles.optionText}>{mult.toFixed(1)}</Text>
-                        {getCurrentMultiplier() === mult && (
-                          <Ionicons
-                            name="checkmark"
-                            size={20}
-                            color="#007AFF"
-                          />
-                        )}
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              </View>
+              {/* Multiplier - only show when editing relevant role */}
+              {((editPositions.includes("H") || editPositions.includes("P")) &&
+                (!editPositions.includes("MV") ||
+                  editSkillsRole === "field")) ||
+              (editPositions.includes("MV") &&
+                !editPositions.includes("H") &&
+                !editPositions.includes("P")) ||
+              (editPositions.includes("MV") &&
+                editSkillsRole === "goalkeeper") ? (
+                <View style={styles.editInputGroup}>
+                  <Text style={styles.label}>Kerroin</Text>
+                  <TouchableOpacity
+                    style={styles.selector}
+                    onPress={() =>
+                      setEditDropdown(
+                        editDropdown === "multiplier" ? null : "multiplier"
+                      )
+                    }
+                  >
+                    <Text style={styles.selectorText}>
+                      {getCurrentMultiplier().toFixed(1)}
+                    </Text>
+                    <Ionicons name="chevron-down" size={20} color="#666" />
+                  </TouchableOpacity>
+                  {editDropdown === "multiplier" && (
+                    <View style={styles.dropdownList}>
+                      {getMultiplierOptions(getCurrentCategory()).map(
+                        (mult) => (
+                          <TouchableOpacity
+                            key={mult}
+                            style={styles.dropdownOption}
+                            onPress={() => {
+                              setCurrentMultiplier(mult);
+                              setEditDropdown(null);
+                            }}
+                          >
+                            <Text style={styles.optionText}>
+                              {mult.toFixed(1)}
+                            </Text>
+                            {getCurrentMultiplier() === mult && (
+                              <Ionicons
+                                name="checkmark"
+                                size={20}
+                                color="#007AFF"
+                              />
+                            )}
+                          </TouchableOpacity>
+                        )
+                      )}
+                    </View>
+                  )}
+                </View>
+              ) : null}
 
               {/* Vakiokävijä - näytetään vain kun joukkue on valittu */}
               {selectedTeam && (

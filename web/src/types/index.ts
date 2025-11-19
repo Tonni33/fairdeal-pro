@@ -15,17 +15,23 @@ export interface User {
   teamIds: string[];
   teams: string[];
   createdAt?: string;
-  // Team-specific skills
+  // Team-specific skills - only stores relevant position data
   teamSkills?: {
     [teamId: string]: {
-      field: {
+      field?: {
+        // Field player skills (H or P) - only present if player has H or P position
         category: number;
         multiplier: number;
       };
-      goalkeeper: {
+      goalkeeper?: {
+        // Goalkeeper skills (MV) - only present if player has MV position
         category: number;
         multiplier: number;
       };
+      // Legacy fields for backwards compatibility
+      category?: number;
+      multiplier?: number;
+      position?: string;
       updatedAt?: string;
     };
   };

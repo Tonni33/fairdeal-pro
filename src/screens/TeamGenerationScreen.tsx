@@ -73,22 +73,11 @@ const TeamGenerationScreen: React.FC = () => {
     if (!teamId || !player.teamSkills || !player.teamSkills[teamId]) {
       // This shouldn't happen with proper data, but provide safe defaults
       console.warn(
-        `Missing team skills for player ${player.name} in team ${teamId}`
+        `❌ Missing team skills for player ${player.name} in team ${teamId}`
       );
 
-      // Determine position from playerRole or player's default positions
-      const defaultPosition =
-        playerRole ||
-        (player.positions?.includes("MV")
-          ? "MV"
-          : player.positions?.[0] || "H");
-
-      return {
-        category: 2,
-        multiplier: 2.0,
-        position: defaultPosition,
-        points: 200,
-      };
+      // Return null to indicate missing skills - caller should handle this
+      return null;
     }
 
     const teamSkills = player.teamSkills[teamId];
@@ -104,20 +93,22 @@ const TeamGenerationScreen: React.FC = () => {
     // Use role-specific skills with safety checks
     const roleSkills = isGoalkeeper ? teamSkills.goalkeeper : teamSkills.field;
 
+    // Check if role skills exist and are valid
     if (
       !roleSkills ||
       typeof roleSkills.category === "undefined" ||
       typeof roleSkills.multiplier === "undefined"
     ) {
       console.warn(
-        `Missing or invalid role skills for player ${player.name} (${roleToUse}) in team ${teamId}`
+        `❌ Missing or invalid ${
+          isGoalkeeper ? "goalkeeper" : "field"
+        } skills for player ${player.name} (ID: ${
+          player.id
+        }) in team ${teamId}. Player positions: ${player.positions.join(", ")}`
       );
-      return {
-        category: 2,
-        multiplier: 2.0,
-        position: roleToUse,
-        points: 200,
-      };
+
+      // Return null to indicate missing skills - don't use fallback automatically
+      return null;
     }
 
     const category = roleSkills.category;
@@ -273,6 +264,21 @@ const TeamGenerationScreen: React.FC = () => {
               playerRole
             );
 
+            // If teamSkills is null, player has missing ratings
+            if (!teamSkills) {
+              console.warn(
+                `⚠️ Player ${player.name} has missing skill ratings, using defaults`
+              );
+              return {
+                id,
+                name: player.name || "Unknown",
+                points: 0,
+                position: playerRole || "H",
+                multiplier: 0,
+                category: 0,
+              };
+            }
+
             // Create enriched player with assignedRole if available
             const enrichedPlayer: EnrichedPlayer = {
               ...player,
@@ -349,6 +355,21 @@ const TeamGenerationScreen: React.FC = () => {
           selectedEvent.teamId,
           playerRole
         );
+
+        // If teamSkills is null, player has missing ratings - return with zero points
+        if (!teamSkills) {
+          console.warn(
+            `⚠️ Player ${player.name} has missing skill ratings for team ${selectedEvent.teamId}, role: ${playerRole}`
+          );
+          return {
+            ...player,
+            category: 0,
+            multiplier: 0,
+            position: playerRole || player.positions[0] || "H",
+            points: 0,
+          } as EnrichedPlayer;
+        }
+
         return {
           ...player,
           category: teamSkills.category,
@@ -374,13 +395,29 @@ const TeamGenerationScreen: React.FC = () => {
       .filter((player) => {
         if (!selectedEvent.teamId) return false;
 
-        const hasTeamSkills =
-          player.teamSkills &&
-          player.teamSkills[selectedEvent.teamId] &&
-          player.teamSkills[selectedEvent.teamId].field &&
-          typeof player.teamSkills[selectedEvent.teamId].field.category !==
-            "undefined";
-        return !hasTeamSkills;
+        // Get player's selected role for this event
+        const playerRole = selectedEvent.playerRoles?.[player.id];
+        const roleToCheck =
+          playerRole ||
+          (player.positions?.includes("MV")
+            ? "MV"
+            : player.positions?.[0] || "H");
+        const isGoalkeeper = roleToCheck === "MV";
+
+        // Check if player has team skills for this team
+        const teamSkills = player.teamSkills?.[selectedEvent.teamId];
+        if (!teamSkills) return true;
+
+        // Check if player has skills for their selected role
+        const roleSkills = isGoalkeeper
+          ? teamSkills.goalkeeper
+          : teamSkills.field;
+
+        return (
+          !roleSkills ||
+          typeof roleSkills.category === "undefined" ||
+          typeof roleSkills.multiplier === "undefined"
+        );
       });
   }, [selectedEvent, players]);
 
@@ -397,6 +434,19 @@ const TeamGenerationScreen: React.FC = () => {
         "Virhe",
         "Tarvitaan vähintään 4 pelaajaa joukkueiden luomiseen"
       );
+      return;
+    }
+
+    // Check for players with missing skill ratings
+    const unratedPlayers = registeredPlayers.filter((p) => p.points === 0);
+    if (unratedPlayers.length > 0) {
+      const playerNames = unratedPlayers.map((p) => p.name).join(", ");
+      Alert.alert(
+        "Puuttuvat taitotasot",
+        `Seuraavilla pelaajilla ei ole taitotasoja tälle joukkueelle ja roolille:\n\n${playerNames}\n\nKäy käyttäjähallinnassa asettamassa heille taitotasot ennen joukkueiden luontia.`,
+        [{ text: "OK" }]
+      );
+      setIsGenerating(false);
       return;
     }
 

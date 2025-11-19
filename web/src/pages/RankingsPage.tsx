@@ -85,6 +85,7 @@ export default function RankingsPage() {
   }, [teams, userData]);
 
   // Filter and sort all players by selected team
+  // Players with both field and goalkeeper roles will appear twice
   const allPlayers = useMemo(() => {
     if (!selectedTeam) return [];
 
@@ -92,10 +93,32 @@ export default function RankingsPage() {
       user.teamIds?.includes(selectedTeam)
     );
 
+    // Process each player - if they have both roles, create two entries
+    const processedPlayers: (User & {
+      displayRole?: "field" | "goalkeeper";
+    })[] = [];
+
+    filtered.forEach((user) => {
+      const hasFieldRole = user.positions?.some((p) => p === "H" || p === "P");
+      const hasGoalkeeperRole = user.positions?.includes("MV");
+
+      if (hasFieldRole && hasGoalkeeperRole) {
+        // Add twice: once as field player, once as goalkeeper
+        processedPlayers.push({ ...user, displayRole: "field" });
+        processedPlayers.push({ ...user, displayRole: "goalkeeper" });
+      } else if (hasGoalkeeperRole) {
+        // Only goalkeeper
+        processedPlayers.push({ ...user, displayRole: "goalkeeper" });
+      } else {
+        // Only field player (or no specific role)
+        processedPlayers.push({ ...user, displayRole: "field" });
+      }
+    });
+
     // Sort: field players first (by multiplier), then goalkeepers (by multiplier)
-    filtered.sort((a, b) => {
-      const aIsGK = a.positions?.includes("MV");
-      const bIsGK = b.positions?.includes("MV");
+    processedPlayers.sort((a, b) => {
+      const aIsGK = a.displayRole === "goalkeeper";
+      const bIsGK = b.displayRole === "goalkeeper";
 
       // Goalkeepers always at the end
       if (aIsGK && !bIsGK) return 1;
@@ -114,7 +137,7 @@ export default function RankingsPage() {
       return aMult - bMult;
     });
 
-    return filtered;
+    return processedPlayers;
   }, [users, selectedTeam]);
 
   const handleUpdatePlayer = async (
@@ -143,167 +166,183 @@ export default function RankingsPage() {
     }
   };
 
-  const columns: GridColDef<User>[] = [
-    {
-      field: "name",
-      headerName: "Nimi",
-      width: 250,
-      renderCell: (params) => {
-        const isGoalkeeper = params.row.positions?.includes("MV");
-        return (
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <Typography variant="body2">{params.value}</Typography>
-            {isGoalkeeper && <span>🥅</span>}
-          </Box>
-        );
-      },
-    },
-    {
-      field: "category",
-      headerName: "Kategoria",
-      width: 120,
-      renderCell: (params) => {
-        const isEditing = editingRows.has(params.row.id);
-        const isGoalkeeper = params.row.positions?.includes("MV");
-        const teamSkill = params.row.teamSkills?.[selectedTeam];
-        const skills = isGoalkeeper ? teamSkill?.goalkeeper : teamSkill?.field;
-        const category = skills?.category || 1;
-
-        if (isEditing) {
+  const columns: GridColDef<User & { displayRole?: "field" | "goalkeeper" }>[] =
+    [
+      {
+        field: "name",
+        headerName: "Nimi",
+        width: 250,
+        renderCell: (params) => {
+          const isGoalkeeper = params.row.displayRole === "goalkeeper";
           return (
-            <TextField
-              type="number"
-              size="small"
-              defaultValue={category}
-              inputProps={{ min: 1, max: 3, step: 1 }}
-              sx={{ width: 70 }}
-              onChange={(e) => {
-                const value = parseInt(e.target.value);
-                if (value >= 1 && value <= 3) {
-                  setTempValues((prev) => ({
-                    ...prev,
-                    [params.row.id]: {
-                      ...prev[params.row.id],
-                      category: value,
-                    },
-                  }));
-                }
-              }}
-            />
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Typography variant="body2">{params.row.name}</Typography>
+              {isGoalkeeper && <span>🥅</span>}
+            </Box>
           );
-        }
-
-        return <Typography variant="body2">{category}</Typography>;
+        },
       },
-    },
-    {
-      field: "multiplier",
-      headerName: "Kerroin",
-      width: 120,
-      renderCell: (params) => {
-        const isEditing = editingRows.has(params.row.id);
-        const isGoalkeeper = params.row.positions?.includes("MV");
-        const teamSkill = params.row.teamSkills?.[selectedTeam];
-        const skills = isGoalkeeper ? teamSkill?.goalkeeper : teamSkill?.field;
-        const multiplier = skills?.multiplier || 1;
+      {
+        field: "category",
+        headerName: "Kategoria",
+        width: 120,
+        renderCell: (params) => {
+          const rowKey = `${params.row.id}-${
+            params.row.displayRole || "field"
+          }`;
+          const isEditing = editingRows.has(rowKey);
+          const isGoalkeeper = params.row.displayRole === "goalkeeper";
+          const teamSkill = params.row.teamSkills?.[selectedTeam];
+          const skills = isGoalkeeper
+            ? teamSkill?.goalkeeper
+            : teamSkill?.field;
+          const category = skills?.category || 1;
 
-        if (isEditing) {
+          if (isEditing) {
+            return (
+              <TextField
+                type="number"
+                size="small"
+                defaultValue={category}
+                inputProps={{ min: 1, max: 3, step: 1 }}
+                sx={{ width: 70 }}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value);
+                  if (value >= 1 && value <= 3) {
+                    setTempValues((prev) => ({
+                      ...prev,
+                      [rowKey]: {
+                        ...prev[rowKey],
+                        category: value,
+                      },
+                    }));
+                  }
+                }}
+              />
+            );
+          }
+
+          return <Typography variant="body2">{category}</Typography>;
+        },
+      },
+      {
+        field: "multiplier",
+        headerName: "Kerroin",
+        width: 120,
+        renderCell: (params) => {
+          const rowKey = `${params.row.id}-${
+            params.row.displayRole || "field"
+          }`;
+          const isEditing = editingRows.has(rowKey);
+          const isGoalkeeper = params.row.displayRole === "goalkeeper";
+          const teamSkill = params.row.teamSkills?.[selectedTeam];
+          const skills = isGoalkeeper
+            ? teamSkill?.goalkeeper
+            : teamSkill?.field;
+          const multiplier = skills?.multiplier || 1;
+
+          if (isEditing) {
+            return (
+              <TextField
+                type="number"
+                size="small"
+                defaultValue={multiplier.toFixed(1)}
+                inputProps={{ min: 1.0, max: 3.9, step: 0.1 }}
+                sx={{ width: 70 }}
+                onChange={(e) => {
+                  const value = parseFloat(e.target.value);
+                  if (value >= 1.0 && value <= 3.9) {
+                    setTempValues((prev) => ({
+                      ...prev,
+                      [rowKey]: {
+                        ...prev[rowKey],
+                        multiplier: value,
+                      },
+                    }));
+                  }
+                }}
+              />
+            );
+          }
+
           return (
-            <TextField
-              type="number"
-              size="small"
-              defaultValue={multiplier.toFixed(1)}
-              inputProps={{ min: 1.0, max: 3.9, step: 0.1 }}
-              sx={{ width: 70 }}
-              onChange={(e) => {
-                const value = parseFloat(e.target.value);
-                if (value >= 1.0 && value <= 3.9) {
-                  setTempValues((prev) => ({
-                    ...prev,
-                    [params.row.id]: {
-                      ...prev[params.row.id],
-                      multiplier: value,
-                    },
-                  }));
-                }
-              }}
-            />
+            <Typography variant="body2">{multiplier.toFixed(1)}</Typography>
           );
-        }
-
-        return <Typography variant="body2">{multiplier.toFixed(1)}</Typography>;
+        },
       },
-    },
-    {
-      field: "actions",
-      headerName: "Toiminnot",
-      width: 100,
-      sortable: false,
-      align: "center",
-      headerAlign: "center",
-      renderCell: (params) => {
-        const isEditing = editingRows.has(params.row.id);
-        const isGoalkeeper = params.row.positions?.includes("MV");
+      {
+        field: "actions",
+        headerName: "Toiminnot",
+        width: 100,
+        sortable: false,
+        align: "center",
+        headerAlign: "center",
+        renderCell: (params) => {
+          const rowKey = `${params.row.id}-${
+            params.row.displayRole || "field"
+          }`;
+          const isEditing = editingRows.has(rowKey);
+          const isGoalkeeper = params.row.displayRole === "goalkeeper";
 
-        return (
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              height: "100%",
-            }}
-          >
-            <IconButton
-              size="small"
-              color={isEditing ? "success" : "primary"}
-              onClick={() => {
-                if (isEditing) {
-                  // Save
-                  const teamSkill = params.row.teamSkills?.[selectedTeam];
-                  const skills = isGoalkeeper
-                    ? teamSkill?.goalkeeper
-                    : teamSkill?.field;
-                  const currentCategory = skills?.category || 1;
-                  const currentMultiplier = skills?.multiplier || 1;
-
-                  const tempValue = tempValues[params.row.id];
-                  const newCategory = tempValue?.category || currentCategory;
-                  const newMultiplier =
-                    tempValue?.multiplier || currentMultiplier;
-
-                  handleUpdatePlayer(
-                    params.row.id,
-                    newCategory,
-                    newMultiplier,
-                    isGoalkeeper
-                  );
-
-                  setEditingRows((prev) => {
-                    const next = new Set(prev);
-                    next.delete(params.row.id);
-                    return next;
-                  });
-
-                  // Clear temp values for this row
-                  setTempValues((prev) => {
-                    const next = { ...prev };
-                    delete next[params.row.id];
-                    return next;
-                  });
-                } else {
-                  // Edit
-                  setEditingRows((prev) => new Set(prev).add(params.row.id));
-                }
+          return (
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                height: "100%",
               }}
             >
-              {isEditing ? <LockOpen /> : <Lock />}
-            </IconButton>
-          </Box>
-        );
+              <IconButton
+                size="small"
+                color={isEditing ? "success" : "primary"}
+                onClick={() => {
+                  if (isEditing) {
+                    // Save
+                    const teamSkill = params.row.teamSkills?.[selectedTeam];
+                    const skills = isGoalkeeper
+                      ? teamSkill?.goalkeeper
+                      : teamSkill?.field;
+                    const currentCategory = skills?.category || 1;
+                    const currentMultiplier = skills?.multiplier || 1;
+
+                    const tempValue = tempValues[rowKey];
+                    const newCategory = tempValue?.category || currentCategory;
+                    const newMultiplier =
+                      tempValue?.multiplier || currentMultiplier;
+
+                    handleUpdatePlayer(
+                      params.row.id,
+                      newCategory,
+                      newMultiplier,
+                      isGoalkeeper
+                    );
+
+                    setEditingRows((prev) => {
+                      const next = new Set(prev);
+                      next.delete(rowKey);
+                      return next;
+                    });
+
+                    // Clear temp values for this row
+                    setTempValues((prev) => {
+                      const next = { ...prev };
+                      delete next[rowKey];
+                      return next;
+                    });
+                  } else {
+                    // Edit
+                    setEditingRows((prev) => new Set(prev).add(rowKey));
+                  }
+                }}
+              >
+                {isEditing ? <LockOpen /> : <Lock />}
+              </IconButton>
+            </Box>
+          );
+        },
       },
-    },
-  ];
+    ];
 
   // Admin check
   if (!userData?.isAdmin) {
@@ -380,6 +419,7 @@ export default function RankingsPage() {
                 columns={columns}
                 loading={loading}
                 disableRowSelectionOnClick
+                getRowId={(row) => `${row.id}-${row.displayRole || "field"}`}
                 pageSizeOptions={[10, 25, 50, 100]}
                 initialState={{
                   pagination: {
