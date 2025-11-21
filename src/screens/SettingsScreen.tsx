@@ -116,6 +116,8 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
     useState<string>("");
   const [guestRegistrationHours, setGuestRegistrationHours] =
     useState<number>(24);
+  const [guestRegistrationHoursText, setGuestRegistrationHoursText] =
+    useState<string>("24");
 
   // Helper function to check if user is master admin
   const isMasterAdmin = (): boolean => {
@@ -199,6 +201,9 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
         setWhatsappGroupName(teamData?.whatsappGroupName || "");
         setWhatsappGroupInviteLink(teamData?.whatsappGroupInviteLink || "");
         setGuestRegistrationHours(teamData?.guestRegistrationHours || 24);
+        setGuestRegistrationHoursText(
+          (teamData?.guestRegistrationHours || 24).toString()
+        );
       } else {
         console.log(`SettingsScreen: Skipping team data reload - just saved`);
         justSavedRef.current = false; // Reset flag after skipping once
@@ -208,6 +213,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
       setWhatsappGroupName("");
       setWhatsappGroupInviteLink("");
       setGuestRegistrationHours(24);
+      setGuestRegistrationHoursText("24");
     }
   }, [selectedTeamId, teams]);
 
@@ -844,9 +850,14 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
               </Text>
               <TextInput
                 style={styles.numberInput}
-                value={guestRegistrationHours.toString()}
+                value={guestRegistrationHoursText}
                 onChangeText={(text) => {
-                  const hours = parseInt(text) || 24;
+                  setGuestRegistrationHoursText(text);
+                }}
+                onBlur={() => {
+                  const hours = parseInt(guestRegistrationHoursText) || 24;
+                  setGuestRegistrationHours(hours);
+                  setGuestRegistrationHoursText(hours.toString());
                   handleTeamDataChange("guestRegistrationHours", hours);
                 }}
                 keyboardType="numeric"

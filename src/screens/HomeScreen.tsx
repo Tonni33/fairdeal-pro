@@ -398,6 +398,76 @@ const HomeScreen: React.FC = () => {
     return () => unsubscribe();
   }, [nextEvent]);
 
+  // Automaattinen varallaolijoiden siirto osallistujiksi kun threshold täyttyy
+  useEffect(() => {
+    const promoteReserves = async () => {
+      if (!nextEvent || !teams || !players) return;
+
+      const team = teams.find((t) => t.id === nextEvent.teamId);
+      if (!team) return;
+
+      const guestRegistrationHours = team.guestRegistrationHours || 24;
+      const now = new Date();
+      const eventDate = new Date(nextEvent.date);
+      const hoursUntilEvent =
+        (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+      console.log(
+        `[HomeScreen Promo] 📅 ${nextEvent.title}\n` +
+          `  Threshold: ${guestRegistrationHours}h\n` +
+          `  Aikaa: ${hoursUntilEvent.toFixed(2)}h`
+      );
+
+      // Tarkista vain jos threshold täyttyy
+      if (hoursUntilEvent <= guestRegistrationHours) {
+        const reserves = nextEvent.reservePlayers || [];
+        const registered = nextEvent.registeredPlayers || [];
+
+        console.log(`[HomeScreen Promo] Varalla: ${reserves.length}`);
+
+        if (reserves.length > 0) {
+          // Tarkista onko tilaa
+          const fieldPlayers = registered.filter((id) => {
+            const p = players.find((pl) => pl.id === id);
+            return p && !p.positions.includes("MV");
+          });
+          const goalkeepers = registered.filter((id) => {
+            const p = players.find((pl) => pl.id === id);
+            return p && p.positions.includes("MV");
+          });
+
+          for (const reserveId of reserves) {
+            const reservePlayer = players.find((p) => p.id === reserveId);
+            if (!reservePlayer) continue;
+
+            const isGoalkeeper = reservePlayer.positions.includes("MV");
+            const isFull = isGoalkeeper
+              ? nextEvent.maxGoalkeepers &&
+                goalkeepers.length >= nextEvent.maxGoalkeepers
+              : fieldPlayers.length >= nextEvent.maxPlayers;
+
+            if (!isFull) {
+              try {
+                const eventRef = doc(db, "events", nextEvent.id);
+                await updateDoc(eventRef, {
+                  registeredPlayers: arrayUnion(reserveId),
+                  reservePlayers: arrayRemove(reserveId),
+                });
+                console.log(
+                  `[HomeScreen Promo] ✅ Siirretty ${reservePlayer.name}`
+                );
+              } catch (err) {
+                console.error("[HomeScreen Promo] ❌ Virhe:", err);
+              }
+            }
+          }
+        }
+      }
+    };
+
+    promoteReserves();
+  }, [nextEvent, teams, players]);
+
   const handleRegistration = async () => {
     if (!nextEvent || !currentPlayer || !user) return;
 

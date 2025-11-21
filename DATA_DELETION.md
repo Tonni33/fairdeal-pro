@@ -13,6 +13,7 @@ If you wish to delete your account and all associated data from FairDealPro, ple
 ### What Data Will Be Deleted
 
 Upon receiving your deletion request, we will permanently delete:
+
 - Your account information (email, name)
 - All player profiles you created
 - All teams and events you created or participated in
@@ -37,6 +38,7 @@ Jos haluat poistaa tilisi ja kaikki siihen liittyvät tiedot FairDealPro-sovellu
 ### Mitä tietoja poistetaan
 
 Poistopyyntösi vastaanottamisen jälkeen poistamme pysyvästi:
+
 - Tilitietosi (sähköposti, nimi)
 - Kaikki luomasi pelaajaprofiilit
 - Kaikki luomasi tai osallistumasi joukkueet ja tapahtumat

@@ -46,6 +46,7 @@ interface TeamSettings {
   teamAName: string;
   teamBName: string;
   teamSize: number;
+  guestRegistrationHours: number;
   teamAdminIds: string[];
   updatedAt?: string;
   updatedBy?: string;
@@ -74,6 +75,7 @@ export default function TeamSettingsPage() {
     notificationEnabled: true,
     teamAName: "Joukkue Valkoinen",
     teamBName: "Joukkue Musta",
+    guestRegistrationHours: 24,
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -89,6 +91,7 @@ export default function TeamSettingsPage() {
     "eventDuration",
     "maxPlayers",
     "maxGoalkeepers",
+    "guestRegistrationHours",
     "notificationEnabled",
     "updatedAt",
     "actions",
@@ -122,6 +125,17 @@ export default function TeamSettingsPage() {
     setLoading(true);
     try {
       const settingsSnapshot = await getDocs(collection(db, "settings"));
+      const teamsSnapshot = await getDocs(collection(db, "teams"));
+
+      // Create a map of team IDs to guestRegistrationHours from teams collection
+      const teamGuestHoursMap: Record<string, number> = {};
+      teamsSnapshot.docs.forEach((doc) => {
+        const data = doc.data();
+        if (data.guestRegistrationHours !== undefined) {
+          teamGuestHoursMap[doc.id] = data.guestRegistrationHours;
+        }
+      });
+
       const settingsData = settingsSnapshot.docs
         .filter((doc) => {
           // Only include team-specific settings (team-{teamId})
@@ -135,9 +149,16 @@ export default function TeamSettingsPage() {
         })
         .map((doc) => {
           const data = doc.data();
+          // Use guestRegistrationHours from teams collection if available, otherwise from settings
+          const guestRegistrationHours =
+            data.teamId && teamGuestHoursMap[data.teamId] !== undefined
+              ? teamGuestHoursMap[data.teamId]
+              : data.guestRegistrationHours || 24;
+
           return {
             id: doc.id,
             ...data,
+            guestRegistrationHours,
             // Convert Firestore Timestamps to ISO strings
             updatedAt:
               data.updatedAt?.toDate?.()?.toISOString() || data.updatedAt,
@@ -189,6 +210,7 @@ export default function TeamSettingsPage() {
       notificationEnabled: setting.notificationEnabled,
       teamAName: setting.teamAName,
       teamBName: setting.teamBName,
+      guestRegistrationHours: setting.guestRegistrationHours || 24,
     });
     setEditOpen(true);
   };
@@ -198,11 +220,11 @@ export default function TeamSettingsPage() {
 
     try {
       setError("");
-      const settingsRef = doc(db, "settings", selectedSettings.id);
-      await updateDoc(settingsRef, {
+
+      // Update settings collection (without guestRegistrationHours)
+      await updateDoc(doc(db, "settings", selectedSettings.id), {
         teamName: editForm.teamName,
         teamCode: editForm.teamCode,
-        teamColor: editForm.teamColor,
         autoCreateTeams: editForm.autoCreateTeams,
         defaultLocation: editForm.defaultLocation,
         defaultTime: editForm.defaultTime,
@@ -215,6 +237,43 @@ export default function TeamSettingsPage() {
         teamBName: editForm.teamBName,
         updatedAt: new Date(),
       });
+
+      // Update the teams collection - this is the source of truth for guestRegistrationHours
+      const teamId = selectedSettings.teamId;
+      console.log("Updating guestRegistrationHours for team ID:", teamId);
+      console.log("New value:", editForm.guestRegistrationHours);
+      console.log("Old value:", selectedSettings.guestRegistrationHours);
+
+      if (teamId) {
+        try {
+          const teamRef = doc(db, "teams", teamId);
+          const updateData = {
+            guestRegistrationHours: editForm.guestRegistrationHours,
+          };
+          console.log("Update data:", JSON.stringify(updateData));
+
+          await updateDoc(teamRef, updateData);
+          console.log("Team updated successfully");
+
+          // Verify the update by reading it back
+          const updatedTeamDoc = await getDocs(collection(db, "teams"));
+          const updatedTeam = updatedTeamDoc.docs.find((d) => d.id === teamId);
+          if (updatedTeam) {
+            console.log(
+              "Verified guestRegistrationHours after update:",
+              updatedTeam.data().guestRegistrationHours
+            );
+          }
+        } catch (teamUpdateError) {
+          console.error("Error updating team:", teamUpdateError);
+          setError("Virhe joukkueen päivittämisessä");
+          return;
+        }
+      } else {
+        console.error("No team ID available");
+        setError("Joukkue-ID puuttuu");
+        return;
+      }
 
       setSuccess("Asetukset päivitetty onnistuneesti!");
       setEditOpen(false);
@@ -313,6 +372,13 @@ export default function TeamSettingsPage() {
       headerName: "Max maalivahdit",
       width: 140,
       type: "number",
+    },
+    {
+      field: "guestRegistrationHours",
+      headerName: "Vieraiden raja (h)",
+      width: 150,
+      type: "number",
+      renderCell: (params) => <span>{params.value || 24}h</span>,
     },
     {
       field: "notificationEnabled",
@@ -628,6 +694,37 @@ export default function TeamSettingsPage() {
             <Typography variant="h6" sx={{ mt: 2 }}>
               Muut asetukset
             </Typography>
+
+            <TextField
+              label="Vieraiden ilmoittautumisraja (tuntia ennen)"
+              type="number"
+              value={editForm.guestRegistrationHours}
+              onChange={(e) => {
+                const value = e.target.value;
+                // Allow empty string during editing
+                if (value === "") {
+                  setEditForm({
+                    ...editForm,
+                    guestRegistrationHours: "" as any,
+                  });
+                } else if (!isNaN(Number(value))) {
+                  setEditForm({
+                    ...editForm,
+                    guestRegistrationHours: parseInt(value),
+                  });
+                }
+              }}
+              onBlur={(e) => {
+                // Ensure we have a valid number on blur
+                const value = parseInt(e.target.value) || 24;
+                setEditForm({
+                  ...editForm,
+                  guestRegistrationHours: value,
+                });
+              }}
+              fullWidth
+              helperText="Montako tuntia ennen tapahtumaa vieraat (ei-vakiokävijät) voivat ilmoittautua. Vakiokävijät voivat ilmoittautua aina."
+            />
 
             <FormControlLabel
               control={

@@ -413,8 +413,9 @@ const EventManagementScreen: React.FC = () => {
       const currentFieldPlayers = getFieldPlayers(currentPlayers);
       const currentGoalkeepers = getGoalkeepers(currentPlayers);
 
-      // Check guest registration threshold (24h rule)
-      const guestRegistrationHours = 24; // Same as HomeScreen
+      // Check guest registration threshold from team settings
+      const team = teams.find((t) => t.id === selectedEvent.teamId);
+      const guestRegistrationHours = team?.guestRegistrationHours || 24;
       const now = new Date();
       const eventDate = new Date(selectedEvent.date);
       const hoursUntilEvent =
@@ -669,8 +670,9 @@ const EventManagementScreen: React.FC = () => {
       const currentFieldPlayers = getFieldPlayers(currentPlayers);
       const currentGoalkeepers = getGoalkeepers(currentPlayers);
 
-      // Guest 24h rule (same as handleAddPlayerToEvent)
-      const guestRegistrationHours = 24; // Same as HomeScreen
+      // Guest registration threshold from team settings
+      const team = teams.find((t) => t.id === selectedEvent.teamId);
+      const guestRegistrationHours = team?.guestRegistrationHours || 24;
       const now = new Date();
       const eventDate = new Date(selectedEvent.date);
       const hoursUntilEvent =

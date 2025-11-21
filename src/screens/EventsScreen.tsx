@@ -225,6 +225,145 @@ const EventsScreen: React.FC = () => {
     );
   }, [events, selectedTeamId, userTeams]);
 
+  // Automaattinen varallaolijoiden siirto osallistujiksi kun threshold täyttyy ja tapahtumassa on tilaa
+  useEffect(() => {
+    const promoteReserves = async () => {
+      if (
+        !filteredEvents ||
+        !teams ||
+        !players ||
+        filteredEvents.length === 0 ||
+        teams.length === 0 ||
+        players.length === 0
+      ) {
+        console.log("[Varalla promo] Ei dataa, skipataan");
+        return;
+      }
+
+      const now = new Date();
+      console.log(
+        `[Varalla promo] 🚀 ALOITETAAN TARKISTUS - Kello: ${now.toLocaleString(
+          "fi-FI"
+        )} - Tapahtumia: ${filteredEvents.length}`
+      );
+
+      for (const event of filteredEvents) {
+        const team = teams.find((t) => t.id === event.teamId);
+        if (!team) {
+          console.log(
+            `[Varalla promo] Ei joukkuetta tapahtumalle ${event.title}`
+          );
+          continue;
+        }
+
+        const guestRegistrationHours = team.guestRegistrationHours || 24;
+        const now = new Date();
+        const eventDate = new Date(event.date);
+        const hoursUntilEvent =
+          (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+        console.log(
+          `[Varalla promo] 📅 ${event.title}\n` +
+            `  Joukkue: ${team.name} (ID: ${team.id})\n` +
+            `  Threshold: ${guestRegistrationHours}h\n` +
+            `  Tapahtuma: ${eventDate.toLocaleString("fi-FI")}\n` +
+            `  Aikaa tapahtumaan: ${hoursUntilEvent.toFixed(2)}h\n` +
+            `  Threshold täyttyy: ${
+              hoursUntilEvent <= guestRegistrationHours
+                ? "✅ KYLLÄ"
+                : `❌ EI (vielä ${(
+                    hoursUntilEvent - guestRegistrationHours
+                  ).toFixed(2)}h)`
+            }`
+        );
+
+        if (hoursUntilEvent <= guestRegistrationHours) {
+          let registered = event.registeredPlayers || [];
+          let reserves = event.reservePlayers || [];
+
+          console.log(
+            `[Varalla promo] 🎯 THRESHOLD TÄYTTYI!\n` +
+              `  Ilmoittautuneita: ${registered.length}\n` +
+              `  Varalla: ${reserves.length}\n` +
+              `  Varalla olevat ID:t: ${reserves.join(", ") || "Ei ketään"}`
+          );
+
+          let fieldPlayers = getFieldPlayers(registered, event);
+          let goalkeepers = getGoalkeepers(registered, event);
+
+          console.log(
+            `[Varalla promo] Kenttäpelaajia: ${fieldPlayers.length}/${
+              event.maxPlayers
+            }, Maalivahteja: ${goalkeepers.length}/${event.maxGoalkeepers || 0}`
+          );
+
+          let changed = false;
+          for (const reserveId of [...reserves]) {
+            const reservePlayer = players.find((p) => p.id === reserveId);
+            if (!reservePlayer) {
+              console.log(`[Varalla promo] ❌ Ei pelaajaa id: ${reserveId}`);
+              continue;
+            }
+
+            const isGoalkeeper = reservePlayer.positions.includes("MV");
+            const isFull = isGoalkeeper
+              ? event.maxGoalkeepers &&
+                goalkeepers.length >= event.maxGoalkeepers
+              : fieldPlayers.length >= event.maxPlayers;
+
+            console.log(
+              `[Varalla promo] Tarkistetaan ${reservePlayer.name} (${
+                isGoalkeeper ? "MV" : "KP"
+              }), Täynnä: ${isFull}`
+            );
+
+            if (!isFull) {
+              try {
+                const eventRef = doc(db, "events", event.id);
+                await updateDoc(eventRef, {
+                  registeredPlayers: arrayUnion(reserveId),
+                  reservePlayers: arrayRemove(reserveId),
+                });
+                changed = true;
+                console.log(
+                  `[Varalla promo] ✅ Siirretty varallaolija ${reservePlayer.name} (${reserveId}) osallistujaksi tapahtumaan ${event.title}`
+                );
+                if (isGoalkeeper) goalkeepers.push(reserveId);
+                else fieldPlayers.push(reserveId);
+                reserves = reserves.filter((id) => id !== reserveId);
+              } catch (err) {
+                console.error(
+                  "[Varalla promo] ❌ Automaattinen varalla siirto epäonnistui:",
+                  err
+                );
+              }
+            } else {
+              console.log(
+                `[Varalla promo] ⚠️ Ei tilaa: ${reservePlayer.name} (${reserveId}) tapahtumassa ${event.title}`
+              );
+            }
+          }
+          if (changed) {
+            console.log(
+              `[Varalla promo] ✅ Varalla olevat siirretty osallistujiksi tapahtumassa ${event.title}`
+            );
+          } else if (reserves.length > 0) {
+            console.log(
+              `[Varalla promo] ℹ️ Tapahtuma täynnä tai ei varallaolevia siirrettäväksi tapahtumassa ${event.title}`
+            );
+          }
+        } else {
+          console.log(
+            `[Varalla promo] ⏰ Threshold ei täyttynyt tapahtumassa ${
+              event.title
+            } (vielä ${(hoursUntilEvent - guestRegistrationHours).toFixed(1)}h)`
+          );
+        }
+      }
+    };
+    promoteReserves();
+  }, [filteredEvents, teams, players]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await refreshData();
@@ -550,55 +689,146 @@ const EventsScreen: React.FC = () => {
                   try {
                     const currentReserves = eventData?.reservePlayers || [];
 
-                    // Fetch teamMember status from Firestore for all existing + new player
-                    const teamMemberStatus: Record<string, boolean> = {};
-                    const allPlayerIds = [...currentReserves, currentPlayer.id];
+                    // Priority queue insertion logic
+                    if (hoursUntilEvent > guestRegistrationHours) {
+                      // Before threshold: Maintain priority order (team members first, then guests)
+                      const teamMemberStatus: Record<string, boolean> = {};
+                      const allPlayerIds = [
+                        ...currentReserves,
+                        currentPlayer.id,
+                      ];
 
-                    for (const playerId of allPlayerIds) {
-                      try {
-                        const userRef = doc(db, "users", playerId);
-                        const userSnap = await getDoc(userRef);
-                        if (userSnap.exists()) {
-                          const userData = userSnap.data();
-                          teamMemberStatus[playerId] =
-                            userData.teamMember?.[teamId] === true;
-                        } else {
+                      for (const playerId of allPlayerIds) {
+                        try {
+                          const userRef = doc(db, "users", playerId);
+                          const userSnap = await getDoc(userRef);
+                          if (userSnap.exists()) {
+                            const userData = userSnap.data();
+                            teamMemberStatus[playerId] =
+                              userData.teamMember?.[teamId] === true;
+                          } else {
+                            teamMemberStatus[playerId] = false;
+                          }
+                        } catch (error) {
+                          console.error(
+                            `Error fetching teamMember status for ${playerId}:`,
+                            error
+                          );
                           teamMemberStatus[playerId] = false;
                         }
-                      } catch (error) {
-                        console.error(
-                          `Error fetching teamMember status for ${playerId}:`,
-                          error
-                        );
-                        teamMemberStatus[playerId] = false;
                       }
-                    }
 
-                    // Separate into team members and guests, maintaining order
-                    const teamMembers: string[] = [];
-                    const guests: string[] = [];
+                      const teamMembers: string[] = [];
+                      const guests: string[] = [];
 
-                    for (const playerId of currentReserves) {
-                      if (teamMemberStatus[playerId]) {
-                        teamMembers.push(playerId);
+                      for (const playerId of currentReserves) {
+                        if (teamMemberStatus[playerId]) {
+                          teamMembers.push(playerId);
+                        } else {
+                          guests.push(playerId);
+                        }
+                      }
+
+                      if (teamMemberStatus[currentPlayer.id]) {
+                        teamMembers.push(currentPlayer.id);
                       } else {
-                        guests.push(playerId);
+                        guests.push(currentPlayer.id);
                       }
-                    }
 
-                    // Add new player to appropriate group
-                    if (teamMemberStatus[currentPlayer.id]) {
-                      teamMembers.push(currentPlayer.id);
+                      const sortedReserves = [...teamMembers, ...guests];
+
+                      await updateDoc(eventRef, {
+                        reservePlayers: sortedReserves,
+                      });
                     } else {
-                      guests.push(currentPlayer.id);
+                      // After threshold: pure FIFO - append to end
+                      await updateDoc(eventRef, {
+                        reservePlayers: arrayUnion(currentPlayer.id),
+                      });
                     }
+                    setIsReserve(true);
+                    Alert.alert("Onnistui", "Ilmoittautunut varallistalle");
+                  } catch (error) {
+                    console.error("Error registering as reserve:", error);
+                    Alert.alert(
+                      "Virhe",
+                      "Varamies-ilmoittautuminen epäonnistui"
+                    );
+                  }
+                },
+              },
+            ]
+          );
+        } else if (isEventFull) {
+          // Event is full, offer reserve position with priority queue logic
+          Alert.alert(
+            "Tapahtuma on täynnä",
+            "Haluatko ilmoittautua varamieheksi? Saat paikan jos joku luopuu.",
+            [
+              { text: "Ei", style: "cancel" },
+              {
+                text: "Kyllä, varamieheksi",
+                onPress: async () => {
+                  try {
+                    const currentReserves = eventData?.reservePlayers || [];
 
-                    // Combine: team members first, then guests
-                    const sortedReserves = [...teamMembers, ...guests];
+                    // Priority queue insertion logic
+                    if (hoursUntilEvent > guestRegistrationHours) {
+                      // Before threshold: Maintain priority order (team members first, then guests)
+                      const teamMemberStatus: Record<string, boolean> = {};
+                      const allPlayerIds = [
+                        ...currentReserves,
+                        currentPlayer.id,
+                      ];
 
-                    await updateDoc(eventRef, {
-                      reservePlayers: sortedReserves,
-                    });
+                      for (const playerId of allPlayerIds) {
+                        try {
+                          const userRef = doc(db, "users", playerId);
+                          const userSnap = await getDoc(userRef);
+                          if (userSnap.exists()) {
+                            const userData = userSnap.data();
+                            teamMemberStatus[playerId] =
+                              userData.teamMember?.[teamId] === true;
+                          } else {
+                            teamMemberStatus[playerId] = false;
+                          }
+                        } catch (error) {
+                          console.error(
+                            `Error fetching teamMember status for ${playerId}:`,
+                            error
+                          );
+                          teamMemberStatus[playerId] = false;
+                        }
+                      }
+
+                      const teamMembers: string[] = [];
+                      const guests: string[] = [];
+
+                      for (const playerId of currentReserves) {
+                        if (teamMemberStatus[playerId]) {
+                          teamMembers.push(playerId);
+                        } else {
+                          guests.push(playerId);
+                        }
+                      }
+
+                      if (teamMemberStatus[currentPlayer.id]) {
+                        teamMembers.push(currentPlayer.id);
+                      } else {
+                        guests.push(currentPlayer.id);
+                      }
+
+                      const sortedReserves = [...teamMembers, ...guests];
+
+                      await updateDoc(eventRef, {
+                        reservePlayers: sortedReserves,
+                      });
+                    } else {
+                      // After threshold: pure FIFO - append to end
+                      await updateDoc(eventRef, {
+                        reservePlayers: arrayUnion(currentPlayer.id),
+                      });
+                    }
                     setIsReserve(true);
                     Alert.alert("Onnistui", "Ilmoittautunut varallistalle");
                   } catch (error) {

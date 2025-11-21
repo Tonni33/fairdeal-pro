@@ -490,3 +490,49 @@ exports.createUserAccounts = onCall(async (request) => {
     );
   }
 });
+
+/**
+ * Get HC KeLo team member emails (for testing purposes)
+ */
+exports.getHCKeLoEmails = onCall(async (request) => {
+  try {
+    const db = admin.firestore();
+
+    // Get HC KeLo team
+    const teamsSnapshot = await db
+      .collection("teams")
+      .where("name", "==", "HC KeLo")
+      .get();
+
+    if (teamsSnapshot.empty) {
+      return { emails: [], count: 0, message: "HC KeLo team not found" };
+    }
+
+    const teamId = teamsSnapshot.docs[0].id;
+
+    // Get users
+    const usersSnapshot = await db
+      .collection("users")
+      .where("teamIds", "array-contains", teamId)
+      .get();
+
+    const emails = [];
+    usersSnapshot.forEach((doc) => {
+      const user = doc.data();
+      if (user.email) {
+        emails.push(user.email);
+      }
+    });
+
+    emails.sort();
+
+    return {
+      emails,
+      count: emails.length,
+      commaSeparated: emails.join(", "),
+    };
+  } catch (error) {
+    console.error("Error:", error);
+    throw new HttpsError("internal", error.message);
+  }
+});

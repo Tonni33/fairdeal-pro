@@ -9,6 +9,7 @@ import UsersPage from "./pages/UsersPage";
 import TeamsPage from "./pages/TeamsPage";
 import RankingsPage from "./pages/RankingsPage";
 import EventsPage from "./pages/EventsPage";
+import ActivityPage from "./pages/ActivityPage";
 import LicensesPage from "./pages/LicensesPage";
 import LicenseRequestsPage from "./pages/LicenseRequestsPage";
 import TeamSettingsPage from "./pages/TeamSettingsPage";
@@ -46,6 +47,7 @@ function App() {
               <Route path="teams" element={<TeamsPage />} />
               <Route path="rankings" element={<RankingsPage />} />
               <Route path="events" element={<EventsPage />} />
+              <Route path="activity" element={<ActivityPage />} />
               <Route path="licenses" element={<LicensesPage />} />
               <Route
                 path="license-requests"

@@ -12,13 +12,22 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
-import { collection, addDoc, doc, updateDoc } from "firebase/firestore";
+import {
+  collection,
+  addDoc,
+  doc,
+  updateDoc,
+  query,
+  where,
+  getDocs,
+  orderBy,
+} from "firebase/firestore";
 import UserProfileEditor from "../components/UserProfileEditor";
 import AdminMenuButton from "../components/AdminMenuButton";
 import BiometricAuthSetup from "../components/BiometricAuthSetup";
 import { useAuth } from "../contexts/AuthContext";
 import { useApp, getUserTeams } from "../contexts/AppContext";
-import { RootStackParamList, TeamCreationRequest } from "../types";
+import { RootStackParamList, TeamCreationRequest, Event } from "../types";
 import { db } from "../services/firebase";
 
 type ProfileScreenNavigationProp = StackNavigationProp<
@@ -29,7 +38,8 @@ type ProfileScreenNavigationProp = StackNavigationProp<
 const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<ProfileScreenNavigationProp>();
   const { user, signOut, changePassword, deleteAccount } = useAuth();
-  const { players, teams, refreshData, isUserSoleAdminInAnyTeam } = useApp();
+  const { players, teams, refreshData, isUserSoleAdminInAnyTeam, events } =
+    useApp();
 
   // Password change state
   const [isPasswordModalVisible, setIsPasswordModalVisible] = useState(false);
@@ -48,6 +58,17 @@ const ProfileScreen: React.FC = () => {
   const [adminName, setAdminName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPhone, setAdminPhone] = useState("");
+
+  // Event history state
+  const [eventHistory, setEventHistory] = useState<Event[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [timeFilter, setTimeFilter] = useState<"30d" | "3m" | "6m" | "all">(
+    "all"
+  );
+  const [teamFilter, setTeamFilter] = useState<string | "all">("all");
+  const [isTeamFilterModalVisible, setIsTeamFilterModalVisible] =
+    useState(false);
 
   // Hae pelaaja käyttäjän sähköpostilla tai ID:llä
   console.log("ProfileScreen: user =", user);
@@ -88,6 +109,86 @@ const ProfileScreen: React.FC = () => {
   // Check if user is already in any teams
   const userTeams = getUserTeams(user, teams, players);
   const hasTeamMembership = userTeams.length > 0;
+
+  // Load event history for current user
+  const loadEventHistory = async () => {
+    if (!enrichedPlayer?.id) {
+      console.log("ProfileScreen: No player ID, skipping history load");
+      return;
+    }
+
+    setHistoryLoading(true);
+    try {
+      // Calculate date threshold based on filter
+      const now = new Date();
+      let dateThreshold: Date | null = null;
+
+      switch (timeFilter) {
+        case "30d":
+          dateThreshold = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          break;
+        case "3m":
+          dateThreshold = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+          break;
+        case "6m":
+          dateThreshold = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+          break;
+        case "all":
+          dateThreshold = null;
+          break;
+      }
+
+      // Query events where user is in registeredPlayers array
+      const eventsRef = collection(db, "events");
+      const q = query(
+        eventsRef,
+        where("registeredPlayers", "array-contains", enrichedPlayer.id),
+        orderBy("date", "desc")
+      );
+
+      const querySnapshot = await getDocs(q);
+      const userEvents: Event[] = [];
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        const eventDate = data.date?.toDate?.() || new Date(data.date);
+
+        // Apply time filter
+        if (dateThreshold && eventDate < dateThreshold) {
+          return; // Skip events older than threshold
+        }
+
+        // Apply team filter
+        if (teamFilter !== "all" && data.teamId !== teamFilter) {
+          return; // Skip events from other teams
+        }
+
+        userEvents.push({
+          id: doc.id,
+          ...data,
+          date: eventDate,
+          createdAt: data.createdAt?.toDate?.() || new Date(data.createdAt),
+        } as Event);
+      });
+
+      console.log(
+        `ProfileScreen: Loaded ${userEvents.length} events for user (time: ${timeFilter}, team: ${teamFilter})`
+      );
+      setEventHistory(userEvents);
+    } catch (error) {
+      console.error("ProfileScreen: Error loading event history:", error);
+      Alert.alert("Virhe", "Tapahtumahistorian lataus epäonnistui");
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  // Reload history when time or team filter changes
+  React.useEffect(() => {
+    if (showHistory && enrichedPlayer?.id) {
+      loadEventHistory();
+    }
+  }, [timeFilter, teamFilter]);
 
   const handleProfileSave = async () => {
     // Refresh data after profile changes
@@ -403,6 +504,259 @@ const ProfileScreen: React.FC = () => {
           </View>
         )}
 
+        {/* Event History Section */}
+        {enrichedPlayer && (
+          <View style={styles.historyCard}>
+            <TouchableOpacity
+              style={styles.historyHeader}
+              onPress={() => {
+                if (!showHistory && eventHistory.length === 0) {
+                  loadEventHistory();
+                }
+                setShowHistory(!showHistory);
+              }}
+            >
+              <View style={styles.historyTitleRow}>
+                <Ionicons name="calendar-outline" size={20} color="#1976d2" />
+                <Text style={styles.historyTitle}>Tapahtumahistoria</Text>
+              </View>
+              <Ionicons
+                name={showHistory ? "chevron-up" : "chevron-down"}
+                size={20}
+                color="#666"
+              />
+            </TouchableOpacity>
+
+            {showHistory && (
+              <View style={styles.historyContent}>
+                {/* Time filter buttons */}
+                <View style={styles.timeFilterContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.timeFilterButton,
+                      timeFilter === "30d" && styles.timeFilterButtonActive,
+                    ]}
+                    onPress={() => setTimeFilter("30d")}
+                  >
+                    <Text
+                      style={[
+                        styles.timeFilterText,
+                        timeFilter === "30d" && styles.timeFilterTextActive,
+                      ]}
+                    >
+                      30 pv
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.timeFilterButton,
+                      timeFilter === "3m" && styles.timeFilterButtonActive,
+                    ]}
+                    onPress={() => setTimeFilter("3m")}
+                  >
+                    <Text
+                      style={[
+                        styles.timeFilterText,
+                        timeFilter === "3m" && styles.timeFilterTextActive,
+                      ]}
+                    >
+                      3 kk
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.timeFilterButton,
+                      timeFilter === "6m" && styles.timeFilterButtonActive,
+                    ]}
+                    onPress={() => setTimeFilter("6m")}
+                  >
+                    <Text
+                      style={[
+                        styles.timeFilterText,
+                        timeFilter === "6m" && styles.timeFilterTextActive,
+                      ]}
+                    >
+                      6 kk
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.timeFilterButton,
+                      timeFilter === "all" && styles.timeFilterButtonActive,
+                    ]}
+                    onPress={() => setTimeFilter("all")}
+                  >
+                    <Text
+                      style={[
+                        styles.timeFilterText,
+                        timeFilter === "all" && styles.timeFilterTextActive,
+                      ]}
+                    >
+                      Kaikki
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Team filter dropdown */}
+                <View style={styles.teamFilterContainer}>
+                  <Text style={styles.filterLabel}>Joukkue:</Text>
+                  <TouchableOpacity
+                    style={styles.teamDropdownButton}
+                    onPress={() => setIsTeamFilterModalVisible(true)}
+                  >
+                    <View style={styles.teamDropdownContent}>
+                      {teamFilter === "all" ? (
+                        <Text style={styles.teamDropdownText}>
+                          Kaikki joukkueet
+                        </Text>
+                      ) : (
+                        <>
+                          <View
+                            style={[
+                              styles.teamColorDot,
+                              {
+                                backgroundColor:
+                                  userTeams.find((t) => t.id === teamFilter)
+                                    ?.color || "#1976d2",
+                              },
+                            ]}
+                          />
+                          <Text style={styles.teamDropdownText}>
+                            {userTeams.find((t) => t.id === teamFilter)?.name ||
+                              "Valitse joukkue"}
+                          </Text>
+                        </>
+                      )}
+                    </View>
+                    <Ionicons name="chevron-down" size={20} color="#666" />
+                  </TouchableOpacity>
+                </View>
+
+                {historyLoading ? (
+                  <View style={styles.historyLoading}>
+                    <Text style={styles.historyLoadingText}>Ladataan...</Text>
+                  </View>
+                ) : eventHistory.length === 0 ? (
+                  <View style={styles.historyEmpty}>
+                    <Ionicons name="calendar-outline" size={48} color="#ccc" />
+                    <Text style={styles.historyEmptyText}>
+                      Ei osallistumisia vielä
+                    </Text>
+                  </View>
+                ) : (
+                  <>
+                    <View style={styles.historyStats}>
+                      <View style={styles.statItem}>
+                        <Text style={styles.statValue}>
+                          {eventHistory.length}
+                        </Text>
+                        <Text style={styles.statLabel}>Yhteensä</Text>
+                      </View>
+                      <View style={styles.statItem}>
+                        <Text style={styles.statValue}>
+                          {
+                            eventHistory.filter(
+                              (e) => new Date(e.date) < new Date()
+                            ).length
+                          }
+                        </Text>
+                        <Text style={styles.statLabel}>Menneet</Text>
+                      </View>
+                      <View style={styles.statItem}>
+                        <Text style={styles.statValue}>
+                          {
+                            eventHistory.filter(
+                              (e) => new Date(e.date) >= new Date()
+                            ).length
+                          }
+                        </Text>
+                        <Text style={styles.statLabel}>Tulevat</Text>
+                      </View>
+                    </View>
+
+                    <ScrollView
+                      style={styles.historyList}
+                      showsVerticalScrollIndicator={true}
+                      nestedScrollEnabled={true}
+                    >
+                      {eventHistory.map((event) => {
+                        const eventDate = new Date(event.date);
+                        const isPast = eventDate < new Date();
+                        const team = teams.find((t) => t.id === event.teamId);
+
+                        return (
+                          <View key={event.id} style={styles.historyEventItem}>
+                            <View
+                              style={[
+                                styles.historyEventIndicator,
+                                {
+                                  backgroundColor: isPast
+                                    ? "#4CAF50"
+                                    : team?.color || "#1976d2",
+                                },
+                              ]}
+                            />
+                            <View style={styles.historyEventContent}>
+                              <Text style={styles.historyEventTitle}>
+                                {event.title || "Nimetön tapahtuma"}
+                              </Text>
+                              <Text style={styles.historyEventTeam}>
+                                {team?.name || "Tuntematon joukkue"}
+                              </Text>
+                              <Text style={styles.historyEventDate}>
+                                {eventDate.toLocaleDateString("fi-FI", {
+                                  weekday: "short",
+                                  day: "numeric",
+                                  month: "numeric",
+                                  year: "numeric",
+                                })}{" "}
+                                klo{" "}
+                                {eventDate
+                                  .toLocaleTimeString("fi-FI", {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })
+                                  .replace(":", ".")}
+                              </Text>
+                              {event.location && (
+                                <View style={styles.historyEventLocation}>
+                                  <Ionicons
+                                    name="location-outline"
+                                    size={14}
+                                    color="#666"
+                                  />
+                                  <Text style={styles.historyEventLocationText}>
+                                    {event.location}
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                            <View style={styles.historyEventStatus}>
+                              {isPast ? (
+                                <Ionicons
+                                  name="checkmark-circle"
+                                  size={24}
+                                  color="#4CAF50"
+                                />
+                              ) : (
+                                <Ionicons
+                                  name="time-outline"
+                                  size={24}
+                                  color="#FF9800"
+                                />
+                              )}
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </ScrollView>
+                  </>
+                )}
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Team creation request button - available for all users */}
         <TouchableOpacity
           style={styles.createTeamButton}
@@ -641,6 +995,90 @@ const ProfileScreen: React.FC = () => {
                 {passwordChangeLoading ? "Tallennetaan..." : "Vaihda salasana"}
               </Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Team Filter Selection Modal */}
+      <Modal
+        visible={isTeamFilterModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setIsTeamFilterModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Valitse joukkue</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setIsTeamFilterModalVisible(false)}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.teamSelectionList}>
+              {/* All teams option */}
+              <TouchableOpacity
+                style={[
+                  styles.teamSelectionItem,
+                  teamFilter === "all" && styles.teamSelectionItemActive,
+                ]}
+                onPress={() => {
+                  setTeamFilter("all");
+                  setIsTeamFilterModalVisible(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.teamSelectionItemText,
+                    teamFilter === "all" && styles.teamSelectionItemTextActive,
+                  ]}
+                >
+                  Kaikki joukkueet
+                </Text>
+                {teamFilter === "all" && (
+                  <Ionicons name="checkmark" size={20} color="#1976d2" />
+                )}
+              </TouchableOpacity>
+
+              {/* User teams */}
+              {userTeams.map((team) => (
+                <TouchableOpacity
+                  key={team.id}
+                  style={[
+                    styles.teamSelectionItem,
+                    teamFilter === team.id && styles.teamSelectionItemActive,
+                  ]}
+                  onPress={() => {
+                    setTeamFilter(team.id);
+                    setIsTeamFilterModalVisible(false);
+                  }}
+                >
+                  <View style={styles.teamSelectionItemLeft}>
+                    <View
+                      style={[
+                        styles.teamColorIndicator,
+                        { backgroundColor: team.color || "#1976d2" },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.teamSelectionItemText,
+                        teamFilter === team.id &&
+                          styles.teamSelectionItemTextActive,
+                      ]}
+                    >
+                      {team.name}
+                    </Text>
+                  </View>
+                  {teamFilter === team.id && (
+                    <Ionicons name="checkmark" size={20} color="#1976d2" />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -961,6 +1399,252 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#E65100",
     flex: 1,
+  },
+  historyCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    overflow: "hidden",
+  },
+  historyHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    backgroundColor: "#fff",
+  },
+  historyTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  historyTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+  },
+  historyContent: {
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+  },
+  historyLoading: {
+    padding: 40,
+    alignItems: "center",
+  },
+  historyLoadingText: {
+    fontSize: 14,
+    color: "#666",
+  },
+  historyEmpty: {
+    padding: 40,
+    alignItems: "center",
+  },
+  historyEmptyText: {
+    fontSize: 14,
+    color: "#999",
+    marginTop: 12,
+  },
+  historyStats: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    padding: 16,
+    backgroundColor: "#f8f8f8",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  statItem: {
+    alignItems: "center",
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#1976d2",
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: "#666",
+  },
+  historyList: {
+    maxHeight: 400, // ~5 items at ~80px each
+    padding: 16,
+  },
+  historyEventItem: {
+    flexDirection: "row",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  historyEventIndicator: {
+    width: 4,
+    borderRadius: 2,
+    marginRight: 12,
+  },
+  historyEventContent: {
+    flex: 1,
+  },
+  historyEventTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 4,
+  },
+  historyEventTeam: {
+    fontSize: 13,
+    color: "#1976d2",
+    marginBottom: 2,
+  },
+  historyEventDate: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 4,
+  },
+  historyEventLocation: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  historyEventLocationText: {
+    fontSize: 12,
+    color: "#666",
+  },
+  historyEventStatus: {
+    justifyContent: "center",
+    paddingLeft: 8,
+  },
+  teamFilterContainer: {
+    padding: 12,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  filterLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#666",
+    marginBottom: 8,
+  },
+  teamDropdownButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    backgroundColor: "#fff",
+  },
+  teamDropdownContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  teamDropdownText: {
+    fontSize: 14,
+    color: "#333",
+  },
+  teamSelectionList: {
+    maxHeight: 400,
+  },
+  teamSelectionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  teamSelectionItemActive: {
+    backgroundColor: "#f0f7ff",
+  },
+  teamSelectionItemLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  teamSelectionItemText: {
+    fontSize: 15,
+    color: "#333",
+  },
+  teamSelectionItemTextActive: {
+    fontWeight: "600",
+    color: "#1976d2",
+  },
+  teamColorIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  teamFilterScroll: {
+    flexDirection: "row",
+  },
+  teamFilterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    backgroundColor: "#fff",
+    marginRight: 8,
+    gap: 6,
+  },
+  teamFilterChipActive: {
+    backgroundColor: "#1976d2",
+    borderColor: "#1976d2",
+  },
+  teamFilterChipText: {
+    fontSize: 13,
+    color: "#666",
+    fontWeight: "500",
+  },
+  teamFilterChipTextActive: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  teamColorDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  timeFilterContainer: {
+    flexDirection: "row",
+    padding: 12,
+    gap: 8,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  timeFilterButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    backgroundColor: "#fff",
+    alignItems: "center",
+  },
+  timeFilterButtonActive: {
+    backgroundColor: "#1976d2",
+    borderColor: "#1976d2",
+  },
+  timeFilterText: {
+    fontSize: 13,
+    color: "#666",
+    fontWeight: "500",
+  },
+  timeFilterTextActive: {
+    color: "#fff",
+    fontWeight: "600",
   },
 });
 

@@ -45,6 +45,7 @@ import {
   query,
   where,
   arrayUnion,
+  arrayRemove,
 } from "firebase/firestore";
 import type { Event, Team, User } from "../types";
 import ColumnSelector from "../components/ColumnSelector";
@@ -171,6 +172,169 @@ export default function EventsPage() {
     fetchData();
   }, []);
 
+  // Automatic reserve promotion when threshold is met
+  useEffect(() => {
+    const promoteReserves = async () => {
+      if (
+        !events ||
+        !teams ||
+        !users ||
+        events.length === 0 ||
+        teams.length === 0 ||
+        users.length === 0
+      ) {
+        console.log("[Web Varalla promo] Ei dataa, skipataan");
+        return;
+      }
+
+      const now = new Date();
+      console.log(
+        `[Web Varalla promo] 🚀 ALOITETAAN TARKISTUS - Kello: ${now.toLocaleString(
+          "fi-FI"
+        )} - Tapahtumia: ${events.length}`
+      );
+
+      for (const event of events) {
+        const team = teams.find((t) => t.id === event.teamId);
+        if (!team) {
+          console.log(
+            `[Web Varalla promo] Ei joukkuetta tapahtumalle ${event.title}`
+          );
+          continue;
+        }
+
+        const guestRegistrationHours = team.guestRegistrationHours || 24;
+        const now = new Date();
+        const eventDate = new Date(event.date);
+        const hoursUntilEvent =
+          (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+        console.log(
+          `[Web Varalla promo] 📅 ${event.title}\n` +
+            `  Joukkue: ${team.name} (ID: ${team.id})\n` +
+            `  Threshold: ${guestRegistrationHours}h\n` +
+            `  Tapahtuma: ${eventDate.toLocaleString("fi-FI")}\n` +
+            `  Aikaa tapahtumaan: ${hoursUntilEvent.toFixed(2)}h\n` +
+            `  Threshold täyttyy: ${
+              hoursUntilEvent <= guestRegistrationHours
+                ? "✅ KYLLÄ"
+                : `❌ EI (vielä ${(
+                    hoursUntilEvent - guestRegistrationHours
+                  ).toFixed(2)}h)`
+            }`
+        );
+
+        if (hoursUntilEvent <= guestRegistrationHours) {
+          let registered = event.registeredPlayers || [];
+          let reserves = event.reservePlayers || [];
+
+          console.log(
+            `[Web Varalla promo] 🎯 THRESHOLD TÄYTTYI!\n` +
+              `  Ilmoittautuneita: ${registered.length}\n` +
+              `  Varalla: ${reserves.length}\n` +
+              `  Varalla olevat ID:t: ${reserves.join(", ") || "Ei ketään"}`
+          );
+
+          // Helper to check if player is goalkeeper
+          const isPlayerGoalkeeper = (playerId: string) => {
+            const user = users.find((u) => u.id === playerId);
+            if (!user) return false;
+
+            // Check event-specific role first
+            const eventRole = event.playerRoles?.[playerId];
+            if (eventRole !== undefined) {
+              return eventRole === "MV";
+            }
+
+            // Fall back to user's positions
+            const hasMV = user.positions?.includes("MV");
+            const hasFieldPosition = user.positions?.some((pos: string) =>
+              ["H", "P", "H/P"].includes(pos)
+            );
+            return hasMV && !hasFieldPosition;
+          };
+
+          // Count current participants by position
+          let fieldPlayers = registered.filter((id) => !isPlayerGoalkeeper(id));
+          let goalkeepers = registered.filter((id) => isPlayerGoalkeeper(id));
+
+          console.log(
+            `[Web Varalla promo] Kenttäpelaajia: ${fieldPlayers.length}/${
+              event.maxPlayers
+            }, Maalivahteja: ${goalkeepers.length}/${event.maxGoalkeepers || 0}`
+          );
+
+          let changed = false;
+          for (const reserveId of [...reserves]) {
+            const reserveUser = users.find((u) => u.id === reserveId);
+            if (!reserveUser) {
+              console.log(
+                `[Web Varalla promo] ❌ Ei käyttäjää id: ${reserveId}`
+              );
+              continue;
+            }
+
+            const isGoalkeeper = isPlayerGoalkeeper(reserveId);
+            const isFull = isGoalkeeper
+              ? event.maxGoalkeepers &&
+                goalkeepers.length >= event.maxGoalkeepers
+              : fieldPlayers.length >= event.maxPlayers;
+
+            console.log(
+              `[Web Varalla promo] Tarkistetaan ${reserveUser.name} (${
+                isGoalkeeper ? "MV" : "KP"
+              }), Täynnä: ${isFull}`
+            );
+
+            if (!isFull) {
+              try {
+                const eventRef = doc(db, "events", event.id);
+                await updateDoc(eventRef, {
+                  registeredPlayers: arrayUnion(reserveId),
+                  reservePlayers: arrayRemove(reserveId),
+                });
+                changed = true;
+                console.log(
+                  `[Web Varalla promo] ✅ Siirretty varallaolija ${reserveUser.name} (${reserveId}) osallistujaksi tapahtumaan ${event.title}`
+                );
+                if (isGoalkeeper) goalkeepers.push(reserveId);
+                else fieldPlayers.push(reserveId);
+                reserves = reserves.filter((id) => id !== reserveId);
+              } catch (err) {
+                console.error(
+                  "[Web Varalla promo] ❌ Automaattinen varalla siirto epäonnistui:",
+                  err
+                );
+              }
+            } else {
+              console.log(
+                `[Web Varalla promo] ⚠️ Ei tilaa: ${reserveUser.name} (${reserveId}) tapahtumassa ${event.title}`
+              );
+            }
+          }
+          if (changed) {
+            console.log(
+              `[Web Varalla promo] ✅ Varalla olevat siirretty osallistujiksi tapahtumassa ${event.title}`
+            );
+            // Refresh data to show updated participant lists
+            fetchData();
+          } else if (reserves.length > 0) {
+            console.log(
+              `[Web Varalla promo] ℹ️ Tapahtuma täynnä tai ei varallaolevia siirrettäväksi tapahtumassa ${event.title}`
+            );
+          }
+        } else {
+          console.log(
+            `[Web Varalla promo] ⏰ Threshold ei täyttynyt tapahtumassa ${
+              event.title
+            } (vielä ${(hoursUntilEvent - guestRegistrationHours).toFixed(1)}h)`
+          );
+        }
+      }
+    };
+    promoteReserves();
+  }, [events, teams, users]);
+
   const fetchData = async () => {
     if (!authUser) return;
 
@@ -247,22 +411,27 @@ export default function EventsPage() {
     return new Date(dateString) < new Date();
   };
 
-  const filteredEvents = events.filter((event) => {
-    // Team filter
-    if (selectedTeam !== "all" && event.teamId !== selectedTeam) {
-      return false;
-    }
+  const filteredEvents = events
+    .filter((event) => {
+      // Team filter
+      if (selectedTeam !== "all" && event.teamId !== selectedTeam) {
+        return false;
+      }
 
-    // Date filter
-    if (dateFilter === "upcoming" && isPastEvent(event.date)) {
-      return false;
-    }
-    if (dateFilter === "past" && !isPastEvent(event.date)) {
-      return false;
-    }
+      // Date filter
+      if (dateFilter === "upcoming" && isPastEvent(event.date)) {
+        return false;
+      }
+      if (dateFilter === "past" && !isPastEvent(event.date)) {
+        return false;
+      }
 
-    return true;
-  });
+      return true;
+    })
+    .sort((a, b) => {
+      // Sort by date, newest first
+      return new Date(b.date).getTime() - new Date(a.date).getTime();
+    });
 
   const columns: GridColDef[] = [
     {
@@ -879,6 +1048,7 @@ export default function EventsPage() {
         onClose={() => setDetailsOpen(false)}
         maxWidth="md"
         fullWidth
+        disableRestoreFocus
       >
         <DialogTitle>
           {selectedEvent?.title}
@@ -1218,6 +1388,7 @@ export default function EventsPage() {
         onClose={() => setEditOpen(false)}
         maxWidth="sm"
         fullWidth
+        disableRestoreFocus
       >
         <DialogTitle>Muokkaa tapahtumaa</DialogTitle>
         <DialogContent>
@@ -1304,6 +1475,7 @@ export default function EventsPage() {
         onClose={() => setCreateOpen(false)}
         maxWidth="sm"
         fullWidth
+        disableRestoreFocus
       >
         <DialogTitle>Luo uusi tapahtuma</DialogTitle>
         <DialogContent>
@@ -1423,7 +1595,11 @@ export default function EventsPage() {
       </Dialog>
 
       {/* Delete Confirmation */}
-      <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)}>
+      <Dialog
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        disableRestoreFocus
+      >
         <DialogTitle>Poista tapahtuma</DialogTitle>
         <DialogContent>
           <Typography>
@@ -1447,6 +1623,7 @@ export default function EventsPage() {
         }}
         maxWidth="md"
         fullWidth
+        disableRestoreFocus
       >
         <DialogTitle>
           <Box

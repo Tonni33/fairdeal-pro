@@ -28,6 +28,7 @@ import {
   SettingsApplications,
   Event,
   EmojiEvents,
+  Timeline,
 } from "@mui/icons-material";
 import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
@@ -102,6 +103,12 @@ export default function Layout() {
       text: "Tapahtumat",
       icon: <Event />,
       path: "/events",
+      masterAdminOnly: false,
+    },
+    {
+      text: "Aktiivisuus",
+      icon: <Timeline />,
+      path: "/activity",
       masterAdminOnly: false,
     },
     {

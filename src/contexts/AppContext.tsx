@@ -234,6 +234,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
               // WhatsApp group fields
               whatsappGroupName: data.whatsappGroupName,
               whatsappGroupInviteLink: data.whatsappGroupInviteLink,
+              // Guest registration settings
+              guestRegistrationHours: data.guestRegistrationHours,
               // License fields
               licenseStatus: data.licenseStatus,
               licenseExpiresAt: data.licenseExpiresAt,

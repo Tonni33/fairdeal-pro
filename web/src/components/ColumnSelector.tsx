@@ -117,44 +117,42 @@ export default function ColumnSelector({
         <Divider />
 
         {/* Visibility Tab */}
-        {tabValue === 0 && (
-          <>
-            <Box sx={{ px: 2, py: 1 }}>
-              <Box sx={{ display: "flex", gap: 1 }}>
-                <Button size="small" onClick={onSelectAll}>
-                  Valitse kaikki
-                </Button>
-                <Button size="small" onClick={onDeselectAll}>
-                  Tyhjennä
-                </Button>
-              </Box>
+        {tabValue === 0 && [
+          <Box key="controls" sx={{ px: 2, py: 1 }}>
+            <Box sx={{ display: "flex", gap: 1 }}>
+              <Button size="small" onClick={onSelectAll}>
+                Valitse kaikki
+              </Button>
+              <Button size="small" onClick={onDeselectAll}>
+                Tyhjennä
+              </Button>
             </Box>
-            {columns.map((column) => (
-              <MenuItem
-                key={column.field}
-                dense
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onColumnVisibilityChange(
-                    column.field,
-                    !visibleColumns.includes(column.field)
-                  );
-                }}
-              >
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={visibleColumns.includes(column.field)}
-                      size="small"
-                    />
-                  }
-                  label={column.headerName}
-                  sx={{ width: "100%", m: 0 }}
-                />
-              </MenuItem>
-            ))}
-          </>
-        )}
+          </Box>,
+          ...columns.map((column) => (
+            <MenuItem
+              key={column.field}
+              dense
+              onClick={(e) => {
+                e.stopPropagation();
+                onColumnVisibilityChange(
+                  column.field,
+                  !visibleColumns.includes(column.field)
+                );
+              }}
+            >
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={visibleColumns.includes(column.field)}
+                    size="small"
+                  />
+                }
+                label={column.headerName}
+                sx={{ width: "100%", m: 0 }}
+              />
+            </MenuItem>
+          )),
+        ]}
 
         {/* Order Tab */}
         {tabValue === 1 && onColumnOrderChange && (
