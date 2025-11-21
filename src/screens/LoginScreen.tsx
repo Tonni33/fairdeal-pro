@@ -328,6 +328,7 @@ const LoginScreen: React.FC = () => {
                   value={displayName}
                   onChangeText={setDisplayName}
                   placeholder="Anna nimesi"
+                  placeholderTextColor="#999"
                   autoCapitalize="words"
                 />
               </View>
@@ -340,6 +341,7 @@ const LoginScreen: React.FC = () => {
                 value={email}
                 onChangeText={setEmail}
                 placeholder="anna@esimerkki.com"
+                placeholderTextColor="#999"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoComplete="email"
@@ -353,6 +355,7 @@ const LoginScreen: React.FC = () => {
                 value={password}
                 onChangeText={setPassword}
                 placeholder="Salasana"
+                placeholderTextColor="#999"
                 secureTextEntry
                 autoComplete={isRegister ? "new-password" : "current-password"}
               />
@@ -471,6 +474,7 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     backgroundColor: "#fff",
+    color: "#000",
   },
   button: {
     backgroundColor: "#1976d2",
