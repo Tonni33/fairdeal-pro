@@ -95,12 +95,24 @@ const EventsScreen: React.FC = () => {
   }; // Helper function to sort players - goalkeepers at the end
   const sortPlayersByPosition = (playerData: any[], event?: any) => {
     return playerData.sort((a, b) => {
-      // Check playerRole from event first, then fall back to position
-      const aRole = event?.playerRoles?.[a.id] || a.position;
-      const bRole = event?.playerRoles?.[b.id] || b.position;
+      // Check playerRole from event first, then fall back to positions array
+      const aRole = event?.playerRoles?.[a.id];
+      const bRole = event?.playerRoles?.[b.id];
 
-      if (aRole === "MV" && bRole !== "MV") return 1;
-      if (aRole !== "MV" && bRole === "MV") return -1;
+      // Determine if player is goalkeeper
+      const aIsGK =
+        aRole === "MV" ||
+        (!aRole &&
+          a.positions?.includes("MV") &&
+          !a.positions?.some((pos: string) => ["H", "P", "H/P"].includes(pos)));
+      const bIsGK =
+        bRole === "MV" ||
+        (!bRole &&
+          b.positions?.includes("MV") &&
+          !b.positions?.some((pos: string) => ["H", "P", "H/P"].includes(pos)));
+
+      if (aIsGK && !bIsGK) return 1;
+      if (!aIsGK && bIsGK) return -1;
       return a.name.localeCompare(b.name);
     });
   };
@@ -231,6 +243,7 @@ const EventsScreen: React.FC = () => {
   // Create marked dates object for calendar with team colors
   const markedDates = useMemo(() => {
     const marked: Record<string, any> = {};
+    const today = new Date().toISOString().split("T")[0];
 
     filteredEvents.forEach((event) => {
       const dateKey = new Date(event.date).toISOString().split("T")[0];
@@ -248,15 +261,32 @@ const EventsScreen: React.FC = () => {
       });
     });
 
-    // Mark selected date if exists
-    if (selectedDate && marked[selectedDate]) {
-      marked[selectedDate].selected = true;
-      marked[selectedDate].selectedColor = "#e3f2fd";
-    } else if (selectedDate) {
-      marked[selectedDate] = {
+    // Mark today with light blue background (always visible)
+    if (marked[today]) {
+      marked[today].selected = true;
+      marked[today].selectedColor = "#e3f2fd";
+      marked[today].selectedTextColor = "#1976d2";
+    } else {
+      marked[today] = {
         selected: true,
         selectedColor: "#e3f2fd",
+        selectedTextColor: "#1976d2",
       };
+    }
+
+    // Mark selected date with orange border (if different from today)
+    if (selectedDate && selectedDate !== today) {
+      if (marked[selectedDate]) {
+        marked[selectedDate].selected = true;
+        marked[selectedDate].selectedColor = "#fff3e0";
+        marked[selectedDate].selectedTextColor = "#ff9800";
+      } else {
+        marked[selectedDate] = {
+          selected: true,
+          selectedColor: "#fff3e0",
+          selectedTextColor: "#ff9800",
+        };
+      }
     }
 
     return marked;
@@ -525,33 +555,28 @@ const EventsScreen: React.FC = () => {
         selectedEvent.reservePlayers?.includes(currentPlayer.id) || false
       );
 
-      // Update registered players list with enriched data
-      const loadRegisteredPlayers = async () => {
-        const registeredPlayerData = [];
-        for (const playerId of selectedEvent.registeredPlayers || []) {
-          const player = await findPlayerByAnyId(playerId);
-          registeredPlayerData.push(player);
-        }
-        console.log(
-          "DEBUG - EventsScreen registered players:",
-          registeredPlayerData
-        );
-        setRegisteredPlayers(registeredPlayerData);
-      };
+      // Update registered players list with enriched data - optimized
+      const registeredPlayerData = (selectedEvent.registeredPlayers || [])
+        .map((playerId) =>
+          players.find((p) => p.id === playerId || p.playerId === playerId)
+        )
+        .filter(Boolean);
 
-      // Update reserve players list with enriched data
-      const loadReservePlayers = async () => {
-        const reservePlayerData = [];
-        for (const playerId of selectedEvent.reservePlayers || []) {
-          const player = await findPlayerByAnyId(playerId);
-          reservePlayerData.push(player);
-        }
-        console.log("DEBUG - EventsScreen reserve players:", reservePlayerData);
-        setReservePlayers(reservePlayerData);
-      };
+      console.log(
+        "DEBUG - EventsScreen registered players:",
+        registeredPlayerData
+      );
+      setRegisteredPlayers(registeredPlayerData);
 
-      loadRegisteredPlayers();
-      loadReservePlayers();
+      // Update reserve players list with enriched data - optimized
+      const reservePlayerData = (selectedEvent.reservePlayers || [])
+        .map((playerId) =>
+          players.find((p) => p.id === playerId || p.playerId === playerId)
+        )
+        .filter(Boolean);
+
+      console.log("DEBUG - EventsScreen reserve players:", reservePlayerData);
+      setReservePlayers(reservePlayerData);
     } else {
       setIsRegistered(false);
       setIsReserve(false);
@@ -1200,46 +1225,74 @@ const EventsScreen: React.FC = () => {
             onDayPress={(day) => {
               setSelectedDate(day.dateString);
             }}
-            theme={{
-              todayTextColor: "#1976d2",
-              selectedDayBackgroundColor: "#1976d2",
-              dotColor: "#1976d2",
-              arrowColor: "#1976d2",
-            }}
+            firstDay={1}
+            theme={
+              {
+                backgroundColor: "#ffffff",
+                calendarBackground: "#ffffff",
+                textSectionTitleColor: "#1976d2",
+                selectedDayBackgroundColor: "#1976d2",
+                selectedDayTextColor: "#ffffff",
+                todayTextColor: "#1976d2",
+                dayTextColor: "#2d4150",
+                textDisabledColor: "#d9e1e8",
+                dotColor: "#1976d2",
+                selectedDotColor: "#ffffff",
+                arrowColor: "#1976d2",
+                monthTextColor: "#2d4150",
+                indicatorColor: "#1976d2",
+                textDayFontFamily: "System",
+                textMonthFontFamily: "System",
+                textDayHeaderFontFamily: "System",
+                textDayFontWeight: "600",
+                textMonthFontWeight: "bold",
+                textDayHeaderFontWeight: "600",
+                textDayFontSize: 16,
+                textMonthFontSize: 18,
+                textDayHeaderFontSize: 14,
+                "stylesheet.day.basic": {
+                  selected: {
+                    backgroundColor: "#1976d2",
+                    borderRadius: 8,
+                    width: 40,
+                    height: 40,
+                  },
+                  today: {
+                    backgroundColor: "#e3f2fd",
+                    borderRadius: 8,
+                    width: 40,
+                    height: 40,
+                  },
+                },
+                "stylesheet.dot": {
+                  dot: {
+                    width: 8,
+                    height: 8,
+                    borderRadius: 4,
+                    marginTop: 1,
+                    marginHorizontal: 1,
+                  },
+                },
+              } as any
+            }
+            style={styles.calendar}
           />
 
-          {/* Events for selected date */}
-          {selectedDate && (
-            <View style={styles.selectedDateContainer}>
-              <View style={styles.selectedDateHeader}>
-                <Text style={styles.selectedDateTitle}>
-                  {new Date(selectedDate).toLocaleDateString("fi-FI", {
-                    weekday: "long",
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}
-                </Text>
-                <TouchableOpacity onPress={() => setSelectedDate(null)}>
-                  <Ionicons name="close" size={24} color="#666" />
-                </TouchableOpacity>
-              </View>
-              {eventsForSelectedDate.length > 0 ? (
-                <ScrollView style={styles.selectedDateEvents}>
-                  {eventsForSelectedDate.map((event) => (
-                    <View key={event.id}>
-                      {renderEventItem({ item: event })}
-                    </View>
-                  ))}
-                </ScrollView>
-              ) : (
-                <View style={styles.noEventsContainer}>
-                  <Ionicons name="calendar-outline" size={48} color="#ccc" />
-                  <Text style={styles.noEventsText}>
-                    Ei tapahtumia tänä päivänä
-                  </Text>
-                </View>
-              )}
+          {/* Events for selected date - without date banner */}
+          {selectedDate && eventsForSelectedDate.length > 0 && (
+            <ScrollView style={styles.selectedDateEvents}>
+              {eventsForSelectedDate.map((event) => (
+                <View key={event.id}>{renderEventItem({ item: event })}</View>
+              ))}
+            </ScrollView>
+          )}
+
+          {selectedDate && eventsForSelectedDate.length === 0 && (
+            <View style={styles.noEventsContainer}>
+              <Ionicons name="calendar-outline" size={48} color="#ccc" />
+              <Text style={styles.noEventsText}>
+                Ei tapahtumia tänä päivänä
+              </Text>
             </View>
           )}
         </View>
@@ -1424,33 +1477,41 @@ const EventsScreen: React.FC = () => {
                     <Ionicons
                       name="people-outline"
                       size={18}
-                      color="#1976d2"
+                      color="#4CAF50"
                       style={{ marginRight: 6 }}
                     />
                     <Text style={styles.participantText}>
-                      {getFieldPlayers(
-                        selectedEvent.registeredPlayers || [],
-                        selectedEvent
-                      ).length +
-                        getGoalkeepers(
+                      {
+                        getFieldPlayers(
                           selectedEvent.registeredPlayers || [],
                           selectedEvent
-                        ).length}{" "}
-                      ilmoittautunut
-                      {selectedEvent.maxGoalkeepers &&
-                        selectedEvent.maxGoalkeepers > 0 && (
-                          <Text style={{ color: "#999", fontWeight: "400" }}>
-                            {" • "}
+                        ).length
+                      }
+                      /{selectedEvent.maxPlayers || "∞"} KP
+                    </Text>
+                    {selectedEvent.maxGoalkeepers &&
+                      selectedEvent.maxGoalkeepers > 0 && (
+                        <>
+                          <Text style={styles.participantText}> • </Text>
+                          <Text style={{ fontSize: 16, marginRight: 4 }}>
+                            🥅
+                          </Text>
+                          <Text
+                            style={[
+                              styles.participantText,
+                              { color: "#ff9800", fontWeight: "500" },
+                            ]}
+                          >
                             {
                               getGoalkeepers(
                                 selectedEvent.registeredPlayers || [],
                                 selectedEvent
                               ).length
-                            }{" "}
-                            MV
+                            }
+                            /{selectedEvent.maxGoalkeepers} MV
                           </Text>
-                        )}
-                    </Text>
+                        </>
+                      )}
                   </View>
 
                   <TouchableOpacity
@@ -1501,12 +1562,16 @@ const EventsScreen: React.FC = () => {
                             registeredPlayers,
                             selectedEvent
                           ).map((player, index) => {
-                            // Check playerRole from event first, then fall back to player.position
+                            // Check playerRole from event first, then fall back to player.positions
                             const playerRole =
                               selectedEvent?.playerRoles?.[player.id];
                             const isGoalkeeper =
                               playerRole === "MV" ||
-                              (!playerRole && player?.position === "MV");
+                              (!playerRole &&
+                                player?.positions?.includes("MV") &&
+                                !player?.positions?.some((pos: string) =>
+                                  ["H", "P", "H/P"].includes(pos)
+                                ));
                             return (
                               <View
                                 key={player.id}
@@ -1579,19 +1644,58 @@ const EventsScreen: React.FC = () => {
                         </View>
 
                         <View style={styles.reservePlayersList}>
-                          {reservePlayers.map((player, index) => {
-                            const isGoalkeeper = player?.position === "MV";
+                          {sortPlayersByPosition(
+                            reservePlayers,
+                            selectedEvent
+                          ).map((player, index) => {
+                            // Check playerRole from event first, then fall back to player.positions
+                            const playerRole =
+                              selectedEvent?.playerRoles?.[player.id];
+                            const isGoalkeeper =
+                              playerRole === "MV" ||
+                              (!playerRole &&
+                                player?.positions?.includes("MV") &&
+                                !player?.positions?.some((pos: string) =>
+                                  ["H", "P", "H/P"].includes(pos)
+                                ));
                             return (
                               <View
                                 key={player.id}
-                                style={styles.reservePlayersListItem}
+                                style={[
+                                  styles.reservePlayersListItem,
+                                  isGoalkeeper && {
+                                    borderLeftWidth: 4,
+                                    borderLeftColor: "#ff9800",
+                                    backgroundColor: "#fff8e1",
+                                  },
+                                ]}
                               >
-                                <View style={styles.reservePlayerNumber}>
-                                  <Text style={styles.reservePlayerNumberText}>
+                                <View
+                                  style={[
+                                    styles.reservePlayerNumber,
+                                    isGoalkeeper && {
+                                      backgroundColor: "#ff9800",
+                                    },
+                                  ]}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.reservePlayerNumberText,
+                                      isGoalkeeper && { color: "#fff" },
+                                    ]}
+                                  >
                                     {index + 1}
                                   </Text>
                                 </View>
-                                <Text style={styles.reservePlayersListName}>
+                                <Text
+                                  style={[
+                                    styles.reservePlayersListName,
+                                    isGoalkeeper && {
+                                      color: "#ff9800",
+                                      fontWeight: "600",
+                                    },
+                                  ]}
+                                >
                                   {player.name ||
                                     player.email ||
                                     `ID: ${player.id}`}
@@ -1790,7 +1894,7 @@ const styles = StyleSheet.create({
   },
   selectorContainer: {
     backgroundColor: "#f5f5f5",
-    padding: 16,
+    padding: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#e0e0e0",
     flexDirection: "row",
@@ -1800,7 +1904,7 @@ const styles = StyleSheet.create({
   selectorButton: {
     backgroundColor: "#fff",
     flex: 1,
-    padding: 16,
+    padding: 12,
     borderRadius: 8,
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2156,11 +2260,22 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fff",
   },
+  calendar: {
+    borderRadius: 12,
+    marginHorizontal: 12,
+    marginTop: 12,
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
   selectedDateContainer: {
     flex: 1,
     backgroundColor: "#f9f9f9",
     borderTopWidth: 1,
     borderTopColor: "#e0e0e0",
+    marginTop: 16,
   },
   selectedDateHeader: {
     flexDirection: "row",
@@ -2179,13 +2294,15 @@ const styles = StyleSheet.create({
   },
   selectedDateEvents: {
     flex: 1,
-    padding: 16,
+    padding: 12,
+    paddingTop: 16,
   },
   noEventsContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 40,
+    marginTop: 20,
   },
   noEventsText: {
     fontSize: 16,

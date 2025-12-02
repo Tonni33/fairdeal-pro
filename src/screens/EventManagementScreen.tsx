@@ -1597,20 +1597,29 @@ const EventManagementScreen: React.FC = () => {
                   </Text>
                 </TouchableOpacity>
                 {showEditDateDialog && (
-                  <DateTimePicker
-                    value={editDate || new Date()}
-                    mode="date"
-                    display={Platform.OS === "ios" ? "spinner" : "default"}
-                    onChange={(event, selectedDate) => {
-                      setShowEditDateDialog(Platform.OS === "ios");
-                      if (selectedDate) {
-                        setEditDate(selectedDate);
+                  <View>
+                    <DateTimePicker
+                      value={editDate || new Date()}
+                      mode="date"
+                      display={Platform.OS === "ios" ? "spinner" : "default"}
+                      onChange={(event, selectedDate) => {
                         if (Platform.OS === "android") {
                           setShowEditDateDialog(false);
                         }
-                      }
-                    }}
-                  />
+                        if (selectedDate) {
+                          setEditDate(selectedDate);
+                        }
+                      }}
+                    />
+                    {Platform.OS === "ios" && (
+                      <TouchableOpacity
+                        style={styles.pickerCloseButton}
+                        onPress={() => setShowEditDateDialog(false)}
+                      >
+                        <Text style={styles.pickerCloseButtonText}>Valmis</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 )}
               </View>
 
@@ -1631,20 +1640,29 @@ const EventManagementScreen: React.FC = () => {
                   </Text>
                 </TouchableOpacity>
                 {showEditTimeDialog && (
-                  <DateTimePicker
-                    value={editTime || new Date()}
-                    mode="time"
-                    display={Platform.OS === "ios" ? "spinner" : "default"}
-                    onChange={(event, selectedTime) => {
-                      setShowEditTimeDialog(Platform.OS === "ios");
-                      if (selectedTime) {
-                        setEditTime(selectedTime);
+                  <View>
+                    <DateTimePicker
+                      value={editTime || new Date()}
+                      mode="time"
+                      display={Platform.OS === "ios" ? "spinner" : "default"}
+                      onChange={(event, selectedTime) => {
                         if (Platform.OS === "android") {
                           setShowEditTimeDialog(false);
                         }
-                      }
-                    }}
-                  />
+                        if (selectedTime) {
+                          setEditTime(selectedTime);
+                        }
+                      }}
+                    />
+                    {Platform.OS === "ios" && (
+                      <TouchableOpacity
+                        style={styles.pickerCloseButton}
+                        onPress={() => setShowEditTimeDialog(false)}
+                      >
+                        <Text style={styles.pickerCloseButtonText}>Valmis</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 )}
               </View>
 
@@ -2360,6 +2378,18 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     flex: 1,
+  },
+  pickerCloseButton: {
+    backgroundColor: "#1976d2",
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 12,
+    alignItems: "center",
+  },
+  pickerCloseButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
 
