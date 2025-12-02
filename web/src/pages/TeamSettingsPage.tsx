@@ -42,6 +42,8 @@ interface TeamSettings {
   eventDuration: number;
   maxGoalkeepers: number;
   maxPlayers: number;
+  defaultMaxGoalkeepers?: number; // Joukkueen pysyvä oletusarvo
+  defaultMaxPlayers?: number; // Joukkueen pysyvä oletusarvo
   notificationEnabled: boolean;
   teamAName: string;
   teamBName: string;
@@ -72,6 +74,8 @@ export default function TeamSettingsPage() {
     eventDuration: 50,
     maxGoalkeepers: 2,
     maxPlayers: 20,
+    defaultMaxGoalkeepers: 2,
+    defaultMaxPlayers: 20,
     notificationEnabled: true,
     teamAName: "Joukkue Valkoinen",
     teamBName: "Joukkue Musta",
@@ -127,13 +131,15 @@ export default function TeamSettingsPage() {
       const settingsSnapshot = await getDocs(collection(db, "settings"));
       const teamsSnapshot = await getDocs(collection(db, "teams"));
 
-      // Create a map of team IDs to guestRegistrationHours from teams collection
-      const teamGuestHoursMap: Record<string, number> = {};
+      // Create a map of team IDs to team data from teams collection
+      const teamDataMap: Record<string, any> = {};
       teamsSnapshot.docs.forEach((doc) => {
         const data = doc.data();
-        if (data.guestRegistrationHours !== undefined) {
-          teamGuestHoursMap[doc.id] = data.guestRegistrationHours;
-        }
+        teamDataMap[doc.id] = {
+          guestRegistrationHours: data.guestRegistrationHours,
+          defaultMaxPlayers: data.defaultMaxPlayers,
+          defaultMaxGoalkeepers: data.defaultMaxGoalkeepers,
+        };
       });
 
       const settingsData = settingsSnapshot.docs
@@ -149,16 +155,24 @@ export default function TeamSettingsPage() {
         })
         .map((doc) => {
           const data = doc.data();
-          // Use guestRegistrationHours from teams collection if available, otherwise from settings
+          const teamData = data.teamId ? teamDataMap[data.teamId] : undefined;
+
+          // Use values from teams collection if available, otherwise from settings
           const guestRegistrationHours =
-            data.teamId && teamGuestHoursMap[data.teamId] !== undefined
-              ? teamGuestHoursMap[data.teamId]
-              : data.guestRegistrationHours || 24;
+            teamData?.guestRegistrationHours ??
+            data.guestRegistrationHours ??
+            24;
+          const defaultMaxPlayers =
+            teamData?.defaultMaxPlayers ?? data.defaultMaxPlayers;
+          const defaultMaxGoalkeepers =
+            teamData?.defaultMaxGoalkeepers ?? data.defaultMaxGoalkeepers;
 
           return {
             id: doc.id,
             ...data,
             guestRegistrationHours,
+            defaultMaxPlayers,
+            defaultMaxGoalkeepers,
             // Convert Firestore Timestamps to ISO strings
             updatedAt:
               data.updatedAt?.toDate?.()?.toISOString() || data.updatedAt,
@@ -207,6 +221,8 @@ export default function TeamSettingsPage() {
       eventDuration: setting.eventDuration,
       maxGoalkeepers: setting.maxGoalkeepers,
       maxPlayers: setting.maxPlayers,
+      defaultMaxGoalkeepers: setting.defaultMaxGoalkeepers ?? 2,
+      defaultMaxPlayers: setting.defaultMaxPlayers ?? 20,
       notificationEnabled: setting.notificationEnabled,
       teamAName: setting.teamAName,
       teamBName: setting.teamBName,
@@ -238,17 +254,20 @@ export default function TeamSettingsPage() {
         updatedAt: new Date(),
       });
 
-      // Update the teams collection - this is the source of truth for guestRegistrationHours
+      // Update the teams collection - this is the source of truth for guestRegistrationHours, defaultMaxPlayers, defaultMaxGoalkeepers
       const teamId = selectedSettings.teamId;
-      console.log("Updating guestRegistrationHours for team ID:", teamId);
-      console.log("New value:", editForm.guestRegistrationHours);
-      console.log("Old value:", selectedSettings.guestRegistrationHours);
+      console.log("Updating team settings for team ID:", teamId);
+      console.log("guestRegistrationHours:", editForm.guestRegistrationHours);
+      console.log("defaultMaxPlayers:", editForm.defaultMaxPlayers);
+      console.log("defaultMaxGoalkeepers:", editForm.defaultMaxGoalkeepers);
 
       if (teamId) {
         try {
           const teamRef = doc(db, "teams", teamId);
           const updateData = {
             guestRegistrationHours: editForm.guestRegistrationHours,
+            defaultMaxPlayers: editForm.defaultMaxPlayers,
+            defaultMaxGoalkeepers: editForm.defaultMaxGoalkeepers,
           };
           console.log("Update data:", JSON.stringify(updateData));
 
@@ -259,10 +278,11 @@ export default function TeamSettingsPage() {
           const updatedTeamDoc = await getDocs(collection(db, "teams"));
           const updatedTeam = updatedTeamDoc.docs.find((d) => d.id === teamId);
           if (updatedTeam) {
-            console.log(
-              "Verified guestRegistrationHours after update:",
-              updatedTeam.data().guestRegistrationHours
-            );
+            console.log("Verified team settings after update:", {
+              guestRegistrationHours: updatedTeam.data().guestRegistrationHours,
+              defaultMaxPlayers: updatedTeam.data().defaultMaxPlayers,
+              defaultMaxGoalkeepers: updatedTeam.data().defaultMaxGoalkeepers,
+            });
           }
         } catch (teamUpdateError) {
           console.error("Error updating team:", teamUpdateError);
@@ -295,8 +315,25 @@ export default function TeamSettingsPage() {
 
     try {
       setError("");
+
+      // Delete from settings collection
       await deleteDoc(doc(db, "settings", selectedSettings.id));
-      setSuccess("Asetukset poistettu onnistuneesti!");
+
+      // Delete from teams collection if teamId exists
+      if (selectedSettings.teamId) {
+        try {
+          await deleteDoc(doc(db, "teams", selectedSettings.teamId));
+          console.log("Team deleted:", selectedSettings.teamId);
+        } catch (teamDeleteError) {
+          console.error("Error deleting team:", teamDeleteError);
+          setError(
+            "Joukkue-asetukset poistettu, mutta joukkueen poisto epäonnistui"
+          );
+          return;
+        }
+      }
+
+      setSuccess("Joukkue ja asetukset poistettu onnistuneesti!");
       setDeleteOpen(false);
       loadSettings();
       setTimeout(() => setSuccess(""), 3000);
@@ -363,15 +400,29 @@ export default function TeamSettingsPage() {
     },
     {
       field: "maxPlayers",
-      headerName: "Max pelaajat",
-      width: 120,
+      headerName: "Max pelaajat (luonti)",
+      width: 160,
       type: "number",
     },
     {
       field: "maxGoalkeepers",
-      headerName: "Max maalivahdit",
+      headerName: "Max MV (luonti)",
       width: 140,
       type: "number",
+    },
+    {
+      field: "defaultMaxPlayers",
+      headerName: "Joukkueen max pelaajat",
+      width: 180,
+      type: "number",
+      renderCell: (params) => <span>{params.value ?? "-"}</span>,
+    },
+    {
+      field: "defaultMaxGoalkeepers",
+      headerName: "Joukkueen max MV",
+      width: 150,
+      type: "number",
+      renderCell: (params) => <span>{params.value ?? "-"}</span>,
     },
     {
       field: "guestRegistrationHours",
@@ -643,7 +694,7 @@ export default function TeamSettingsPage() {
 
             <Stack direction="row" spacing={2}>
               <TextField
-                label="Max pelaajat"
+                label="Max pelaajat (tapahtuman luonti)"
                 type="number"
                 value={editForm.maxPlayers}
                 onChange={(e) =>
@@ -653,9 +704,10 @@ export default function TeamSettingsPage() {
                   })
                 }
                 fullWidth
+                helperText="Oletusarvo uusille tapahtumille"
               />
               <TextField
-                label="Max maalivahdit"
+                label="Max maalivahdit (tapahtuman luonti)"
                 type="number"
                 value={editForm.maxGoalkeepers}
                 onChange={(e) =>
@@ -665,6 +717,36 @@ export default function TeamSettingsPage() {
                   })
                 }
                 fullWidth
+                helperText="Oletusarvo uusille tapahtumille"
+              />
+            </Stack>
+
+            <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+              <TextField
+                label="Joukkueen max pelaajat"
+                type="number"
+                value={editForm.defaultMaxPlayers}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    defaultMaxPlayers: parseInt(e.target.value) || 20,
+                  })
+                }
+                fullWidth
+                helperText="Joukkueen pysyvä maksimipelaajamäärä"
+              />
+              <TextField
+                label="Joukkueen max maalivahdit"
+                type="number"
+                value={editForm.defaultMaxGoalkeepers}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    defaultMaxGoalkeepers: parseInt(e.target.value) || 2,
+                  })
+                }
+                fullWidth
+                helperText="Joukkueen pysyvä maksimimaalivahtimäärä"
               />
             </Stack>
 
@@ -767,13 +849,19 @@ export default function TeamSettingsPage() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)}>
-        <DialogTitle>Poista asetukset</DialogTitle>
+        <DialogTitle>Poista joukkue</DialogTitle>
         <DialogContent>
           <Typography>
-            Haluatko varmasti poistaa joukkueen "{selectedSettings?.teamName}"
-            asetukset?
+            Haluatko varmasti poistaa joukkueen "{selectedSettings?.teamName}"?
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          <Typography variant="body2" color="error" sx={{ mt: 2 }}>
+            <strong>Varoitus:</strong> Tämä poistaa:
+          </Typography>
+          <Typography variant="body2" component="ul" sx={{ mt: 1, pl: 2 }}>
+            <li>Joukkueen tiedot teams-kokoelmasta</li>
+            <li>Joukkueen asetukset settings-kokoelmasta</li>
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
             Tätä toimintoa ei voi perua.
           </Typography>
         </DialogContent>
@@ -784,7 +872,7 @@ export default function TeamSettingsPage() {
             color="error"
             variant="contained"
           >
-            Poista
+            Poista joukkue
           </Button>
         </DialogActions>
       </Dialog>

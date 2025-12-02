@@ -20,9 +20,14 @@ import {
 } from "@mui/material";
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import { Add, Refresh, Edit, Delete } from "@mui/icons-material";
-import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
-import { getFunctions, httpsCallable } from "firebase/functions";
-import app, { db } from "../services/firebase";
+import {
+  collection,
+  getDocs,
+  doc,
+  updateDoc,
+  deleteDoc,
+} from "firebase/firestore";
+import { db } from "../services/firebase";
 import type { Team, User } from "../types";
 import ColumnSelector from "../components/ColumnSelector";
 
@@ -200,20 +205,29 @@ export default function TeamsPage() {
 
     try {
       setError("");
-      const functions = getFunctions(app);
-      const deleteTeamFn = httpsCallable(functions, "deleteTeam");
-      await deleteTeamFn({ teamId: selectedTeam.id });
-      setSuccess(
-        "Joukkue poistettu onnistuneesti ja käyttäjien tiedot päivitetty!"
-      );
+
+      // Delete team document from teams collection
+      await deleteDoc(doc(db, "teams", selectedTeam.id));
+
+      // Try to delete corresponding settings document if it exists
+      try {
+        const settingsId = `team-${selectedTeam.id}`;
+        await deleteDoc(doc(db, "settings", settingsId));
+        console.log("Settings deleted:", settingsId);
+      } catch (settingsError) {
+        console.warn(
+          "Settings document not found or already deleted:",
+          settingsError
+        );
+      }
+
+      setSuccess("Joukkue poistettu onnistuneesti!");
       setDeleteOpen(false);
       loadTeams();
       setTimeout(() => setSuccess(""), 3000);
     } catch (err) {
-      console.error("Error deleting team via Cloud Function:", err);
-      setError(
-        "Virhe joukkueen poistamisessa. Tarkista oikeudet ja yritä uudelleen."
-      );
+      console.error("Error deleting team:", err);
+      setError("Virhe joukkueen poistamisessa");
     }
   };
 

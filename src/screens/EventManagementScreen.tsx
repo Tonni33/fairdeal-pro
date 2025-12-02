@@ -295,24 +295,37 @@ const EventManagementScreen: React.FC = () => {
     let timeObj: Date | null = null;
 
     if (event.date) {
-      dateObj = new Date(event.date);
-      timeObj = new Date(event.date);
+      try {
+        dateObj = new Date(event.date);
+        // Check if date is valid
+        if (isNaN(dateObj.getTime())) {
+          console.warn("Invalid date in event:", event.date);
+          dateObj = null;
+        } else {
+          timeObj = new Date(event.date);
+        }
+      } catch (error) {
+        console.error("Error parsing event date:", error);
+        dateObj = null;
+      }
     }
 
     setEditForm({
       name: event.name || event.title || "",
-      date: dateObj
-        ? `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(
-            2,
-            "0"
-          )}-${String(dateObj.getDate()).padStart(2, "0")}`
-        : "",
-      time: dateObj
-        ? dateObj.toLocaleTimeString("fi-FI", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })
-        : "",
+      date:
+        dateObj && !isNaN(dateObj.getTime())
+          ? `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(
+              2,
+              "0"
+            )}-${String(dateObj.getDate()).padStart(2, "0")}`
+          : "",
+      time:
+        dateObj && !isNaN(dateObj.getTime())
+          ? dateObj.toLocaleTimeString("fi-FI", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "",
       location: event.location || "",
     });
     setEditDate(dateObj);
@@ -1555,7 +1568,7 @@ const EventManagementScreen: React.FC = () => {
                 <Text style={styles.formLabel}>Tapahtuman nimi</Text>
                 <TextInput
                   style={styles.formInput}
-                  value={editForm.name}
+                  value={editForm.name || ""}
                   onChangeText={(text) =>
                     setEditForm({ ...editForm, name: text })
                   }
@@ -1655,7 +1668,7 @@ const EventManagementScreen: React.FC = () => {
                 <Text style={styles.formLabel}>Paikka</Text>
                 <TextInput
                   style={styles.formInput}
-                  value={editForm.location}
+                  value={editForm.location || ""}
                   onChangeText={(text) =>
                     setEditForm({ ...editForm, location: text })
                   }
