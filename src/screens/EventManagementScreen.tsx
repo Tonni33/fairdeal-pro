@@ -9,9 +9,11 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   collection,
   getDocs,
@@ -1594,31 +1596,22 @@ const EventManagementScreen: React.FC = () => {
                       : "Valitse päivämäärä"}
                   </Text>
                 </TouchableOpacity>
-                <Portal>
-                  <Dialog
-                    visible={showEditDateDialog}
-                    onDismiss={() => setShowEditDateDialog(false)}
-                  >
-                    <Dialog.Title>Valitse päivämäärä</Dialog.Title>
-                    <Dialog.Content>
-                      <Button
-                        onPress={() => {
-                          const today = new Date();
-                          setEditDate(today);
+                {showEditDateDialog && (
+                  <DateTimePicker
+                    value={editDate || new Date()}
+                    mode="date"
+                    display={Platform.OS === "ios" ? "spinner" : "default"}
+                    onChange={(event, selectedDate) => {
+                      setShowEditDateDialog(Platform.OS === "ios");
+                      if (selectedDate) {
+                        setEditDate(selectedDate);
+                        if (Platform.OS === "android") {
                           setShowEditDateDialog(false);
-                        }}
-                      >
-                        Tänään
-                      </Button>
-                      {/* Voit laajentaa tähän oman kalenterin tai päivämäärän valinnan */}
-                    </Dialog.Content>
-                    <Dialog.Actions>
-                      <Button onPress={() => setShowEditDateDialog(false)}>
-                        Sulje
-                      </Button>
-                    </Dialog.Actions>
-                  </Dialog>
-                </Portal>
+                        }
+                      }
+                    }}
+                  />
+                )}
               </View>
 
               {/* Kellonaikavalitsin */}
@@ -1637,31 +1630,22 @@ const EventManagementScreen: React.FC = () => {
                       : "Valitse aika"}
                   </Text>
                 </TouchableOpacity>
-                <Portal>
-                  <Dialog
-                    visible={showEditTimeDialog}
-                    onDismiss={() => setShowEditTimeDialog(false)}
-                  >
-                    <Dialog.Title>Valitse aika</Dialog.Title>
-                    <Dialog.Content>
-                      <Button
-                        onPress={() => {
-                          const now = new Date();
-                          setEditTime(now);
+                {showEditTimeDialog && (
+                  <DateTimePicker
+                    value={editTime || new Date()}
+                    mode="time"
+                    display={Platform.OS === "ios" ? "spinner" : "default"}
+                    onChange={(event, selectedTime) => {
+                      setShowEditTimeDialog(Platform.OS === "ios");
+                      if (selectedTime) {
+                        setEditTime(selectedTime);
+                        if (Platform.OS === "android") {
                           setShowEditTimeDialog(false);
-                        }}
-                      >
-                        Nyt
-                      </Button>
-                      {/* Voit laajentaa tähän oman kellonajan valinnan */}
-                    </Dialog.Content>
-                    <Dialog.Actions>
-                      <Button onPress={() => setShowEditTimeDialog(false)}>
-                        Sulje
-                      </Button>
-                    </Dialog.Actions>
-                  </Dialog>
-                </Portal>
+                        }
+                      }
+                    }}
+                  />
+                )}
               </View>
 
               <View style={styles.formGroup}>
