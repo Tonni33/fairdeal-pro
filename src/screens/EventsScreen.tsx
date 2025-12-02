@@ -11,6 +11,7 @@ import {
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { Calendar } from "react-native-calendars";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import {
@@ -45,6 +46,8 @@ const EventsScreen: React.FC = () => {
   const [pendingRegistrationEventId, setPendingRegistrationEventId] = useState<
     string | null
   >(null);
+  const [viewMode, setViewMode] = useState<"calendar" | "list">("list");
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   // Helper functions for player counting by position
   // Note: These check event-specific playerRoles first, then fall back to player's default position
@@ -224,6 +227,49 @@ const EventsScreen: React.FC = () => {
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
   }, [events, selectedTeamId, userTeams]);
+
+  // Create marked dates object for calendar with team colors
+  const markedDates = useMemo(() => {
+    const marked: Record<string, any> = {};
+
+    filteredEvents.forEach((event) => {
+      const dateKey = new Date(event.date).toISOString().split("T")[0];
+      const team = teams.find((t) => t.id === event.teamId);
+      const teamColor = team?.color || "#1976d2";
+
+      if (!marked[dateKey]) {
+        marked[dateKey] = { dots: [] };
+      }
+
+      // Add color dot for each team's event
+      marked[dateKey].dots.push({
+        key: event.id,
+        color: teamColor,
+      });
+    });
+
+    // Mark selected date if exists
+    if (selectedDate && marked[selectedDate]) {
+      marked[selectedDate].selected = true;
+      marked[selectedDate].selectedColor = "#e3f2fd";
+    } else if (selectedDate) {
+      marked[selectedDate] = {
+        selected: true,
+        selectedColor: "#e3f2fd",
+      };
+    }
+
+    return marked;
+  }, [filteredEvents, teams, selectedDate]);
+
+  // Get events for selected date
+  const eventsForSelectedDate = useMemo(() => {
+    if (!selectedDate) return [];
+    return filteredEvents.filter((event) => {
+      const eventDate = new Date(event.date).toISOString().split("T")[0];
+      return eventDate === selectedDate;
+    });
+  }, [selectedDate, filteredEvents]);
 
   // Automaattinen varallaolijoiden siirto osallistujiksi kun threshold täyttyy ja tapahtumassa on tilaa
   useEffect(() => {
@@ -1128,23 +1174,92 @@ const EventsScreen: React.FC = () => {
           </View>
           <Ionicons name="chevron-down" size={20} color="#666" />
         </TouchableOpacity>
+
+        {/* View mode toggle */}
+        <TouchableOpacity
+          style={styles.viewToggleButton}
+          onPress={() => {
+            setViewMode(viewMode === "list" ? "calendar" : "list");
+            setSelectedDate(null); // Clear selected date when switching views
+          }}
+        >
+          <Ionicons
+            name={viewMode === "list" ? "calendar" : "list"}
+            size={24}
+            color="#1976d2"
+          />
+        </TouchableOpacity>
       </View>
 
-      {/* Tapahtumien lista */}
-      <FlatList
-        data={filteredEvents}
-        renderItem={renderEventItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={
-          filteredEvents.length === 0
-            ? styles.emptyContainer
-            : styles.listContainer
-        }
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        ListEmptyComponent={!loading ? <EmptyState /> : null}
-      />
+      {/* Calendar view */}
+      {viewMode === "calendar" ? (
+        <View style={styles.calendarContainer}>
+          <Calendar
+            markingType="multi-dot"
+            markedDates={markedDates}
+            onDayPress={(day) => {
+              setSelectedDate(day.dateString);
+            }}
+            theme={{
+              todayTextColor: "#1976d2",
+              selectedDayBackgroundColor: "#1976d2",
+              dotColor: "#1976d2",
+              arrowColor: "#1976d2",
+            }}
+          />
+
+          {/* Events for selected date */}
+          {selectedDate && (
+            <View style={styles.selectedDateContainer}>
+              <View style={styles.selectedDateHeader}>
+                <Text style={styles.selectedDateTitle}>
+                  {new Date(selectedDate).toLocaleDateString("fi-FI", {
+                    weekday: "long",
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </Text>
+                <TouchableOpacity onPress={() => setSelectedDate(null)}>
+                  <Ionicons name="close" size={24} color="#666" />
+                </TouchableOpacity>
+              </View>
+              {eventsForSelectedDate.length > 0 ? (
+                <ScrollView style={styles.selectedDateEvents}>
+                  {eventsForSelectedDate.map((event) => (
+                    <View key={event.id}>
+                      {renderEventItem({ item: event })}
+                    </View>
+                  ))}
+                </ScrollView>
+              ) : (
+                <View style={styles.noEventsContainer}>
+                  <Ionicons name="calendar-outline" size={48} color="#ccc" />
+                  <Text style={styles.noEventsText}>
+                    Ei tapahtumia tänä päivänä
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+      ) : (
+        /* Tapahtumien lista */
+        <FlatList
+          data={filteredEvents}
+          renderItem={renderEventItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={
+            filteredEvents.length === 0
+              ? styles.emptyContainer
+              : styles.listContainer
+          }
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          ListEmptyComponent={!loading ? <EmptyState /> : null}
+        />
+      )}
 
       {/* Joukkuevalinta modal */}
       <Modal
@@ -1678,9 +1793,13 @@ const styles = StyleSheet.create({
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#e0e0e0",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
   selectorButton: {
     backgroundColor: "#fff",
+    flex: 1,
     padding: 16,
     borderRadius: 8,
     flexDirection: "row",
@@ -2023,6 +2142,55 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
+  },
+  viewToggleButton: {
+    backgroundColor: "#fff",
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  calendarContainer: {
+    flex: 1,
+    backgroundColor: "#fff",
+  },
+  selectedDateContainer: {
+    flex: 1,
+    backgroundColor: "#f9f9f9",
+    borderTopWidth: 1,
+    borderTopColor: "#e0e0e0",
+  },
+  selectedDateHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+  },
+  selectedDateTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    flex: 1,
+  },
+  selectedDateEvents: {
+    flex: 1,
+    padding: 16,
+  },
+  noEventsContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 40,
+  },
+  noEventsText: {
+    fontSize: 16,
+    color: "#999",
+    marginTop: 12,
   },
 });
 
