@@ -240,58 +240,6 @@ const EventsScreen: React.FC = () => {
     );
   }, [events, selectedTeamId, userTeams]);
 
-  // Create marked dates object for calendar with team colors
-  const markedDates = useMemo(() => {
-    const marked: Record<string, any> = {};
-    const today = new Date().toISOString().split("T")[0];
-
-    filteredEvents.forEach((event) => {
-      const dateKey = new Date(event.date).toISOString().split("T")[0];
-      const team = teams.find((t) => t.id === event.teamId);
-      const teamColor = team?.color || "#1976d2";
-
-      if (!marked[dateKey]) {
-        marked[dateKey] = { dots: [] };
-      }
-
-      // Add color dot for each team's event
-      marked[dateKey].dots.push({
-        key: event.id,
-        color: teamColor,
-      });
-    });
-
-    // Mark today with light blue background (always visible)
-    if (marked[today]) {
-      marked[today].selected = true;
-      marked[today].selectedColor = "#e3f2fd";
-      marked[today].selectedTextColor = "#1976d2";
-    } else {
-      marked[today] = {
-        selected: true,
-        selectedColor: "#e3f2fd",
-        selectedTextColor: "#1976d2",
-      };
-    }
-
-    // Mark selected date with orange border (if different from today)
-    if (selectedDate && selectedDate !== today) {
-      if (marked[selectedDate]) {
-        marked[selectedDate].selected = true;
-        marked[selectedDate].selectedColor = "#fff3e0";
-        marked[selectedDate].selectedTextColor = "#ff9800";
-      } else {
-        marked[selectedDate] = {
-          selected: true,
-          selectedColor: "#fff3e0",
-          selectedTextColor: "#ff9800",
-        };
-      }
-    }
-
-    return marked;
-  }, [filteredEvents, teams, selectedDate]);
-
   // Get events for selected date
   const eventsForSelectedDate = useMemo(() => {
     if (!selectedDate) return [];
@@ -522,6 +470,116 @@ const EventsScreen: React.FC = () => {
       teamMember: playerData?.teamMember || {},
     } as Player;
   }, [user, players]);
+
+  // Helper function to get registration status for current user
+  const getRegistrationStatus = (
+    event: Event
+  ): "registered" | "reserve" | "not-registered" => {
+    if (!currentPlayer?.id) return "not-registered";
+
+    const registeredPlayers = event.registeredPlayers || [];
+    const reservePlayers = event.reservePlayers || [];
+
+    if (registeredPlayers.includes(currentPlayer.id)) {
+      return "registered";
+    } else if (reservePlayers.includes(currentPlayer.id)) {
+      return "reserve";
+    }
+    return "not-registered";
+  };
+
+  // Create marked dates object for calendar with team colors
+  const markedDates = useMemo(() => {
+    const marked: Record<string, any> = {};
+    const today = new Date().toISOString().split("T")[0];
+
+    // Track events per date for status checking
+    const eventsByDate: Record<string, Event[]> = {};
+
+    filteredEvents.forEach((event) => {
+      const dateKey = new Date(event.date).toISOString().split("T")[0];
+      const team = teams.find((t) => t.id === event.teamId);
+      const teamColor = team?.color || "#1976d2";
+
+      if (!marked[dateKey]) {
+        marked[dateKey] = { dots: [] };
+      }
+
+      // Add color dot for each team's event
+      marked[dateKey].dots.push({
+        key: event.id,
+        color: teamColor,
+      });
+
+      // Track events for this date
+      if (!eventsByDate[dateKey]) {
+        eventsByDate[dateKey] = [];
+      }
+      eventsByDate[dateKey].push(event);
+    });
+
+    // Add colored borders based on registration status
+    // Priority: First event (chronologically) determines the color
+    Object.keys(eventsByDate).forEach((dateKey) => {
+      const events = eventsByDate[dateKey];
+
+      // Sort events by time and take the first one
+      const sortedEvents = [...events].sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+
+      const firstEvent = sortedEvents[0];
+      const status = getRegistrationStatus(firstEvent);
+
+      const borderColor =
+        status === "registered"
+          ? "#4CAF50" // green
+          : status === "reserve"
+          ? "#ff9800" // orange
+          : "#f44336"; // red
+
+      // Add border to marked date
+      if (!marked[dateKey].customStyles) {
+        marked[dateKey].customStyles = {
+          container: {},
+          text: {},
+        };
+      }
+      marked[dateKey].customStyles.container.borderWidth = 3;
+      marked[dateKey].customStyles.container.borderColor = borderColor;
+      marked[dateKey].customStyles.container.borderRadius = 8;
+    });
+
+    // Mark today with light blue background (always visible)
+    if (marked[today]) {
+      marked[today].selected = true;
+      marked[today].selectedColor = "#e3f2fd";
+      marked[today].selectedTextColor = "#1976d2";
+    } else {
+      marked[today] = {
+        selected: true,
+        selectedColor: "#e3f2fd",
+        selectedTextColor: "#1976d2",
+      };
+    }
+
+    // Mark selected date with orange border (if different from today)
+    if (selectedDate && selectedDate !== today) {
+      if (marked[selectedDate]) {
+        marked[selectedDate].selected = true;
+        marked[selectedDate].selectedColor = "#fff3e0";
+        marked[selectedDate].selectedTextColor = "#ff9800";
+      } else {
+        marked[selectedDate] = {
+          selected: true,
+          selectedColor: "#fff3e0",
+          selectedTextColor: "#ff9800",
+        };
+      }
+    }
+
+    return marked;
+  }, [filteredEvents, teams, selectedDate, currentPlayer]);
 
   // Päivitä valittu tapahtuma kun events-data muuttuu
   useEffect(() => {
@@ -1099,6 +1157,16 @@ const EventsScreen: React.FC = () => {
     // Hae joukkueen väri
     const team = teams.find((t) => t.id === item.teamId);
     const teamColor = team?.color || "#1976d2";
+
+    // Hae ilmoittautumis-status
+    const registrationStatus = getRegistrationStatus(item);
+    const statusIcon =
+      registrationStatus === "registered"
+        ? { name: "checkmark-circle" as const, color: "#4CAF50" }
+        : registrationStatus === "reserve"
+        ? { name: "time-outline" as const, color: "#ff9800" }
+        : { name: "ellipse-outline" as const, color: "#f44336" };
+
     return (
       <TouchableOpacity
         style={[styles.eventCard, { borderColor: teamColor, borderWidth: 2 }]}
@@ -1107,6 +1175,11 @@ const EventsScreen: React.FC = () => {
           setEventModalVisible(true);
         }}
       >
+        {/* Status-ikoni oikeassa yläkulmassa */}
+        <View style={styles.statusIconContainer}>
+          <Ionicons name={statusIcon.name} size={22} color={statusIcon.color} />
+        </View>
+
         {/* Joukkueen nimi ylimpänä värikoodilla */}
         <View style={styles.eventTeamHeader}>
           <Text style={[styles.eventTeamName, { color: teamColor }]}>
@@ -1813,6 +1886,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 5,
+    position: "relative" as any,
+  },
+  statusIconContainer: {
+    position: "absolute" as any,
+    top: 12,
+    right: 12,
+    zIndex: 10,
   },
   eventHeader: {
     flexDirection: "row",

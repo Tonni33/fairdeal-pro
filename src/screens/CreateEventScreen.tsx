@@ -504,6 +504,7 @@ const CreateEventScreen: React.FC = () => {
               minDate={new Date().toISOString().split("T")[0]}
               monthFormat={"MMMM yyyy"}
               hideExtraDays={true}
+              firstDay={1}
               theme={{
                 backgroundColor: "#ffffff",
                 calendarBackground: "#ffffff",

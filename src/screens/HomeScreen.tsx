@@ -64,6 +64,23 @@ const HomeScreen: React.FC = () => {
   const { user } = useAuth();
   const { players, events, teams, refreshData } = useApp();
 
+  // Helper function to get registration status for current user
+  const getRegistrationStatus = (
+    event: Event
+  ): "registered" | "reserve" | "not-registered" => {
+    if (!currentPlayer?.id) return "not-registered";
+
+    const registeredPlayers = event.registeredPlayers || [];
+    const reservePlayers = event.reservePlayers || [];
+
+    if (registeredPlayers.includes(currentPlayer.id)) {
+      return "registered";
+    } else if (reservePlayers.includes(currentPlayer.id)) {
+      return "reserve";
+    }
+    return "not-registered";
+  };
+
   // Helper functions for player counting by position
   // Note: These check event-specific playerRoles first, then fall back to player's default position
   const getFieldPlayers = (playerIds: string[], event?: Event) => {
@@ -1164,6 +1181,47 @@ const HomeScreen: React.FC = () => {
               </View>
             </View>
 
+            {/* Registration status */}
+            {(() => {
+              const status = getRegistrationStatus(nextEvent);
+              const statusConfig =
+                status === "registered"
+                  ? {
+                      icon: "checkmark-circle" as const,
+                      color: "#4CAF50",
+                      text: "Olet ilmoittautunut",
+                    }
+                  : status === "reserve"
+                  ? {
+                      icon: "time-outline" as const,
+                      color: "#ff9800",
+                      text: "Olet varasijoilla",
+                    }
+                  : {
+                      icon: "ellipse-outline" as const,
+                      color: "#f44336",
+                      text: "Et ole ilmoittautunut",
+                    };
+
+              return (
+                <View style={styles.registrationStatusContainer}>
+                  <Ionicons
+                    name={statusConfig.icon}
+                    size={18}
+                    color={statusConfig.color}
+                  />
+                  <Text
+                    style={[
+                      styles.registrationStatusText,
+                      { color: statusConfig.color },
+                    ]}
+                  >
+                    {statusConfig.text}
+                  </Text>
+                </View>
+              );
+            })()}
+
             {(() => {
               const eventTeam = teams.find(
                 (team) => team.id === nextEvent.teamId
@@ -2043,6 +2101,21 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#1976d2",
     marginLeft: 8,
+  },
+  registrationStatusContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#f5f5f5",
+    borderRadius: 8,
+  },
+  registrationStatusText: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginLeft: 6,
   },
   eventTitle: {
     fontSize: 24,
