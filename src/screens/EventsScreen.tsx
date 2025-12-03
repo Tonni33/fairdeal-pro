@@ -11,7 +11,7 @@ import {
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Calendar } from "react-native-calendars";
+import { Calendar, DateData } from "react-native-calendars";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import {
@@ -518,7 +518,7 @@ const EventsScreen: React.FC = () => {
       eventsByDate[dateKey].push(event);
     });
 
-    // Add colored borders based on registration status
+    // Determine border color based on registration status
     // Priority: First event (chronologically) determines the color
     Object.keys(eventsByDate).forEach((dateKey) => {
       const events = eventsByDate[dateKey];
@@ -531,23 +531,15 @@ const EventsScreen: React.FC = () => {
       const firstEvent = sortedEvents[0];
       const status = getRegistrationStatus(firstEvent);
 
-      const borderColor =
+      const statusColor =
         status === "registered"
           ? "#4CAF50" // green
           : status === "reserve"
           ? "#ff9800" // orange
           : "#f44336"; // red
 
-      // Add border to marked date
-      if (!marked[dateKey].customStyles) {
-        marked[dateKey].customStyles = {
-          container: {},
-          text: {},
-        };
-      }
-      marked[dateKey].customStyles.container.borderWidth = 3;
-      marked[dateKey].customStyles.container.borderColor = borderColor;
-      marked[dateKey].customStyles.container.borderRadius = 8;
+      // Store status color for border rendering only (no status dot)
+      marked[dateKey].statusBorderColor = statusColor;
     });
 
     // Mark today with light blue background (always visible)
@@ -1144,6 +1136,82 @@ const EventsScreen: React.FC = () => {
     return `${formatDate(date)} klo ${formatTime(date)}`;
   };
 
+  // Custom day component for calendar with colored borders
+  const renderDay = (day: any) => {
+    const dateStr = day.dateString;
+    const marking = markedDates[dateStr];
+    const isToday = dateStr === new Date().toISOString().split("T")[0];
+    const isSelected = dateStr === selectedDate;
+    const borderColor = marking?.statusBorderColor;
+
+    const dayStyle: any = {
+      width: 40,
+      height: 40,
+      justifyContent: "center",
+      alignItems: "center",
+      borderRadius: 8,
+    };
+
+    if (borderColor) {
+      dayStyle.borderWidth = 3;
+      dayStyle.borderColor = borderColor;
+    }
+
+    if (isToday) {
+      dayStyle.backgroundColor = "#e3f2fd";
+    }
+
+    if (isSelected) {
+      dayStyle.backgroundColor = "#fff3e0";
+    }
+
+    const textStyle: any = {
+      fontSize: 16,
+      fontWeight: "600",
+      color: isToday ? "#1976d2" : isSelected ? "#ff9800" : "#2d4150",
+    };
+
+    if (day.state === "disabled") {
+      textStyle.color = "#d9e1e8";
+    }
+
+    return (
+      <TouchableOpacity
+        style={dayStyle}
+        onPress={() => {
+          if (day.state !== "disabled") {
+            setSelectedDate(dateStr);
+          }
+        }}
+        disabled={day.state === "disabled"}
+      >
+        <Text style={textStyle}>{day.day}</Text>
+        {marking?.dots && (
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "center",
+              marginTop: 2,
+            }}
+          >
+            {marking.dots.slice(0, 3).map((dot: any, index: number) => (
+              <View
+                key={dot.key || index}
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor: dot.color,
+                  marginHorizontal: 1,
+                }}
+              />
+            ))}
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
   const renderEventItem = ({ item }: { item: Event }) => {
     const eventDate = new Date(item.date);
     const isUpcoming = eventDate > new Date();
@@ -1298,6 +1366,7 @@ const EventsScreen: React.FC = () => {
             onDayPress={(day) => {
               setSelectedDate(day.dateString);
             }}
+            dayComponent={(props: any) => renderDay(props.date)}
             firstDay={1}
             theme={
               {
