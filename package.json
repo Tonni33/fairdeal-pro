@@ -1,6 +1,6 @@
 {
-  "name": "fairdealpro",
-  "version": "1.0.7",
+  "name": "fairdeal-pro",
+  "version": "1.0.8",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",

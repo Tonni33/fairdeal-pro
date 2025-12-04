@@ -141,7 +141,6 @@ const EventsScreen: React.FC = () => {
   };
 
   const navigation = useNavigation<EventsScreenNavigationProp>();
-  const { user } = useAuth();
   const { events, teams, loading, refreshData, players } = useApp();
 
   // Helper function to find player by any ID and enrich with Firebase Auth data
