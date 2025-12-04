@@ -49,6 +49,10 @@ const EventsScreen: React.FC = () => {
   const [viewMode, setViewMode] = useState<"calendar" | "list">("list");
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
+  // Check if current user is admin
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin" || user?.isAdmin === true;
+
   // Helper functions for player counting by position
   // Note: These check event-specific playerRoles first, then fall back to player's default position
   const getFieldPlayers = (playerIds: string[], event?: Event) => {
@@ -647,6 +651,17 @@ const EventsScreen: React.FC = () => {
       console.log("❌ Missing selectedEvent or currentPlayer");
       return;
     }
+
+    // Check if event is in the past and user is not admin
+    const eventDate = new Date(selectedEvent.date);
+    const now = new Date();
+    if (eventDate < now && !isAdmin) {
+      Alert.alert(
+        "Tapahtuma on mennyt",
+        "Et voi enää muokata ilmoittautumista menneeseen tapahtumaan. Ota yhteyttä adminiin jos tarvitset muutoksia."
+      );
+      return;
+    }
     setRegistrationLoading(true);
     try {
       const eventRef = doc(db, "events", selectedEvent.id);
@@ -1153,7 +1168,7 @@ const EventsScreen: React.FC = () => {
     };
 
     if (borderColor) {
-      dayStyle.borderWidth = 3;
+      dayStyle.borderWidth = 2;
       dayStyle.borderColor = borderColor;
     }
 
@@ -1664,10 +1679,16 @@ const EventsScreen: React.FC = () => {
                         : isReserve
                         ? styles.reserveButton
                         : styles.registerButton,
-                      registrationLoading && styles.disabledButton,
+                      (registrationLoading ||
+                        (new Date(selectedEvent.date) < new Date() &&
+                          !isAdmin)) &&
+                        styles.disabledButton,
                     ]}
                     onPress={handleRegistration}
-                    disabled={registrationLoading}
+                    disabled={
+                      registrationLoading ||
+                      (new Date(selectedEvent.date) < new Date() && !isAdmin)
+                    }
                   >
                     <Ionicons
                       name={

@@ -488,6 +488,17 @@ const HomeScreen: React.FC = () => {
   const handleRegistration = async () => {
     if (!nextEvent || !currentPlayer || !user) return;
 
+    // Check if event is in the past and user is not admin
+    const eventDate = new Date(nextEvent.date);
+    const now = new Date();
+    if (eventDate < now && !isAdmin) {
+      Alert.alert(
+        "Tapahtuma on mennyt",
+        "Et voi enää muokata ilmoittautumista menneeseen tapahtumaan. Ota yhteyttä adminiin jos tarvitset muutoksia."
+      );
+      return;
+    }
+
     // Käytä currentPlayer.id (Firestore document ID) eikä user.id (Auth UID)
     const playerIdToUse = currentPlayer.id;
     console.log("HomeScreen: Registration - using player ID:", playerIdToUse);
@@ -1361,10 +1372,15 @@ const HomeScreen: React.FC = () => {
                   : isReserve
                   ? styles.reserveButton
                   : styles.registerButton,
-                registrationLoading && styles.disabledButton,
+                (registrationLoading ||
+                  (new Date(nextEvent.date) < new Date() && !isAdmin)) &&
+                  styles.disabledButton,
               ]}
               onPress={handleRegistration}
-              disabled={registrationLoading}
+              disabled={
+                registrationLoading ||
+                (new Date(nextEvent.date) < new Date() && !isAdmin)
+              }
             >
               <Ionicons
                 name={
