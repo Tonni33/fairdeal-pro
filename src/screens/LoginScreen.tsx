@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as LocalAuthentication from "expo-local-authentication";
+import { sendPasswordResetEmail } from "firebase/auth";
 import { useAuth } from "../contexts/AuthContext";
 import { auth } from "../services/firebase";
 import { SecureStorage } from "../utils/secureStorage";
@@ -124,6 +125,37 @@ const LoginScreen: React.FC = () => {
       setQuickAuthAvailable(false);
       // Show email login on error as well
       setShowEmailLogin(true);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    if (!email.trim()) {
+      Alert.alert(
+        "Syötä sähköpostiosoite",
+        "Kirjoita sähköpostiosoitteesi ensin, niin voimme lähettää sinulle salasanan palautusohjeet."
+      );
+      return;
+    }
+
+    try {
+      await sendPasswordResetEmail(auth, email);
+      Alert.alert(
+        "Sähköposti lähetetty",
+        `Salasanan palautusohjeet on lähetetty osoitteeseen ${email}. Tarkista myös roskapostikansiosi.`
+      );
+    } catch (error: any) {
+      console.error("Password reset error:", error);
+      let errorMessage = "Salasanan palautus epäonnistui";
+
+      if (error.code === "auth/user-not-found") {
+        errorMessage = "Sähköpostiosoitetta ei löydy järjestelmästä";
+      } else if (error.code === "auth/invalid-email") {
+        errorMessage = "Virheellinen sähköpostiosoite";
+      } else if (error.code === "auth/too-many-requests") {
+        errorMessage = "Liian monta yritystä. Odota hetki ja yritä uudelleen.";
+      }
+
+      Alert.alert("Virhe", errorMessage);
     }
   };
 
@@ -377,6 +409,17 @@ const LoginScreen: React.FC = () => {
               </Text>
             </TouchableOpacity>
 
+            {!isRegister && (
+              <TouchableOpacity
+                style={styles.forgotPasswordButton}
+                onPress={handlePasswordReset}
+              >
+                <Text style={styles.forgotPasswordText}>
+                  Unohditko salasanan?
+                </Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
               style={styles.switchButton}
               onPress={() => {
@@ -496,6 +539,16 @@ const styles = StyleSheet.create({
   },
   switchButtonText: {
     color: "#1976d2",
+    fontSize: 14,
+    textDecorationLine: "underline",
+  },
+  forgotPasswordButton: {
+    alignItems: "center",
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  forgotPasswordText: {
+    color: "#666",
     fontSize: 14,
     textDecorationLine: "underline",
   },

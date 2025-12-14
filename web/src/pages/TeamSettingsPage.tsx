@@ -224,8 +224,8 @@ export default function TeamSettingsPage() {
       defaultMaxGoalkeepers: setting.defaultMaxGoalkeepers ?? 2,
       defaultMaxPlayers: setting.defaultMaxPlayers ?? 20,
       notificationEnabled: setting.notificationEnabled,
-      teamAName: setting.teamAName,
-      teamBName: setting.teamBName,
+      teamAName: setting.teamAName || "",
+      teamBName: setting.teamBName || "",
       guestRegistrationHours: setting.guestRegistrationHours || 24,
     });
     setEditOpen(true);
@@ -642,7 +642,7 @@ export default function TeamSettingsPage() {
             />
 
             <Typography variant="h6" sx={{ mt: 2 }}>
-              Tapahtumaoletuarvot
+              Tapahtuman oletuarvot
             </Typography>
 
             <Stack direction="row" spacing={2}>
@@ -761,6 +761,7 @@ export default function TeamSettingsPage() {
                 onChange={(e) =>
                   setEditForm({ ...editForm, teamAName: e.target.value })
                 }
+                placeholder="Joukkue Valkoinen"
                 fullWidth
               />
               <TextField
@@ -769,6 +770,7 @@ export default function TeamSettingsPage() {
                 onChange={(e) =>
                   setEditForm({ ...editForm, teamBName: e.target.value })
                 }
+                placeholder="Joukkue Musta"
                 fullWidth
               />
             </Stack>

@@ -241,7 +241,7 @@ const CreateEventScreen: React.FC = () => {
       return false;
     }
     if (parseInt(maxGoalkeepers) < 0) {
-      Alert.alert("Virhe", "Maalivartijien määrä ei voi olla negatiivinen");
+      Alert.alert("Virhe", "Maalivahtien määrä ei voi olla negatiivinen");
       return false;
     }
     if (parseInt(duration) < 1) {
@@ -431,7 +431,7 @@ const CreateEventScreen: React.FC = () => {
 
         {/* Max Goalkeepers */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Maalivartijien maksimimäärä</Text>
+          <Text style={styles.label}>Maalivahtien maksimimäärä</Text>
           <TextInput
             style={styles.input}
             value={maxGoalkeepers}

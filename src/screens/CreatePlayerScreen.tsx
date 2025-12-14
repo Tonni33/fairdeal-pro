@@ -12,7 +12,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
-import { collection, addDoc } from "firebase/firestore";
+import { collection, addDoc, query, where, getDocs } from "firebase/firestore";
 
 import { RootStackParamList, Team } from "../types";
 import { db } from "../services/firebase";
@@ -138,6 +138,23 @@ const CreatePlayerScreen: React.FC = () => {
 
     setLoading(true);
     try {
+      // Tarkista onko sähköpostilla jo käyttäjä olemassa
+      const usersRef = collection(db, "users");
+      const emailQuery = query(
+        usersRef,
+        where("email", "==", email.trim().toLowerCase())
+      );
+      const existingUsers = await getDocs(emailQuery);
+
+      if (!existingUsers.empty) {
+        Alert.alert(
+          "Virhe",
+          "Käyttäjä tällä sähköpostiosoitteella on jo olemassa. Käytä Käyttäjähallintaa lisätäksesi käyttäjän uuteen joukkueeseen."
+        );
+        setLoading(false);
+        return;
+      }
+
       // Build teamMember object for selected teams
       const teamMemberStatus: { [teamId: string]: boolean } = {};
       selectedTeams.forEach((teamId) => {

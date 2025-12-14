@@ -838,6 +838,34 @@ const LicenseManager: React.FC<LicenseManagerProps> = ({
         usedAt: now,
       });
 
+      // Päivitä kaikkien joukkueen adminien teamIds-kenttä
+      if (team.adminIds && Array.isArray(team.adminIds)) {
+        for (const adminId of team.adminIds) {
+          try {
+            const adminRef = doc(db, "users", adminId);
+            const adminSnap = await getDoc(adminRef);
+
+            if (adminSnap.exists()) {
+              const adminData = adminSnap.data();
+              const currentTeamIds = adminData.teamIds || [];
+
+              // Lisää joukkue vain jos sitä ei ole jo listassa
+              if (!currentTeamIds.includes(team.id)) {
+                await updateDoc(adminRef, {
+                  teamIds: [...currentTeamIds, team.id],
+                });
+                console.log(
+                  `Added team ${team.id} to admin ${adminId} teamIds`
+                );
+              }
+            }
+          } catch (error) {
+            console.error(`Error updating admin ${adminId} teamIds:`, error);
+            // Jatka muiden adminien päivitystä vaikka yksi epäonnistuisi
+          }
+        }
+      }
+
       Alert.alert(
         "Lisenssi aktivoitu",
         `Lisenssi on aktivoitu joukkueelle ${

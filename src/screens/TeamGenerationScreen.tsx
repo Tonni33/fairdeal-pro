@@ -25,7 +25,7 @@ import {
 import { RootStackParamList, Player, Event, Team } from "../types";
 import { db } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
-import { useApp } from "../contexts/AppContext";
+import { useApp, getUserAdminTeams } from "../contexts/AppContext";
 import { TeamBalancer } from "../utils/teamBalancer";
 
 type TeamGenerationScreenNavigationProp = StackNavigationProp<
@@ -178,20 +178,29 @@ const TeamGenerationScreen: React.FC = () => {
     });
   };
 
-  // Get upcoming events with registered players
+  // Get user's admin teams (Master Admin sees all teams)
+  const userAdminTeams = useMemo(() => {
+    return getUserAdminTeams(user, teams);
+  }, [user, teams]);
+
+  // Get upcoming events with registered players - filtered by admin teams
   const availableEvents = useMemo(() => {
     const now = new Date();
+    const userTeamIds = userAdminTeams.map((team) => team.id);
+
     return events
       .filter((event) => {
         const eventDate = new Date(event.date);
         return (
           eventDate >= now &&
           event.registeredPlayers &&
-          event.registeredPlayers.length >= 4 // Minimum 4 players to generate teams
+          event.registeredPlayers.length >= 4 && // Minimum 4 players to generate teams
+          event.teamId &&
+          userTeamIds.includes(event.teamId) // Only show events from admin teams
         );
       })
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [events]);
+  }, [events, userAdminTeams]);
 
   // Auto-select next event if no eventId provided
   useEffect(() => {

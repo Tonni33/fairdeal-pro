@@ -18,6 +18,8 @@ import {
   arrayRemove,
   collection,
   getDocs,
+  query,
+  where,
 } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { auth, db } from "../services/firebase";
@@ -56,8 +58,83 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.log("Firebase user:", firebaseUser.email, firebaseUser.uid);
 
         try {
-          // Get user data from Firestore
-          const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
+          // First, try to get user data by UID
+          let userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
+
+          // If not found by UID, search by email (for admin-created users)
+          if (!userDoc.exists() && firebaseUser.email) {
+            console.log("User not found by UID, searching by email...");
+            const usersRef = collection(db, "users");
+            const q = query(usersRef, where("email", "==", firebaseUser.email));
+            const querySnapshot = await getDocs(q);
+
+            if (!querySnapshot.empty) {
+              console.log("Found user by email, migrating to Auth UID...");
+              const oldUserDoc = querySnapshot.docs[0];
+              const oldUserId = oldUserDoc.id;
+              const oldUserData = oldUserDoc.data();
+
+              // Create new document with Auth UID (copy all existing data)
+              await setDoc(doc(db, "users", firebaseUser.uid), {
+                ...oldUserData,
+                uid: firebaseUser.uid,
+                id: firebaseUser.uid,
+                updatedAt: new Date(),
+              });
+
+              // Update event references from old ID to new ID
+              const eventsRef = collection(db, "events");
+              const eventsSnapshot = await getDocs(eventsRef);
+
+              for (const eventDoc of eventsSnapshot.docs) {
+                const eventData = eventDoc.data();
+                let needsUpdate = false;
+                const updates: any = {};
+
+                // Update registeredPlayers array
+                if (
+                  eventData.registeredPlayers &&
+                  Array.isArray(eventData.registeredPlayers)
+                ) {
+                  const index = eventData.registeredPlayers.indexOf(oldUserId);
+                  if (index !== -1) {
+                    const updatedPlayers = [...eventData.registeredPlayers];
+                    updatedPlayers[index] = firebaseUser.uid;
+                    updates.registeredPlayers = updatedPlayers;
+                    needsUpdate = true;
+                  }
+                }
+
+                // Update reservePlayers array
+                if (
+                  eventData.reservePlayers &&
+                  Array.isArray(eventData.reservePlayers)
+                ) {
+                  const index = eventData.reservePlayers.indexOf(oldUserId);
+                  if (index !== -1) {
+                    const updatedReserves = [...eventData.reservePlayers];
+                    updatedReserves[index] = firebaseUser.uid;
+                    updates.reservePlayers = updatedReserves;
+                    needsUpdate = true;
+                  }
+                }
+
+                if (needsUpdate) {
+                  await updateDoc(doc(db, "events", eventDoc.id), updates);
+                  console.log(`Updated event ${eventDoc.id} with new user ID`);
+                }
+              }
+
+              // Delete old document
+              await deleteDoc(doc(db, "users", oldUserId));
+              console.log(
+                `Migrated user from ${oldUserId} to ${firebaseUser.uid}`
+              );
+
+              // Re-fetch the migrated document
+              userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
+            }
+          }
 
           if (!isComponentMounted) return; // Check again after async operation
 

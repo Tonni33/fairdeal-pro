@@ -421,8 +421,66 @@ exports.createUserAccounts = onCall(async (request) => {
             });
           console.log(`Created new user document with UID: ${userRecord.uid}`);
 
-          // Delete old document if it has a different ID
+          // Update all references in events before deleting old document
           if (user.id !== userRecord.uid) {
+            console.log(
+              `Updating event references from ${user.id} to ${userRecord.uid}`
+            );
+
+            // Find all events that reference the old user ID
+            const eventsSnapshot = await admin
+              .firestore()
+              .collection("events")
+              .get();
+
+            const batch = admin.firestore().batch();
+            let eventsUpdated = 0;
+
+            eventsSnapshot.docs.forEach((eventDoc) => {
+              const eventData = eventDoc.data();
+              let needsUpdate = false;
+              const updates = {};
+
+              // Update registeredPlayers array
+              if (
+                eventData.registeredPlayers &&
+                Array.isArray(eventData.registeredPlayers)
+              ) {
+                const index = eventData.registeredPlayers.indexOf(user.id);
+                if (index !== -1) {
+                  const updatedPlayers = [...eventData.registeredPlayers];
+                  updatedPlayers[index] = userRecord.uid;
+                  updates.registeredPlayers = updatedPlayers;
+                  needsUpdate = true;
+                }
+              }
+
+              // Update reservePlayers array
+              if (
+                eventData.reservePlayers &&
+                Array.isArray(eventData.reservePlayers)
+              ) {
+                const index = eventData.reservePlayers.indexOf(user.id);
+                if (index !== -1) {
+                  const updatedReserves = [...eventData.reservePlayers];
+                  updatedReserves[index] = userRecord.uid;
+                  updates.reservePlayers = updatedReserves;
+                  needsUpdate = true;
+                }
+              }
+
+              if (needsUpdate) {
+                batch.update(eventDoc.ref, updates);
+                eventsUpdated++;
+              }
+            });
+
+            if (eventsUpdated > 0) {
+              await batch.commit();
+              console.log(`Updated ${eventsUpdated} events with new user ID`);
+            }
+
+            // Now delete the old document
             await admin.firestore().collection("users").doc(user.id).delete();
             console.log(`Deleted old user document: ${user.id}`);
           }

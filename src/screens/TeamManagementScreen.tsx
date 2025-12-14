@@ -25,6 +25,7 @@ import {
   onSnapshot,
   query,
   orderBy,
+  getDoc,
 } from "firebase/firestore";
 import { db, functions } from "../services/firebase";
 import { httpsCallable } from "firebase/functions";
@@ -152,6 +153,20 @@ const TeamManagementScreen: React.FC = () => {
           totalPoints: 0,
           players: [],
         });
+
+        // Päivitä käyttäjän teamIds-kenttä
+        if (user?.uid) {
+          const userRef = doc(db, "users", user.uid);
+          const userSnap = await getDoc(userRef);
+
+          if (userSnap.exists()) {
+            const currentTeamIds = userSnap.data().teamIds || [];
+            await updateDoc(userRef, {
+              teamIds: [...currentTeamIds, teamRef.id],
+            });
+            console.log(`Added team ${teamRef.id} to user ${user.uid} teamIds`);
+          }
+        }
 
         Alert.alert(
           "Onnistui",

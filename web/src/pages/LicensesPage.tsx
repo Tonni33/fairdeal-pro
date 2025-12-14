@@ -43,6 +43,7 @@ export default function LicensesPage() {
     type: "monthly" as "monthly" | "yearly",
     duration: 30,
     isUsed: false,
+    expiresAt: "",
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -197,11 +198,22 @@ export default function LicensesPage() {
 
   const handleEdit = (license: License) => {
     setSelectedLicense(license);
+
+    // Calculate expiresAt for the form
+    let expiresAtString = "";
+    if (license.isUsed && license.usedAt) {
+      const usedDate = new Date(license.usedAt);
+      const expiresDate = new Date(usedDate);
+      expiresDate.setDate(expiresDate.getDate() + license.duration);
+      expiresAtString = expiresDate.toISOString().split("T")[0]; // Format as YYYY-MM-DD
+    }
+
     setEditForm({
       code: license.code,
       type: license.type,
       duration: license.duration,
       isUsed: license.isUsed,
+      expiresAt: expiresAtString,
     });
     setEditOpen(true);
   };
@@ -211,14 +223,41 @@ export default function LicensesPage() {
 
     try {
       setError("");
+
+      // Calculate duration from expiresAt if it's set and license is used
+      let newDuration = editForm.duration;
+      let newExpiresAt: Date | null = null;
+
+      if (editForm.isUsed && editForm.expiresAt && selectedLicense.usedAt) {
+        const usedDate = new Date(selectedLicense.usedAt);
+        const expiresDate = new Date(editForm.expiresAt);
+
+        // Calculate duration in days
+        const diffTime = expiresDate.getTime() - usedDate.getTime();
+        newDuration = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        newExpiresAt = expiresDate;
+      }
+
+      // Update license document
       const licenseRef = doc(db, "licenses", selectedLicense.id);
       await updateDoc(licenseRef, {
         code: editForm.code,
         type: editForm.type,
-        duration: editForm.duration,
+        duration: newDuration,
         isUsed: editForm.isUsed,
         updatedAt: new Date(),
       });
+
+      // If license is used and assigned to a team, update team's licenseExpiresAt
+      if (editForm.isUsed && selectedLicense.usedByTeamId && newExpiresAt) {
+        const teamRef = doc(db, "teams", selectedLicense.usedByTeamId);
+        await updateDoc(teamRef, {
+          licenseExpiresAt: newExpiresAt,
+        });
+        console.log(
+          `Updated team ${selectedLicense.usedByTeamId} licenseExpiresAt to ${newExpiresAt}`
+        );
+      }
 
       setSuccess("Lisenssi päivitetty onnistuneesti!");
       setEditOpen(false);
@@ -583,7 +622,30 @@ export default function LicensesPage() {
                 })
               }
               fullWidth
+              helperText={
+                editForm.isUsed
+                  ? "Kesto lasketaan automaattisesti lopetuspäivämäärästä"
+                  : ""
+              }
             />
+            {editForm.isUsed && (
+              <TextField
+                label="Lisenssin lopetuspäivämäärä"
+                type="date"
+                value={editForm.expiresAt}
+                onChange={(e) => {
+                  setEditForm({
+                    ...editForm,
+                    expiresAt: e.target.value,
+                  });
+                }}
+                fullWidth
+                InputLabelProps={{
+                  shrink: true,
+                }}
+                helperText="Kesto päivitetään automaattisesti tämän päivämäärän mukaan"
+              />
+            )}
             <FormControl fullWidth>
               <InputLabel>Tila</InputLabel>
               <Select

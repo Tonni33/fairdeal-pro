@@ -882,7 +882,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
             <Text style={styles.settingLabel}>Ensimmäisen joukkueen nimi</Text>
             <TextInput
               style={styles.textInput}
-              value={getCurrentSettings().teamAName || "Joukkue A"}
+              value={getCurrentSettings().teamAName ?? ""}
               onChangeText={(text) => handleInputChange("teamAName", text)}
               placeholder="Joukkue A"
             />
@@ -892,7 +892,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
             <Text style={styles.settingLabel}>Toisen joukkueen nimi</Text>
             <TextInput
               style={styles.textInput}
-              value={getCurrentSettings().teamBName || "Joukkue B"}
+              value={getCurrentSettings().teamBName ?? ""}
               onChangeText={(text) => handleInputChange("teamBName", text)}
               placeholder="Joukkue B"
             />
