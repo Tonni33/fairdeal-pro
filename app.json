@@ -43,7 +43,7 @@
         "backgroundColor": "#1976d2"
       },
       "package": "com.fairdeal.pro",
-      "versionCode": 3,
+      "versionCode": 9,
       "edgeToEdgeEnabled": true,
       "permissions": [
         "CAMERA",
