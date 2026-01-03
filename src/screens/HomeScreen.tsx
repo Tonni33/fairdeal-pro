@@ -33,6 +33,7 @@ import { db } from "../services/firebase";
 import { Event, Player, Team, Message, RootStackParamList } from "../types";
 import { useAuth } from "../contexts/AuthContext";
 import { useApp, getUserTeams } from "../contexts/AppContext";
+import { sendPromotedToRosterNotification } from "../services/notificationService";
 import AdminMenuButton from "../components/AdminMenuButton";
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList>;
@@ -612,6 +613,15 @@ const HomeScreen: React.FC = () => {
             const promotedPlayer = players.find(
               (p) => p.id === suitableReserve
             );
+
+            // Send push notification to promoted player
+            const team = teams.find((t) => t.id === nextEvent.teamId);
+            sendPromotedToRosterNotification(
+              suitableReserve,
+              nextEvent,
+              team?.name || "Joukkue"
+            );
+
             Alert.alert(
               "Ilmoittautuminen peruttu",
               `Paikkasi otettiin varalla ilmoittautuneelta pelaajalta: ${

@@ -6,6 +6,7 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { AuthProvider } from "./src/contexts/AuthContext";
 import { AppProvider } from "./src/contexts/AppContext";
 import AppNavigator from "./src/navigation/AppNavigator";
+import { NotificationHandler } from "./src/components/NotificationHandler";
 
 export default function App() {
   return (
@@ -13,20 +14,22 @@ export default function App() {
       <PaperProvider>
         <AuthProvider>
           <AppProvider>
-            {Platform.OS === "android" ? (
-              <SafeAreaView
-                style={styles.androidContainer}
-                edges={["top", "bottom"]}
-              >
-                <StatusBar style="auto" />
-                <AppNavigator />
-              </SafeAreaView>
-            ) : (
-              <View style={styles.container}>
-                <StatusBar style="auto" />
-                <AppNavigator />
-              </View>
-            )}
+            <NotificationHandler>
+              {Platform.OS === "android" ? (
+                <SafeAreaView
+                  style={styles.androidContainer}
+                  edges={["top", "bottom"]}
+                >
+                  <StatusBar style="auto" />
+                  <AppNavigator />
+                </SafeAreaView>
+              ) : (
+                <View style={styles.container}>
+                  <StatusBar style="auto" />
+                  <AppNavigator />
+                </View>
+              )}
+            </NotificationHandler>
           </AppProvider>
         </AuthProvider>
       </PaperProvider>
