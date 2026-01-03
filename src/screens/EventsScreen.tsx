@@ -1106,6 +1106,123 @@ const EventsScreen: React.FC = () => {
               },
             ]
           );
+        } else if (
+          isEventFull &&
+          isTeamMember &&
+          hoursUntilEvent > guestRegistrationHours
+        ) {
+          // SPECIAL CASE: Team member registers when event is full BEFORE threshold
+          // Check if there are any guests in the registered list that can be bumped
+          const isGoalkeeperPlayer = currentPlayer.positions.includes("MV");
+
+          // Find guests in registered players with matching position
+          const guestsInRegistered: string[] = [];
+          for (const playerId of currentRegistered) {
+            try {
+              const userRef = doc(db, "users", playerId);
+              const userSnap = await getDoc(userRef);
+              if (userSnap.exists()) {
+                const userData = userSnap.data();
+                const isPlayerTeamMember =
+                  userData.teamMember?.[teamId] === true;
+                if (!isPlayerTeamMember) {
+                  // Check if position matches
+                  const playerPositions = userData.positions || [];
+                  const isPlayerGoalkeeper = playerPositions.includes("MV");
+                  if (isPlayerGoalkeeper === isGoalkeeperPlayer) {
+                    guestsInRegistered.push(playerId);
+                  }
+                }
+              }
+            } catch (error) {
+              console.error(
+                `Error checking guest status for ${playerId}:`,
+                error
+              );
+            }
+          }
+
+          if (guestsInRegistered.length > 0) {
+            // There's a guest to bump - team member takes priority
+            const guestToBump =
+              guestsInRegistered[guestsInRegistered.length - 1]; // Last guest registered
+            const bumpedPlayer = players.find((p) => p.id === guestToBump);
+
+            Alert.alert(
+              "Vakiokävijän etuoikeus",
+              `Tapahtuma on täynnä, mutta vakiokävijänä saat paikan. ${
+                bumpedPlayer?.name || "Vieras"
+              } siirtyy varalistalle.`,
+              [
+                { text: "Peruuta", style: "cancel" },
+                {
+                  text: "Ilmoittaudu",
+                  onPress: async () => {
+                    try {
+                      // Remove guest from registered and add to reserves
+                      // Add team member to registered
+                      const currentReserves = eventData?.reservePlayers || [];
+                      const updatedReserves = [guestToBump, ...currentReserves]; // Guest goes to front of reserve list
+
+                      await updateDoc(eventRef, {
+                        registeredPlayers: arrayRemove(guestToBump),
+                      });
+                      await updateDoc(eventRef, {
+                        registeredPlayers: arrayUnion(currentPlayer.id),
+                        reservePlayers: updatedReserves,
+                      });
+
+                      setIsRegistered(true);
+                      Alert.alert(
+                        "Onnistui",
+                        `Ilmoittautuminen tallennettu. ${
+                          bumpedPlayer?.name || "Vieras"
+                        } siirrettiin varalistalle.`
+                      );
+                    } catch (error) {
+                      console.error("Error bumping guest:", error);
+                      Alert.alert("Virhe", "Ilmoittautuminen epäonnistui");
+                    }
+                  },
+                },
+              ]
+            );
+          } else {
+            // No guests to bump - team member goes to reserve (all are team members)
+            Alert.alert(
+              "Tapahtuma on täynnä",
+              "Kaikki osallistujat ovat vakiokävijöitä. Haluatko ilmoittautua varamieheksi?",
+              [
+                { text: "Ei", style: "cancel" },
+                {
+                  text: "Kyllä, varamieheksi",
+                  onPress: async () => {
+                    try {
+                      const currentReserves = eventData?.reservePlayers || [];
+                      // Team member goes to front of reserves
+                      const updatedReserves = [
+                        currentPlayer.id,
+                        ...currentReserves,
+                      ];
+                      await updateDoc(eventRef, {
+                        reservePlayers: updatedReserves,
+                      });
+                      setIsReserve(true);
+                      Alert.alert("Onnistui", "Ilmoittautunut varamieheksi");
+                    } catch (error) {
+                      console.error("Error registering as reserve:", error);
+                      Alert.alert(
+                        "Virhe",
+                        "Varamies-ilmoittautuminen epäonnistui"
+                      );
+                    }
+                  },
+                },
+              ]
+            );
+          }
+          setRegistrationLoading(false);
+          return;
         } else {
           // Register normally (event not full and either team member or after threshold)
           // Check if player needs role selection
