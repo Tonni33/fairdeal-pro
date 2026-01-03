@@ -377,6 +377,14 @@ const EventsScreen: React.FC = () => {
                 console.log(
                   `[Varalla promo] ✅ Siirretty varallaolija ${reservePlayer.name} (${reserveId}) osallistujaksi tapahtumaan ${event.title}`
                 );
+
+                // Send push notification to promoted player
+                sendPromotedToRosterNotification(
+                  reserveId,
+                  event,
+                  team?.name || "Joukkue"
+                );
+
                 if (isGoalkeeper) goalkeepers.push(reserveId);
                 else fieldPlayers.push(reserveId);
                 reserves = reserves.filter((id) => id !== reserveId);

@@ -474,6 +474,13 @@ const HomeScreen: React.FC = () => {
                 console.log(
                   `[HomeScreen Promo] ✅ Siirretty ${reservePlayer.name}`
                 );
+
+                // Send push notification to promoted player
+                sendPromotedToRosterNotification(
+                  reserveId,
+                  nextEvent,
+                  team?.name || "Joukkue"
+                );
               } catch (err) {
                 console.error("[HomeScreen Promo] ❌ Virhe:", err);
               }
