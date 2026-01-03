@@ -223,7 +223,8 @@ const EventsScreen: React.FC = () => {
   }, [user, teams, players]);
 
   // Filtteröi tapahtumat valitun joukkueen mukaan
-  const filteredEvents = useMemo(() => {
+  // allFilteredEvents sisältää kaikki tapahtumat (myös menneet) - käytetään kalenterissa
+  const allFilteredEvents = useMemo(() => {
     let filteredList: Event[];
 
     if (selectedTeamId) {
@@ -237,20 +238,40 @@ const EventsScreen: React.FC = () => {
       );
     }
 
-    // Järjestä tapahtumat ajan mukaan (uusin ylhäällä)
+    // Järjestä tapahtumat ajan mukaan (uusin ylhäällä) - kalenterille
     return filteredList.sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
   }, [events, selectedTeamId, userTeams]);
 
-  // Get events for selected date
+  // filteredEvents sisältää vain tulevat tapahtumat - käytetään listanäkymässä
+  // Tapahtumat järjestetään niin että seuraava tuleva tapahtuma on ylimpänä
+  const filteredEvents = useMemo(() => {
+    const now = new Date();
+    // Aseta aika päivän alkuun, jotta tänään olevat tapahtumat näkyvät
+    now.setHours(0, 0, 0, 0);
+
+    // Suodata vain tulevat tapahtumat (tänään tai myöhemmin)
+    const upcomingEvents = allFilteredEvents.filter((event) => {
+      const eventDate = new Date(event.date);
+      return eventDate >= now;
+    });
+
+    // Järjestä kronologisesti - lähin tapahtuma ensin
+    return upcomingEvents.sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+  }, [allFilteredEvents]);
+
+  // Get events for selected date (kalenterinäkymässä)
+  // Käytetään allFilteredEvents jotta myös menneet tapahtumat voi valita kalenterista
   const eventsForSelectedDate = useMemo(() => {
     if (!selectedDate) return [];
-    return filteredEvents.filter((event) => {
+    return allFilteredEvents.filter((event) => {
       const eventDate = new Date(event.date).toISOString().split("T")[0];
       return eventDate === selectedDate;
     });
-  }, [selectedDate, filteredEvents]);
+  }, [selectedDate, allFilteredEvents]);
 
   // Automaattinen varallaolijoiden siirto osallistujiksi kun threshold täyttyy ja tapahtumassa on tilaa
   useEffect(() => {
@@ -492,6 +513,7 @@ const EventsScreen: React.FC = () => {
   };
 
   // Create marked dates object for calendar with team colors
+  // Käytetään allFilteredEvents jotta myös menneet tapahtumat näkyvät kalenterissa
   const markedDates = useMemo(() => {
     const marked: Record<string, any> = {};
     const today = new Date().toISOString().split("T")[0];
@@ -499,7 +521,7 @@ const EventsScreen: React.FC = () => {
     // Track events per date for status checking
     const eventsByDate: Record<string, Event[]> = {};
 
-    filteredEvents.forEach((event) => {
+    allFilteredEvents.forEach((event) => {
       const dateKey = new Date(event.date).toISOString().split("T")[0];
       const team = teams.find((t) => t.id === event.teamId);
       const teamColor = team?.color || "#1976d2";
@@ -574,7 +596,7 @@ const EventsScreen: React.FC = () => {
     }
 
     return marked;
-  }, [filteredEvents, teams, selectedDate, currentPlayer]);
+  }, [allFilteredEvents, teams, selectedDate, currentPlayer]);
 
   // Päivitä valittu tapahtuma kun events-data muuttuu
   useEffect(() => {

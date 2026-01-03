@@ -2,6 +2,7 @@ package com.fairdeal.pro
 
 import android.os.Build
 import android.os.Bundle
+import androidx.core.view.WindowCompat
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -17,6 +18,12 @@ class MainActivity : ReactActivity() {
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme);
     super.onCreate(null)
+    
+    // Enable edge-to-edge display for Android 15+ (SDK 35+)
+    // This ensures proper handling of system bars and insets
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      WindowCompat.setDecorFitsSystemWindows(window, false)
+    }
   }
 
   /**

@@ -75,17 +75,17 @@ const AdminMenuScreen: React.FC = () => {
       masterAdminOnly: true,
     },
     {
-      title: "Tiimien luonti",
+      title: "Joukkueiden luonti",
       icon: "people-outline",
       screen: "TeamGeneration",
-      description: "Luo tasapainoiset tiimit",
+      description: "Luo tasapainoiset joukkueet",
       adminOnly: true,
     },
     {
       title: "Luo tapahtuma",
       icon: "add-circle-outline",
       screen: "CreateEvent",
-      description: "Luo uusi peli-ilta",
+      description: "Luo uusi tapahtuma",
       adminOnly: true,
     },
     {

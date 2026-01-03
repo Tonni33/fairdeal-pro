@@ -44,6 +44,15 @@ const EventManagementScreen: React.FC = () => {
   // Multi-select state for adding multiple players
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
   const [isAddingMultiplePlayers, setIsAddingMultiplePlayers] = useState(false);
+  const [showPastEvents, setShowPastEvents] = useState(false);
+  const [selectedTeamFilter, setSelectedTeamFilter] = useState<string | null>(
+    null
+  ); // null = kaikki joukkueet
+  const [isTeamFilterModalVisible, setIsTeamFilterModalVisible] =
+    useState(false);
+
+  // Hae käyttäjän admin-joukkueet (MasterAdmin näkee kaikki)
+  const userAdminTeams = getUserAdminTeams(user, teams);
 
   // Helper function to get player's team-specific skills for the event
   const getPlayerEventSkills = (
@@ -265,12 +274,36 @@ const EventManagementScreen: React.FC = () => {
         return adminTeamIds.includes(event.teamId);
       });
 
-      // Sort events by date, newest first
-      const sortedEvents = filteredEvents.sort((a: any, b: any) => {
-        const dateA = new Date(a.date || 0);
-        const dateB = new Date(b.date || 0);
-        return dateB.getTime() - dateA.getTime(); // Newest first
-      });
+      // Jaa tapahtumat tuleviin ja menneisiin
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+
+      const upcomingEvents = filteredEvents
+        .filter((event: any) => {
+          const eventDate = new Date(event.date || 0);
+          return eventDate >= now;
+        })
+        .sort((a: any, b: any) => {
+          // Tulevat tapahtumat: lähin ensin
+          const dateA = new Date(a.date || 0);
+          const dateB = new Date(b.date || 0);
+          return dateA.getTime() - dateB.getTime();
+        });
+
+      const pastEvents = filteredEvents
+        .filter((event: any) => {
+          const eventDate = new Date(event.date || 0);
+          return eventDate < now;
+        })
+        .sort((a: any, b: any) => {
+          // Menneet tapahtumat: uusin ensin
+          const dateA = new Date(a.date || 0);
+          const dateB = new Date(b.date || 0);
+          return dateB.getTime() - dateA.getTime();
+        });
+
+      // Yhdistä: tulevat ensin, sitten menneet
+      const sortedEvents = [...upcomingEvents, ...pastEvents];
 
       setEvents(sortedEvents);
 
@@ -1156,13 +1189,152 @@ const EventManagementScreen: React.FC = () => {
     );
   }
 
+  // Jaa tapahtumat tuleviin ja menneisiin näyttöä varten
+  // Suodatetaan myös valitun joukkueen mukaan
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+
+  const filteredByTeam = selectedTeamFilter
+    ? events.filter((event) => event.teamId === selectedTeamFilter)
+    : events;
+
+  const upcomingEvents = filteredByTeam.filter((event) => {
+    const eventDate = new Date(event.date || 0);
+    return eventDate >= now;
+  });
+
+  const pastEvents = filteredByTeam.filter((event) => {
+    const eventDate = new Date(event.date || 0);
+    return eventDate < now;
+  });
+
+  // Apufunktio tapahtuman renderöimiseen
+  const renderEventCard = (event: any, isPast: boolean = false) => (
+    <TouchableOpacity
+      key={event.id}
+      style={[
+        styles.eventCard,
+        event.teamId && {
+          borderLeftWidth: 4,
+          borderLeftColor: getTeamColor(event.teamId),
+        },
+        isPast && { opacity: 0.7 },
+      ]}
+      onPress={() => handleSelectEvent(event)}
+    >
+      <View style={styles.eventCardContent}>
+        <View style={styles.eventCardHeader}>
+          {(() => {
+            const eventTeam = teams.find((team) => team.id === event.teamId);
+            return (
+              <Text
+                style={[
+                  styles.eventName,
+                  { color: eventTeam?.color || "#1976d2" },
+                ]}
+              >
+                {eventTeam?.name || event.name || event.title}
+              </Text>
+            );
+          })()}
+          <Ionicons
+            name="chevron-forward"
+            size={20}
+            color={event.teamId ? getTeamColor(event.teamId) : "#1976d2"}
+          />
+        </View>
+        <View style={styles.eventDetails}>
+          <View style={styles.eventDetailRow}>
+            <Ionicons
+              name="information-circle-outline"
+              size={16}
+              color="#666"
+            />
+            <Text style={styles.eventDetailText}>
+              {event.name || event.title}
+            </Text>
+          </View>
+          <View style={styles.eventDetailRow}>
+            <Ionicons name="calendar-outline" size={16} color="#666" />
+            <Text style={styles.eventDetailText}>
+              {formatEventDate(event.date)}
+            </Text>
+          </View>
+          <View style={styles.eventDetailRow}>
+            <Ionicons name="time-outline" size={16} color="#666" />
+            <Text style={styles.eventDetailText}>
+              {formatEventTime(event.date)}
+            </Text>
+          </View>
+          <View style={styles.eventDetailRow}>
+            <Ionicons name="person-outline" size={16} color="#666" />
+            <Text style={styles.eventDetailText}>
+              {getFieldPlayers(event.registeredPlayers || [], event).length} /{" "}
+              {event.maxPlayers || "∞"} pelaajaa
+              {event.maxGoalkeepers && event.maxGoalkeepers > 0 && (
+                <Text style={styles.goalkeeperText}>
+                  {" • "}
+                  {
+                    getGoalkeepers(event.registeredPlayers || [], event).length
+                  }{" "}
+                  / {event.maxGoalkeepers} MV
+                </Text>
+              )}
+            </Text>
+          </View>
+          {event.location && (
+            <View style={styles.eventDetailRow}>
+              <Ionicons name="location-outline" size={16} color="#666" />
+              <Text style={styles.eventDetailText}>{event.location}</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+
   return (
     <View style={styles.container}>
       {!selectedEvent ? (
         <ScrollView>
           {/* <Text style={styles.title}>Tapahtumahallinta</Text> */}
           <Text style={styles.subtitle}>Valitse tapahtuma muokattavaksi</Text>
-          {events.length === 0 ? (
+
+          {/* Joukkuevalitsin */}
+          {userAdminTeams.length > 1 && (
+            <TouchableOpacity
+              style={styles.teamFilterButton}
+              onPress={() => setIsTeamFilterModalVisible(true)}
+            >
+              <Text style={styles.teamFilterLabel}>Joukkue:</Text>
+              <View style={styles.teamFilterValueContainer}>
+                {selectedTeamFilter ? (
+                  <>
+                    <View
+                      style={[
+                        styles.teamFilterDot,
+                        { backgroundColor: getTeamColor(selectedTeamFilter) },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.teamFilterValue,
+                        { color: getTeamColor(selectedTeamFilter) },
+                      ]}
+                    >
+                      {teams.find((t) => t.id === selectedTeamFilter)?.name ||
+                        "Tuntematon"}
+                    </Text>
+                  </>
+                ) : (
+                  <Text style={styles.teamFilterValue}>Kaikki joukkueet</Text>
+                )}
+                <Ionicons name="chevron-down" size={16} color="#666" />
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {filteredByTeam.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons name="calendar-outline" size={64} color="#ccc" />
               <Text style={styles.emptyText}>Ei tapahtumia</Text>
@@ -1171,108 +1343,48 @@ const EventManagementScreen: React.FC = () => {
               </Text>
             </View>
           ) : (
-            events.map((event) => (
-              <TouchableOpacity
-                key={event.id}
-                style={[
-                  styles.eventCard,
-                  event.teamId && {
-                    borderLeftWidth: 4,
-                    borderLeftColor: getTeamColor(event.teamId),
-                  },
-                ]}
-                onPress={() => handleSelectEvent(event)}
-              >
-                <View style={styles.eventCardContent}>
-                  <View style={styles.eventCardHeader}>
-                    {(() => {
-                      const eventTeam = teams.find(
-                        (team) => team.id === event.teamId
-                      );
-                      return (
-                        <Text
-                          style={[
-                            styles.eventName,
-                            { color: eventTeam?.color || "#1976d2" },
-                          ]}
-                        >
-                          {eventTeam?.name || event.name || event.title}
-                        </Text>
-                      );
-                    })()}
-                    <Ionicons
-                      name="chevron-forward"
-                      size={20}
-                      color={
-                        event.teamId ? getTeamColor(event.teamId) : "#1976d2"
-                      }
-                    />
-                  </View>
-                  <View style={styles.eventDetails}>
-                    <View style={styles.eventDetailRow}>
-                      <Ionicons
-                        name="information-circle-outline"
-                        size={16}
-                        color="#666"
-                      />
-                      <Text style={styles.eventDetailText}>
-                        {event.name || event.title}
-                      </Text>
-                    </View>
-                    <View style={styles.eventDetailRow}>
-                      <Ionicons
-                        name="calendar-outline"
-                        size={16}
-                        color="#666"
-                      />
-                      <Text style={styles.eventDetailText}>
-                        {formatEventDate(event.date)}
-                      </Text>
-                    </View>
-                    <View style={styles.eventDetailRow}>
-                      <Ionicons name="time-outline" size={16} color="#666" />
-                      <Text style={styles.eventDetailText}>
-                        {formatEventTime(event.date)}
-                      </Text>
-                    </View>
-                    <View style={styles.eventDetailRow}>
-                      <Ionicons name="person-outline" size={16} color="#666" />
-                      <Text style={styles.eventDetailText}>
-                        {
-                          getFieldPlayers(event.registeredPlayers || [], event)
-                            .length
-                        }{" "}
-                        / {event.maxPlayers || "∞"} pelaajaa
-                        {event.maxGoalkeepers && event.maxGoalkeepers > 0 && (
-                          <Text style={styles.goalkeeperText}>
-                            {" • "}
-                            {
-                              getGoalkeepers(
-                                event.registeredPlayers || [],
-                                event
-                              ).length
-                            }{" "}
-                            / {event.maxGoalkeepers} MV
-                          </Text>
-                        )}
-                      </Text>
-                    </View>
-                    {event.location && (
-                      <View style={styles.eventDetailRow}>
-                        <Ionicons
-                          name="location-outline"
-                          size={16}
-                          color="#666"
-                        />
-                        <Text style={styles.eventDetailText}>
-                          {event.location}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
+            <>
+              {/* Tulevat tapahtumat */}
+              {upcomingEvents.length > 0 && (
+                <View style={styles.eventSection}>
+                  <Text style={styles.eventSectionTitle}>
+                    Tulevat tapahtumat
+                  </Text>
+                  {upcomingEvents.map((event) => renderEventCard(event, false))}
                 </View>
-              </TouchableOpacity>
-            ))
+              )}
+
+              {/* Menneet tapahtumat */}
+              {pastEvents.length > 0 && (
+                <View style={styles.eventSection}>
+                  <TouchableOpacity
+                    style={styles.pastEventsHeader}
+                    onPress={() => setShowPastEvents(!showPastEvents)}
+                  >
+                    <Text style={styles.eventSectionTitle}>
+                      Menneet tapahtumat ({pastEvents.length})
+                    </Text>
+                    <Ionicons
+                      name={showPastEvents ? "chevron-up" : "chevron-down"}
+                      size={20}
+                      color="#666"
+                    />
+                  </TouchableOpacity>
+                  {showPastEvents &&
+                    pastEvents.map((event) => renderEventCard(event, true))}
+                </View>
+              )}
+
+              {/* Tyhjä tila jos ei tulevia tapahtumia */}
+              {upcomingEvents.length === 0 && pastEvents.length > 0 && (
+                <View style={styles.noUpcomingContainer}>
+                  <Ionicons name="calendar-outline" size={48} color="#ccc" />
+                  <Text style={styles.noUpcomingText}>
+                    Ei tulevia tapahtumia
+                  </Text>
+                </View>
+              )}
+            </>
           )}
         </ScrollView>
       ) : (
@@ -1545,6 +1657,90 @@ const EventManagementScreen: React.FC = () => {
           </View>
         </View>
       )}
+
+      {/* Team Filter Modal */}
+      <Modal
+        visible={isTeamFilterModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setIsTeamFilterModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Valitse joukkue</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setIsTeamFilterModalVisible(false)}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Kaikki joukkueet -vaihtoehto */}
+            <TouchableOpacity
+              style={[
+                styles.teamFilterOption,
+                !selectedTeamFilter && styles.teamFilterOptionSelected,
+              ]}
+              onPress={() => {
+                setSelectedTeamFilter(null);
+                setIsTeamFilterModalVisible(false);
+              }}
+            >
+              <Text
+                style={[
+                  styles.teamFilterOptionText,
+                  !selectedTeamFilter && styles.teamFilterOptionTextSelected,
+                ]}
+              >
+                Kaikki joukkueet
+              </Text>
+              {!selectedTeamFilter && (
+                <Ionicons name="checkmark" size={20} color="#1976d2" />
+              )}
+            </TouchableOpacity>
+
+            {/* Käyttäjän admin-joukkueet */}
+            {userAdminTeams.map((team) => (
+              <TouchableOpacity
+                key={team.id}
+                style={[
+                  styles.teamFilterOption,
+                  selectedTeamFilter === team.id &&
+                    styles.teamFilterOptionSelected,
+                ]}
+                onPress={() => {
+                  setSelectedTeamFilter(team.id);
+                  setIsTeamFilterModalVisible(false);
+                }}
+              >
+                <View style={styles.teamFilterOptionContent}>
+                  <View
+                    style={[
+                      styles.teamFilterOptionDot,
+                      { backgroundColor: team.color || "#1976d2" },
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.teamFilterOptionText,
+                      selectedTeamFilter === team.id &&
+                        styles.teamFilterOptionTextSelected,
+                      { color: team.color || "#333" },
+                    ]}
+                  >
+                    {team.name}
+                  </Text>
+                </View>
+                {selectedTeamFilter === team.id && (
+                  <Ionicons name="checkmark" size={20} color="#1976d2" />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </Modal>
 
       {/* Edit Event Modal */}
       <Modal
@@ -1908,6 +2104,92 @@ const styles = StyleSheet.create({
     color: "#999",
     marginTop: 8,
     fontSize: 14,
+  },
+  eventSection: {
+    marginBottom: 24,
+  },
+  eventSectionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 12,
+  },
+  pastEventsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+    paddingVertical: 8,
+  },
+  noUpcomingContainer: {
+    alignItems: "center",
+    paddingVertical: 32,
+    marginBottom: 24,
+  },
+  noUpcomingText: {
+    fontSize: 14,
+    color: "#999",
+    marginTop: 8,
+  },
+  teamFilterButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+  },
+  teamFilterLabel: {
+    fontSize: 14,
+    color: "#666",
+  },
+  teamFilterValueContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  teamFilterDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  teamFilterValue: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+  },
+  teamFilterOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  teamFilterOptionSelected: {
+    backgroundColor: "#f0f7ff",
+  },
+  teamFilterOptionContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  teamFilterOptionDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  teamFilterOptionText: {
+    fontSize: 16,
+    color: "#333",
+  },
+  teamFilterOptionTextSelected: {
+    fontWeight: "600",
+    color: "#1976d2",
   },
   eventCard: {
     backgroundColor: "#fff",

@@ -873,9 +873,9 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
         )}
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Satunnaisjoukkueet</Text>
+          <Text style={styles.sectionTitle}>Tapahtuman joukkueet</Text>
           <Text style={styles.sectionDescription}>
-            Määritä nimet joukkueille kun luodaan satunnaisjoukkueita
+            Määritä nimet joukkueille kun luodaan tapahtuman joukkueita
           </Text>
 
           <View style={styles.settingItem}>

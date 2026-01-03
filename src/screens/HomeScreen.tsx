@@ -1095,16 +1095,21 @@ const HomeScreen: React.FC = () => {
   };
   const getTimeUntilEvent = (date: Date) => {
     const now = new Date();
-    const timeDiff = date.getTime() - now.getTime();
-    const daysDiff = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
 
-    if (daysDiff <= 0) {
-      const hoursDiff = Math.ceil(timeDiff / (1000 * 60 * 60));
-      if (hoursDiff <= 0) {
-        const minutesDiff = Math.ceil(timeDiff / (1000 * 60));
-        return minutesDiff > 0 ? `${minutesDiff} min` : "Käynnissä";
-      }
-      return `${hoursDiff} h`;
+    // Lasketaan päivät vertaamalla päivämääriä (ei millisekunteja)
+    // Tämä varmistaa että "tänään" = 0 päivää, "huomenna" = 1 päivä jne.
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const eventDay = new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate()
+    );
+    const daysDiff = Math.round(
+      (eventDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    if (daysDiff === 0) {
+      return "Tänään";
     } else if (daysDiff === 1) {
       return "Huomenna";
     } else {

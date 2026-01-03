@@ -1,14 +1,15 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
+  <!-- Android 12+ (API 31+) specific styles with proper edge-to-edge support -->
   <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
     <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
     <item name="colorPrimary">@color/colorPrimary</item>
     <item name="android:statusBarColor">@android:color/transparent</item>
     <item name="android:navigationBarColor">@android:color/transparent</item>
-    <item name="android:windowLightStatusBar" tools:targetApi="m">false</item>
+    <item name="android:windowLightStatusBar">false</item>
     <item name="android:windowTranslucentStatus">false</item>
     <item name="android:windowTranslucentNavigation">false</item>
-    <item name="android:enforceNavigationBarContrast" tools:targetApi="q">false</item>
-    <item name="android:enforceStatusBarContrast" tools:targetApi="q">false</item>
+    <item name="android:enforceNavigationBarContrast">false</item>
+    <item name="android:enforceStatusBarContrast">false</item>
   </style>
   <style name="Theme.App.SplashScreen" parent="AppTheme">
     <item name="android:windowBackground">@drawable/ic_launcher_background</item>

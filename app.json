@@ -18,7 +18,11 @@
       "soccer"
     ],
     "privacy": "public",
-    "platforms": ["ios", "android", "web"],
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
     "githubUrl": "https://github.com/yourusername/FairDealPro",
     "splash": {
       "image": "./assets/fairdealLogo.png",
@@ -34,7 +38,11 @@
         "NSPhotoLibraryUsageDescription": "This app accesses photo library to select photos for player profiles",
         "NSFaceIDUsageDescription": "Use Face ID for quick and secure authentication",
         "ITSAppUsesNonExemptEncryption": false,
-        "LSApplicationQueriesSchemes": ["whatsapp", "tel", "mailto"]
+        "LSApplicationQueriesSchemes": [
+          "whatsapp",
+          "tel",
+          "mailto"
+        ]
       }
     },
     "android": {
@@ -42,9 +50,6 @@
         "foregroundImage": "./assets/fairdealLogo.png",
         "backgroundColor": "#1976d2"
       },
-      "package": "com.fairdeal.pro",
-      "versionCode": 9,
-      "edgeToEdgeEnabled": true,
       "permissions": [
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
@@ -60,9 +65,14 @@
               "scheme": "whatsapp"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
-      ]
+      ],
+      "softwareKeyboardLayoutMode": "pan",
+      "versionCode": 2
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -70,7 +80,9 @@
     "updates": {
       "fallbackToCacheTimeout": 0
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "extra": {
       "eas": {
         "projectId": "a6757272-927e-48b5-aca1-bba25a20e5b4"

@@ -92,8 +92,8 @@ android {
         applicationId 'com.fairdeal.pro'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 3
-        versionName "1.0.4"
+        versionCode 8
+        versionName "1.0.9"
     }
     signingConfigs {
         debug {
@@ -150,6 +150,9 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    
+    // AndroidX Core for WindowCompat (edge-to-edge support)
+    implementation("androidx.core:core-ktx:1.12.0")
 
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";
     def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true";

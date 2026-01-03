@@ -1,19 +1,45 @@
 import React from "react";
 import { StatusBar } from "expo-status-bar";
+import { View, Platform, StyleSheet } from "react-native";
 import { Provider as PaperProvider } from "react-native-paper";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { AuthProvider } from "./src/contexts/AuthContext";
 import { AppProvider } from "./src/contexts/AppContext";
 import AppNavigator from "./src/navigation/AppNavigator";
 
 export default function App() {
   return (
-    <PaperProvider>
-      <AuthProvider>
-        <AppProvider>
-          <StatusBar style="auto" />
-          <AppNavigator />
-        </AppProvider>
-      </AuthProvider>
-    </PaperProvider>
+    <SafeAreaProvider>
+      <PaperProvider>
+        <AuthProvider>
+          <AppProvider>
+            {Platform.OS === "android" ? (
+              <SafeAreaView
+                style={styles.androidContainer}
+                edges={["top", "bottom"]}
+              >
+                <StatusBar style="auto" />
+                <AppNavigator />
+              </SafeAreaView>
+            ) : (
+              <View style={styles.container}>
+                <StatusBar style="auto" />
+                <AppNavigator />
+              </View>
+            )}
+          </AppProvider>
+        </AuthProvider>
+      </PaperProvider>
+    </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  androidContainer: {
+    flex: 1,
+    backgroundColor: "#fff",
+  },
+});

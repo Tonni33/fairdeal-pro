@@ -140,6 +140,7 @@ const TeamGenerationScreen: React.FC = () => {
   const [existingTeams, setExistingTeams] = useState<GeneratedTeam[]>([]);
   const [hasExistingShuffle, setHasExistingShuffle] = useState(false);
   const [isTeamsSaved, setIsTeamsSaved] = useState(false);
+  const [showAllEvents, setShowAllEvents] = useState(false); // Näytetäänkö kaikki tapahtumat
   const [distributionMethod, setDistributionMethod] = useState<
     "skill-based" | "position-based"
   >("position-based"); // Default to position-based
@@ -201,6 +202,15 @@ const TeamGenerationScreen: React.FC = () => {
       })
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [events, userAdminTeams]);
+
+  // Rajoita näytettävien tapahtumien määrä (oletuksena 3, kaikki jos showAllEvents on true)
+  const MAX_VISIBLE_EVENTS = 3;
+  const visibleEvents = useMemo(() => {
+    if (showAllEvents) {
+      return availableEvents;
+    }
+    return availableEvents.slice(0, MAX_VISIBLE_EVENTS);
+  }, [availableEvents, showAllEvents]);
 
   // Auto-select next event if no eventId provided
   useEffect(() => {
@@ -812,72 +822,94 @@ const TeamGenerationScreen: React.FC = () => {
               </Text>
             </View>
           ) : (
-            availableEvents.map((event) => (
-              <TouchableOpacity
-                key={event.id}
-                style={[
-                  styles.eventCard,
-                  selectedEventId === event.id && styles.selectedEventCard,
-                  (() => {
-                    const eventTeam = teams.find(
-                      (team) => team.id === event.teamId
-                    );
-                    return {
-                      borderLeftWidth: 4,
-                      borderLeftColor: eventTeam?.color || "#1976d2",
-                    };
-                  })(),
-                ]}
-                onPress={() => setSelectedEventId(event.id)}
-              >
-                <View style={styles.eventHeader}>
-                  {(() => {
-                    const eventTeam = teams.find(
-                      (team) => team.id === event.teamId
-                    );
-                    return (
-                      <Text
-                        style={[
-                          styles.eventTitle,
-                          { color: eventTeam?.color || "#1976d2" },
-                        ]}
-                      >
-                        {eventTeam?.name || event.title}
-                      </Text>
-                    );
-                  })()}
-                  {selectedEventId === event.id && (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={20}
-                      color="#4CAF50"
-                    />
-                  )}
-                </View>
-                <Text style={styles.eventDate}>
-                  {formatDate(event.date)} klo {formatTime(event.date)}
-                </Text>
-                <View style={styles.eventPlayersContainer}>
-                  <Text style={styles.eventPlayers}>
-                    {
-                      getFieldPlayers(event.registeredPlayers || [], event)
-                        .length
-                    }{" "}
-                    pelaajaa
-                    {event.maxGoalkeepers && event.maxGoalkeepers > 0 && (
-                      <Text style={{ color: "#ff9800" }}>
-                        {" • "}
-                        {
-                          getGoalkeepers(event.registeredPlayers || [], event)
-                            .length
-                        }{" "}
-                        MV
-                      </Text>
+            <>
+              {visibleEvents.map((event) => (
+                <TouchableOpacity
+                  key={event.id}
+                  style={[
+                    styles.eventCard,
+                    selectedEventId === event.id && styles.selectedEventCard,
+                    (() => {
+                      const eventTeam = teams.find(
+                        (team) => team.id === event.teamId
+                      );
+                      return {
+                        borderLeftWidth: 4,
+                        borderLeftColor: eventTeam?.color || "#1976d2",
+                      };
+                    })(),
+                  ]}
+                  onPress={() => setSelectedEventId(event.id)}
+                >
+                  <View style={styles.eventHeader}>
+                    {(() => {
+                      const eventTeam = teams.find(
+                        (team) => team.id === event.teamId
+                      );
+                      return (
+                        <Text
+                          style={[
+                            styles.eventTitle,
+                            { color: eventTeam?.color || "#1976d2" },
+                          ]}
+                        >
+                          {eventTeam?.name || event.title}
+                        </Text>
+                      );
+                    })()}
+                    {selectedEventId === event.id && (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={20}
+                        color="#4CAF50"
+                      />
                     )}
+                  </View>
+                  <Text style={styles.eventDate}>
+                    {formatDate(event.date)} klo {formatTime(event.date)}
                   </Text>
-                </View>
-              </TouchableOpacity>
-            ))
+                  <View style={styles.eventPlayersContainer}>
+                    <Text style={styles.eventPlayers}>
+                      {
+                        getFieldPlayers(event.registeredPlayers || [], event)
+                          .length
+                      }{" "}
+                      pelaajaa
+                      {event.maxGoalkeepers && event.maxGoalkeepers > 0 && (
+                        <Text style={{ color: "#ff9800" }}>
+                          {" • "}
+                          {
+                            getGoalkeepers(event.registeredPlayers || [], event)
+                              .length
+                          }{" "}
+                          MV
+                        </Text>
+                      )}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+              {/* Näytä lisää/vähemmän -painike */}
+              {availableEvents.length > MAX_VISIBLE_EVENTS && (
+                <TouchableOpacity
+                  style={styles.showMoreButton}
+                  onPress={() => setShowAllEvents(!showAllEvents)}
+                >
+                  <Text style={styles.showMoreButtonText}>
+                    {showAllEvents
+                      ? "Näytä vähemmän"
+                      : `Näytä lisää (${
+                          availableEvents.length - MAX_VISIBLE_EVENTS
+                        } tapahtumaa)`}
+                  </Text>
+                  <Ionicons
+                    name={showAllEvents ? "chevron-up" : "chevron-down"}
+                    size={16}
+                    color="#1976d2"
+                  />
+                </TouchableOpacity>
+              )}
+            </>
           )}
         </View>
 
@@ -1331,6 +1363,22 @@ const styles = StyleSheet.create({
   },
   eventPlayersContainer: {
     marginTop: 8,
+  },
+  showMoreButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "#f0f7ff",
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  showMoreButtonText: {
+    fontSize: 14,
+    color: "#1976d2",
+    fontWeight: "500",
+    marginRight: 4,
   },
   playersContainer: {
     backgroundColor: "white",
