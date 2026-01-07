@@ -185,8 +185,12 @@ const EventManagementScreen: React.FC = () => {
     return [...fieldPlayers, ...goalkeepers];
   };
 
-  // Helper function to get player style based on position
-  const getPlayerIconColor = (player: any, teamId?: string) => {
+  // Helper function to get player style based on position and teamMember status
+  const getPlayerIconColor = (
+    player: any,
+    teamId?: string,
+    isTeamMember?: boolean
+  ) => {
     // Debug logging
     console.log(
       `[getPlayerIconColor] Player: ${player?.name}, ID: ${player?.id}`
@@ -210,20 +214,30 @@ const EventManagementScreen: React.FC = () => {
     if (eventRole) {
       console.log(`[getPlayerIconColor] Event role found: ${eventRole}`);
       if (eventRole === "MV") {
-        return "#ff9800"; // Orange for goalkeepers
+        return "#4caf50"; // Green for goalkeepers
       }
-      return "#4CAF50"; // Green for field players
+      // For field players, check teamMember status
+      if (isTeamMember === false) {
+        return "#ff9800"; // Orange for guests
+      }
+      return "#1976d2"; // Blue for team members
     }
 
     // If no event role (or not registered), check if player has MV position
     // (used in "Add players" modal before they're registered)
     if (player?.positions?.includes("MV")) {
-      console.log(`[getPlayerIconColor] MV position found, returning orange`);
-      return "#ff9800"; // Orange for potential goalkeepers
+      console.log(`[getPlayerIconColor] MV position found, returning green`);
+      return "#4caf50"; // Green for potential goalkeepers
     }
 
-    console.log(`[getPlayerIconColor] Returning green (default field player)`);
-    return "#4CAF50"; // Green for field players
+    // Check teamMember status for non-goalkeepers
+    if (isTeamMember === false) {
+      console.log(`[getPlayerIconColor] Guest player, returning orange`);
+      return "#ff9800"; // Orange for guests
+    }
+
+    console.log(`[getPlayerIconColor] Returning blue (team member)`);
+    return "#1976d2"; // Blue for team members
   };
 
   // Edit form states
@@ -586,11 +600,7 @@ const EventManagementScreen: React.FC = () => {
       if (!isTeamMember && hoursUntilEvent > guestRegistrationHours) {
         Alert.alert(
           "Vakiokävijöillä etuoikeus",
-          `${
-            player.name
-          } ei ole vakiokävijä. Vakiokävijöillä on etuoikeus seuraavat ${Math.round(
-            hoursUntilEvent
-          )} tuntia. Haluatko lisätä pelaajan varallistalle?`,
+          `${player.name} ei ole vakiokävijä. Vakiokävijöillä on vielä etuoikeus tapahtumaan. Haluatko lisätä pelaajan varalle?`,
           [
             {
               text: "Peruuta",
@@ -1542,12 +1552,21 @@ const EventManagementScreen: React.FC = () => {
                   const isGoalkeeper =
                     playerRole === "MV" ||
                     (!playerRole && player?.positions.includes("MV"));
+                  // Check teamMember status
+                  const teamId = selectedEvent?.teamId || "";
+                  const isTeamMember =
+                    teamId && player?.teamMember?.[teamId] === true;
                   return (
                     <View
                       key={pid}
                       style={[
                         styles.playerCard,
                         isGoalkeeper && styles.goalkeeperCard,
+                        !isGoalkeeper && {
+                          borderLeftWidth: 4,
+                          borderLeftColor: isTeamMember ? "#1976d2" : "#ff9800",
+                          backgroundColor: isTeamMember ? "#e3f2fd" : "#fff3e0",
+                        },
                       ]}
                     >
                       <View style={styles.playerInfo}>
@@ -1556,7 +1575,8 @@ const EventManagementScreen: React.FC = () => {
                           size={20}
                           color={getPlayerIconColor(
                             player,
-                            selectedEvent.teamId
+                            selectedEvent.teamId,
+                            isTeamMember
                           )}
                         />
                         <View style={styles.playerDetails}>
@@ -1564,6 +1584,11 @@ const EventManagementScreen: React.FC = () => {
                             style={[
                               styles.playerName,
                               isGoalkeeper && styles.goalkeeperName,
+                              !isGoalkeeper &&
+                                !isTeamMember && {
+                                  color: "#ff9800",
+                                  fontWeight: "500",
+                                },
                             ]}
                           >
                             {player ? player.name : pid}
@@ -1607,12 +1632,20 @@ const EventManagementScreen: React.FC = () => {
                     const isGoalkeeper =
                       playerRole === "MV" ||
                       (!playerRole && player?.positions.includes("MV"));
+                    // Check teamMember status
+                    const teamId = selectedEvent?.teamId || "";
+                    const isTeamMember =
+                      teamId && player?.teamMember?.[teamId] === true;
                     return (
                       <View
                         key={player.id}
                         style={[
                           styles.playerCard,
-                          { borderLeftWidth: 4, borderLeftColor: "#ff9800" },
+                          {
+                            borderLeftWidth: 4,
+                            borderLeftColor: "#ff9800",
+                            backgroundColor: "#fff3e0",
+                          },
                           isGoalkeeper && styles.goalkeeperCard,
                         ]}
                       >
@@ -1620,16 +1653,17 @@ const EventManagementScreen: React.FC = () => {
                           <Ionicons
                             name="person"
                             size={20}
-                            color={getPlayerIconColor(
-                              player,
-                              selectedEvent.teamId
-                            )}
+                            color={isGoalkeeper ? "#4caf50" : "#ff9800"}
                           />
                           <View style={styles.playerDetails}>
                             <Text
                               style={[
                                 styles.playerName,
                                 isGoalkeeper && styles.goalkeeperName,
+                                !isGoalkeeper && {
+                                  color: "#ff9800",
+                                  fontWeight: "500",
+                                },
                               ]}
                             >
                               {player.name}
@@ -1952,12 +1986,21 @@ const EventManagementScreen: React.FC = () => {
                   const isGoalkeeper = player.positions.includes("MV");
                   const isSelected = selectedPlayerIds.includes(player.id);
                   const playerNeedsRoleSelection = needsRoleSelection(player);
+                  // Check teamMember status
+                  const teamId = selectedEvent?.teamId || "";
+                  const isTeamMember =
+                    teamId && player?.teamMember?.[teamId] === true;
                   return (
                     <TouchableOpacity
                       key={player.id}
                       style={[
                         styles.modalPlayerButton,
                         isGoalkeeper && styles.goalkeeperCard,
+                        !isGoalkeeper && {
+                          borderLeftWidth: 4,
+                          borderLeftColor: isTeamMember ? "#1976d2" : "#ff9800",
+                          backgroundColor: isTeamMember ? "#e3f2fd" : "#fff3e0",
+                        },
                         isSelected && styles.selectedPlayerCard,
                       ]}
                       onPress={() => handlePlayerClick(player)}
@@ -1986,7 +2029,8 @@ const EventManagementScreen: React.FC = () => {
                             size={20}
                             color={getPlayerIconColor(
                               player,
-                              selectedEvent?.teamId
+                              selectedEvent?.teamId,
+                              isTeamMember
                             )}
                             style={styles.playerIcon}
                           />
@@ -1996,6 +2040,11 @@ const EventManagementScreen: React.FC = () => {
                             style={[
                               styles.modalPlayerName,
                               isGoalkeeper && styles.goalkeeperName,
+                              !isGoalkeeper &&
+                                !isTeamMember && {
+                                  color: "#ff9800",
+                                  fontWeight: "500",
+                                },
                             ]}
                           >
                             {player.name}
@@ -2573,16 +2622,16 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   goalkeeperText: {
-    color: "#ff9800",
+    color: "#4caf50", // Vihreä maalivahdille
     fontWeight: "500",
   },
   goalkeeperCard: {
     borderLeftWidth: 4,
-    borderLeftColor: "#ff9800",
-    backgroundColor: "#fff8e1",
+    borderLeftColor: "#4caf50", // Vihreä reunus
+    backgroundColor: "#e8f5e9", // Vaaleanvihreä tausta
   },
   goalkeeperName: {
-    color: "#ff9800",
+    color: "#4caf50", // Vihreä teksti
     fontWeight: "600",
   },
   // Multi-select styles

@@ -876,7 +876,7 @@ const TeamGenerationScreen: React.FC = () => {
                       }{" "}
                       pelaajaa
                       {event.maxGoalkeepers && event.maxGoalkeepers > 0 && (
-                        <Text style={{ color: "#ff9800" }}>
+                        <Text style={{ color: "#4caf50" }}>
                           {" • "}
                           {
                             getGoalkeepers(event.registeredPlayers || [], event)
@@ -948,7 +948,7 @@ const TeamGenerationScreen: React.FC = () => {
                   {fieldPlayerCount} pelaajaa
                   {selectedEvent.maxGoalkeepers &&
                     selectedEvent.maxGoalkeepers > 0 && (
-                      <Text style={{ color: "#ff9800" }}>
+                      <Text style={{ color: "#4caf50" }}>
                         {" • "}
                         {goalkeeperCount} MV
                       </Text>
@@ -1405,9 +1405,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   goalkeeperItem: {
-    backgroundColor: "#fff8e1",
+    backgroundColor: "#e8f5e9", // Vaaleanvihreä maalivahdille
     borderLeftWidth: 3,
-    borderLeftColor: "#ff9800",
+    borderLeftColor: "#4caf50", // Vihreä reunus
   },
   playerName: {
     fontSize: 14,
@@ -1416,7 +1416,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   goalkeeperName: {
-    color: "#ff9800",
+    color: "#4caf50", // Vihreä teksti
     fontWeight: "600",
   },
   playerPoints: {
@@ -1506,7 +1506,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   teamGoalkeeperItem: {
-    backgroundColor: "#fff8e1",
+    backgroundColor: "#e8f5e9", // Vaaleanvihreä maalivahdille
   },
   teamDefenderItem: {
     backgroundColor: "#e8f5e9", // Vaalean vihreä
@@ -1520,7 +1520,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   teamGoalkeeperName: {
-    color: "#ff9800",
+    color: "#4caf50", // Vihreä teksti
     fontWeight: "500",
   },
   teamPlayerPoints: {

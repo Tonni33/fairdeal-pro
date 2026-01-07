@@ -1216,6 +1216,10 @@ const UserManagementScreen: React.FC = () => {
                     (team) => team.id === selectedTeam
                   );
 
+                  // Tarkista onko vakiokävijä (teamMember)
+                  const isTeamMember =
+                    selectedTeam && player.teamMember?.[selectedTeam] === true;
+
                   // Get team-specific skills from player.teamSkills
                   const teamSkills = player.teamSkills?.[selectedTeam];
 
@@ -1254,31 +1258,30 @@ const UserManagementScreen: React.FC = () => {
                         styles.playerCard,
                         isGoalkeeper && {
                           borderLeftWidth: 4,
-                          borderLeftColor: "#ff9800",
-                          backgroundColor: "#fff8e1",
+                          borderLeftColor: "#4caf50",
+                          backgroundColor: "#e8f5e9",
+                        },
+                        !isGoalkeeper && {
+                          borderLeftWidth: 4,
+                          borderLeftColor: isTeamMember ? "#1976d2" : "#ff9800",
+                          backgroundColor: isTeamMember ? "#e3f2fd" : "#fff3e0",
                         },
                       ]}
                       onPress={() => openPlayerModal(player)}
                     >
-                      {!isGoalkeeper && selectedTeamData && (
-                        <View
-                          style={[
-                            styles.playerTeamIndicator,
-                            {
-                              backgroundColor:
-                                selectedTeamData.color || "#1976d2",
-                            },
-                          ]}
-                        />
-                      )}
                       <View style={styles.playerInfo}>
                         <Text
                           style={[
                             styles.playerName,
                             isGoalkeeper && {
-                              color: "#ff9800",
+                              color: "#4caf50",
                               fontWeight: "600",
                             },
+                            !isGoalkeeper &&
+                              !isTeamMember && {
+                                color: "#ff9800",
+                                fontWeight: "500",
+                              },
                           ]}
                         >
                           {(player.name && player.name.trim()) ||

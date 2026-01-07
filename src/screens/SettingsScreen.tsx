@@ -36,7 +36,6 @@ interface EventDefaults {
   defaultTime: string;
   eventDuration: number; // minuutteina
   defaultTitle: string; // Oletusnimi tapahtumalle
-  notificationEnabled: boolean;
   teamAName?: string; // Custom name for Team A in random team generation
   teamBName?: string; // Custom name for Team B in random team generation
 }
@@ -100,7 +99,6 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
     defaultTime: "19:00",
     eventDuration: 90,
     defaultTitle: "",
-    notificationEnabled: true,
     teamAName: "Joukkue A",
     teamBName: "Joukkue B",
   });
@@ -234,14 +232,11 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
         if (teamDoc.exists()) {
           teamSettingsMap[team.id] = {
             ...(teamDoc.data() as EventDefaults),
-            // Override with team-specific data if available
-            notificationEnabled: teamData?.notificationEnabled ?? true,
           };
         } else {
           // Use global settings as default for teams without specific settings
           teamSettingsMap[team.id] = {
             ...globalSettings,
-            notificationEnabled: teamData?.notificationEnabled ?? true,
           };
         }
       }
@@ -425,7 +420,6 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
         whatsappGroupName,
         whatsappGroupInviteLink,
         guestRegistrationHours,
-        notificationEnabled: teamSettings[selectedTeamId]?.notificationEnabled,
       });
 
       const teamRef = doc(db, "teams", selectedTeamId);
@@ -433,8 +427,6 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
         whatsappGroupName: whatsappGroupName,
         whatsappGroupInviteLink: whatsappGroupInviteLink,
         guestRegistrationHours: guestRegistrationHours,
-        notificationEnabled:
-          teamSettings[selectedTeamId]?.notificationEnabled ?? true,
         updatedBy: user.email,
         updatedAt: new Date(),
       });
@@ -760,29 +752,6 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
               }
               keyboardType="numeric"
               placeholder="90"
-            />
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Ilmoitukset</Text>
-
-          <View style={styles.switchItem}>
-            <View style={styles.switchLabelContainer}>
-              <Text style={styles.settingLabel}>Push-ilmoitukset</Text>
-              <Text style={styles.settingDescription}>
-                Lähetä ilmoituksia uusista tapahtumista ja muutoksista
-              </Text>
-            </View>
-            <Switch
-              value={getCurrentSettings().notificationEnabled}
-              onValueChange={(value) =>
-                handleInputChange("notificationEnabled", value)
-              }
-              trackColor={{ false: "#767577", true: "#1976d2" }}
-              thumbColor={
-                getCurrentSettings().notificationEnabled ? "#fff" : "#f4f3f4"
-              }
             />
           </View>
         </View>

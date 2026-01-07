@@ -211,7 +211,7 @@ const RankingScreen: React.FC = () => {
           <Text
             style={[
               styles.playerName,
-              isGoalkeeper && { color: "#ff9800", fontWeight: "600" },
+              isGoalkeeper && { color: "#4caf50", fontWeight: "600" },
             ]}
           >
             {item.name || item.email || "Tuntematon"}

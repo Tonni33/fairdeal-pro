@@ -31,7 +31,6 @@ import { db } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import { useApp, getUserTeams } from "../contexts/AppContext";
 import AdminMenuButton from "../components/AdminMenuButton";
-import { sendPromotedToRosterNotification } from "../services/notificationService";
 
 type EventsScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -354,6 +353,14 @@ const EventsScreen: React.FC = () => {
               continue;
             }
 
+            // Skip if player is already registered (prevents duplicate notifications)
+            if (registered.includes(reserveId)) {
+              console.log(
+                `[Varalla promo] ⏭️ ${reservePlayer.name} on jo ilmoittautunut, ohitetaan`
+              );
+              continue;
+            }
+
             const isGoalkeeper = reservePlayer.positions.includes("MV");
             const isFull = isGoalkeeper
               ? event.maxGoalkeepers &&
@@ -377,14 +384,10 @@ const EventsScreen: React.FC = () => {
                 console.log(
                   `[Varalla promo] ✅ Siirretty varallaolija ${reservePlayer.name} (${reserveId}) osallistujaksi tapahtumaan ${event.title}`
                 );
+                // Push notification is sent automatically by Cloud Function
 
-                // Send push notification to promoted player
-                sendPromotedToRosterNotification(
-                  reserveId,
-                  event,
-                  team?.name || "Joukkue"
-                );
-
+                // Update local tracking to prevent processing same player twice
+                registered.push(reserveId);
                 if (isGoalkeeper) goalkeepers.push(reserveId);
                 else fieldPlayers.push(reserveId);
                 reserves = reserves.filter((id) => id !== reserveId);
@@ -784,13 +787,9 @@ const EventsScreen: React.FC = () => {
               (p) => p.id === suitableReserve
             );
 
-            // Send push notification to promoted player
-            const team = teams.find((t) => t.id === selectedEvent.teamId);
-            sendPromotedToRosterNotification(
-              suitableReserve,
-              selectedEvent,
-              team?.name || "Joukkue"
-            );
+            // NOTE: Local notification cannot be sent to other users
+            // The promoted player will receive notification when they open the app
+            // and the promoteReserves useEffect runs on their device
 
             Alert.alert(
               "Ilmoittautuminen peruttu",
@@ -853,9 +852,7 @@ const EventsScreen: React.FC = () => {
           // Guest trying to register too early - redirect to waitlist
           Alert.alert(
             "Vakiokävijöillä etuoikeus",
-            `Vakiokävijöillä on etuoikeus seuraavat ${Math.round(
-              hoursUntilEvent
-            )} tuntia. Voit ilmoittautua varallistalle.`,
+            `Vakiokävijöillä on vielä etuoikeus tapahtumaan. Voit ilmoittautua varalle.`,
             [
               { text: "Peruuta", style: "cancel" },
               {
@@ -1456,13 +1453,15 @@ const EventsScreen: React.FC = () => {
             <Ionicons
               name="people-outline"
               size={16}
-              color="#4CAF50"
+              color="#1976d2"
               style={{ marginRight: 4 }}
             />
             <Text style={styles.participantCount}>
-              {fieldPlayerCount}/{item.maxPlayers || "∞"} KP
+              <Text style={{ color: "#1976d2", fontWeight: "500" }}>
+                {fieldPlayerCount}/{item.maxPlayers || "∞"} KP
+              </Text>
               {item.maxGoalkeepers && item.maxGoalkeepers > 0 && (
-                <Text style={{ color: "#ff9800", fontWeight: "500" }}>
+                <Text style={{ color: "#4caf50", fontWeight: "500" }}>
                   {" • "}
                   {goalkeeperCount}/{item.maxGoalkeepers} MV
                 </Text>
@@ -1790,17 +1789,19 @@ const EventsScreen: React.FC = () => {
                     <Ionicons
                       name="people-outline"
                       size={18}
-                      color="#4CAF50"
+                      color="#1976d2"
                       style={{ marginRight: 6 }}
                     />
                     <Text style={styles.participantText}>
-                      {
-                        getFieldPlayers(
-                          selectedEvent.registeredPlayers || [],
-                          selectedEvent
-                        ).length
-                      }
-                      /{selectedEvent.maxPlayers || "∞"} KP
+                      <Text style={{ color: "#1976d2", fontWeight: "500" }}>
+                        {
+                          getFieldPlayers(
+                            selectedEvent.registeredPlayers || [],
+                            selectedEvent
+                          ).length
+                        }
+                        /{selectedEvent.maxPlayers || "∞"} KP
+                      </Text>
                     </Text>
                     {selectedEvent.maxGoalkeepers &&
                       selectedEvent.maxGoalkeepers > 0 && (
@@ -1812,7 +1813,7 @@ const EventsScreen: React.FC = () => {
                           <Text
                             style={[
                               styles.participantText,
-                              { color: "#ff9800", fontWeight: "500" },
+                              { color: "#4caf50", fontWeight: "500" },
                             ]}
                           >
                             {
@@ -1891,6 +1892,9 @@ const EventsScreen: React.FC = () => {
                                 !player?.positions?.some((pos: string) =>
                                   ["H", "P", "H/P"].includes(pos)
                                 ));
+                            const teamId = selectedEvent?.teamId || "";
+                            const isTeamMember =
+                              teamId && player?.teamMember?.[teamId] === true;
                             return (
                               <View
                                 key={player.id}
@@ -1898,25 +1902,20 @@ const EventsScreen: React.FC = () => {
                                   styles.playerItem,
                                   isGoalkeeper && {
                                     borderLeftWidth: 4,
-                                    borderLeftColor: "#ff9800",
-                                    backgroundColor: "#fff8e1",
+                                    borderLeftColor: "#4caf50",
+                                    backgroundColor: "#e8f5e9",
                                   },
                                 ]}
                               >
                                 <View
                                   style={[
                                     styles.playerIcon,
-                                    isGoalkeeper && {
-                                      backgroundColor: "#ff9800",
-                                    },
+                                    isGoalkeeper
+                                      ? styles.goalkeeperIcon
+                                      : !isTeamMember && styles.guestIcon,
                                   ]}
                                 >
-                                  <Text
-                                    style={[
-                                      styles.playerNumber,
-                                      isGoalkeeper && { color: "#fff" },
-                                    ]}
-                                  >
+                                  <Text style={[styles.playerNumber]}>
                                     {index + 1}
                                   </Text>
                                 </View>
@@ -1925,7 +1924,7 @@ const EventsScreen: React.FC = () => {
                                     style={[
                                       styles.playerName,
                                       isGoalkeeper && {
-                                        color: "#ff9800",
+                                        color: "#4caf50",
                                         fontWeight: "600",
                                       },
                                     ]}
@@ -1984,25 +1983,19 @@ const EventsScreen: React.FC = () => {
                                   styles.reservePlayersListItem,
                                   isGoalkeeper && {
                                     borderLeftWidth: 4,
-                                    borderLeftColor: "#ff9800",
-                                    backgroundColor: "#fff8e1",
+                                    borderLeftColor: "#4caf50",
+                                    backgroundColor: "#e8f5e9",
                                   },
                                 ]}
                               >
                                 <View
                                   style={[
                                     styles.reservePlayerNumber,
-                                    isGoalkeeper && {
-                                      backgroundColor: "#ff9800",
-                                    },
+                                    isGoalkeeper &&
+                                      styles.reserveGoalkeeperNumber,
                                   ]}
                                 >
-                                  <Text
-                                    style={[
-                                      styles.reservePlayerNumberText,
-                                      isGoalkeeper && { color: "#fff" },
-                                    ]}
-                                  >
+                                  <Text style={styles.reservePlayerNumberText}>
                                     {index + 1}
                                   </Text>
                                 </View>
@@ -2010,7 +2003,7 @@ const EventsScreen: React.FC = () => {
                                   style={[
                                     styles.reservePlayersListName,
                                     isGoalkeeper && {
-                                      color: "#ff9800",
+                                      color: "#4caf50",
                                       fontWeight: "600",
                                     },
                                   ]}
@@ -2407,10 +2400,16 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "#007AFF",
+    backgroundColor: "#1976d2", // Sininen vakiokävijöille
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
+  },
+  goalkeeperIcon: {
+    backgroundColor: "#4caf50", // Vihreä maalivahdille
+  },
+  guestIcon: {
+    backgroundColor: "#ff9800", // Oranssi vierailijoille
   },
   playerNumber: {
     color: "white",
@@ -2491,9 +2490,12 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: "#ff9800",
+    backgroundColor: "#ff9800", // Oranssi kaikille varalla olijoille
     alignItems: "center",
     justifyContent: "center",
+  },
+  reserveGoalkeeperNumber: {
+    backgroundColor: "#4caf50", // Vihreä maalivahdille
   },
   reservePlayerNumberText: {
     color: "white",

@@ -180,12 +180,18 @@ const BiometricAuthSetup: React.FC<BiometricAuthSetupProps> = ({
             console.log("Stored email for quick auth:", currentUser.email);
 
             // Check if we already have stored credentials from recent login
-            const existingPassword = await AsyncStorage.getItem("temp_password");
+            const existingPassword = await AsyncStorage.getItem(
+              "temp_password"
+            );
             if (existingPassword) {
-              console.log("Found existing password, keeping for biometric auth");
+              console.log(
+                "Found existing password, keeping for biometric auth"
+              );
               // Keep the existing stored password for biometric auth
             } else {
-              console.log("No existing password found - user will need to re-enter on session expiry");
+              console.log(
+                "No existing password found - user will need to re-enter on session expiry"
+              );
             }
 
             // Verify email was stored
@@ -222,15 +228,17 @@ const BiometricAuthSetup: React.FC<BiometricAuthSetupProps> = ({
         await AsyncStorage.setItem("biometric_enabled", "false");
         setBiometricEnabled(false);
         console.log("Biometric auth disabled");
-        
+
         // Check if PIN is also disabled - if so, clear stored credentials
         const pinEnabled = await AsyncStorage.getItem("pin_enabled");
         if (pinEnabled !== "true") {
-          console.log("No quick auth methods remaining, clearing stored credentials");
+          console.log(
+            "No quick auth methods remaining, clearing stored credentials"
+          );
           await AsyncStorage.removeItem("encrypted_password");
           await AsyncStorage.removeItem("temp_password");
         }
-        
+
         Alert.alert("Poistettu", "Biometrinen tunnistus poistettu käytöstä");
       }
     } catch (error) {
@@ -289,7 +297,9 @@ const BiometricAuthSetup: React.FC<BiometricAuthSetupProps> = ({
           console.log("Found existing password, keeping for PIN auth");
           // Keep the existing stored password for PIN auth
         } else {
-          console.log("No existing password found - user will need to re-enter on session expiry");
+          console.log(
+            "No existing password found - user will need to re-enter on session expiry"
+          );
         }
 
         // Verify email was stored
@@ -337,9 +347,13 @@ const BiometricAuthSetup: React.FC<BiometricAuthSetupProps> = ({
         setCurrentPin("");
 
         // Check if biometric is also disabled - if so, clear stored credentials
-        const biometricEnabled = await AsyncStorage.getItem("biometric_enabled");
+        const biometricEnabled = await AsyncStorage.getItem(
+          "biometric_enabled"
+        );
         if (biometricEnabled !== "true") {
-          console.log("No quick auth methods remaining, clearing stored credentials");
+          console.log(
+            "No quick auth methods remaining, clearing stored credentials"
+          );
           await AsyncStorage.removeItem("encrypted_password");
           await AsyncStorage.removeItem("temp_password");
         }
@@ -372,7 +386,7 @@ const BiometricAuthSetup: React.FC<BiometricAuthSetupProps> = ({
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Turvallisuusasetukset</Text>
+            <Text style={styles.modalTitle}>Kirjautumisasetukset</Text>
             <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
               <Ionicons name="close" size={24} color="#666" />
             </TouchableOpacity>

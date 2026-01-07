@@ -33,7 +33,6 @@ import { db } from "../services/firebase";
 import { Event, Player, Team, Message, RootStackParamList } from "../types";
 import { useAuth } from "../contexts/AuthContext";
 import { useApp, getUserTeams } from "../contexts/AppContext";
-import { sendPromotedToRosterNotification } from "../services/notificationService";
 import AdminMenuButton from "../components/AdminMenuButton";
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList>;
@@ -458,6 +457,14 @@ const HomeScreen: React.FC = () => {
             const reservePlayer = players.find((p) => p.id === reserveId);
             if (!reservePlayer) continue;
 
+            // Skip if player is already registered
+            if (registered.includes(reserveId)) {
+              console.log(
+                `[HomeScreen Promo] ⏭️ ${reservePlayer.name} on jo ilmoittautunut, ohitetaan`
+              );
+              continue;
+            }
+
             const isGoalkeeper = reservePlayer.positions.includes("MV");
             const isFull = isGoalkeeper
               ? nextEvent.maxGoalkeepers &&
@@ -474,13 +481,12 @@ const HomeScreen: React.FC = () => {
                 console.log(
                   `[HomeScreen Promo] ✅ Siirretty ${reservePlayer.name}`
                 );
+                // Push notification is sent automatically by Cloud Function
 
-                // Send push notification to promoted player
-                sendPromotedToRosterNotification(
-                  reserveId,
-                  nextEvent,
-                  team?.name || "Joukkue"
-                );
+                // Update local tracking to prevent processing same player twice
+                registered.push(reserveId);
+                if (isGoalkeeper) goalkeepers.push(reserveId);
+                else fieldPlayers.push(reserveId);
               } catch (err) {
                 console.error("[HomeScreen Promo] ❌ Virhe:", err);
               }
@@ -621,13 +627,9 @@ const HomeScreen: React.FC = () => {
               (p) => p.id === suitableReserve
             );
 
-            // Send push notification to promoted player
-            const team = teams.find((t) => t.id === nextEvent.teamId);
-            sendPromotedToRosterNotification(
-              suitableReserve,
-              nextEvent,
-              team?.name || "Joukkue"
-            );
+            // NOTE: Local notification cannot be sent to other users
+            // The promoted player will receive notification when they open the app
+            // and the promoteReserves useEffect runs on their device
 
             Alert.alert(
               "Ilmoittautuminen peruttu",
@@ -700,9 +702,7 @@ const HomeScreen: React.FC = () => {
           );
           Alert.alert(
             "Vakiokävijöillä etuoikeus",
-            `Vakiokävijöillä on etuoikeus seuraavat ${Math.round(
-              hoursUntilEvent
-            )} tuntia. Voit ilmoittautua varallistalle.`,
+            `Vakiokävijöillä on vielä etuoikeus tapahtumaan. Voit ilmoittautua varalle.`,
             [
               { text: "Peruuta", style: "cancel" },
               {
@@ -1422,16 +1422,18 @@ const HomeScreen: React.FC = () => {
                 <View style={styles.detailContent}>
                   <Text style={styles.detailLabel}>Osallistujat</Text>
                   <Text style={styles.detailText}>
-                    {
-                      getFieldPlayers(
-                        nextEvent.registeredPlayers || [],
-                        nextEvent
-                      ).length
-                    }{" "}
-                    / {nextEvent.maxPlayers} KP
+                    <Text style={{ color: "#1976d2", fontWeight: "500" }}>
+                      {
+                        getFieldPlayers(
+                          nextEvent.registeredPlayers || [],
+                          nextEvent
+                        ).length
+                      }{" "}
+                      / {nextEvent.maxPlayers} KP
+                    </Text>
                     {nextEvent.maxGoalkeepers &&
                       nextEvent.maxGoalkeepers > 0 && (
-                        <Text style={{ color: "#ff9800", fontWeight: "500" }}>
+                        <Text style={{ color: "#4caf50", fontWeight: "500" }}>
                           {" • "}
                           {
                             getGoalkeepers(
@@ -1621,17 +1623,19 @@ const HomeScreen: React.FC = () => {
                           Osallistujat
                         </Text>
                         <Text style={styles.participantsBannerSubtitle}>
-                          {
-                            getFieldPlayers(
-                              nextEvent.registeredPlayers || [],
-                              nextEvent
-                            ).length
-                          }{" "}
-                          / {nextEvent.maxPlayers} KP
+                          <Text style={{ color: "#1976d2", fontWeight: "500" }}>
+                            {
+                              getFieldPlayers(
+                                nextEvent.registeredPlayers || [],
+                                nextEvent
+                              ).length
+                            }{" "}
+                            / {nextEvent.maxPlayers} KP
+                          </Text>
                           {nextEvent.maxGoalkeepers &&
                             nextEvent.maxGoalkeepers > 0 && (
                               <Text
-                                style={{ color: "#ff9800", fontWeight: "500" }}
+                                style={{ color: "#4caf50", fontWeight: "500" }}
                               >
                                 {" • "}
                                 {
@@ -1905,6 +1909,8 @@ const HomeScreen: React.FC = () => {
                           const isGoalkeeper =
                             playerRole === "MV" ||
                             (!playerRole && player?.positions.includes("MV"));
+                          const teamId = nextEvent?.teamId || "";
+                          const isTeamMember = teamId && player?.teamMember?.[teamId] === true;
                           return (
                             <View
                               key={player.id}
@@ -1916,7 +1922,9 @@ const HomeScreen: React.FC = () => {
                               <View
                                 style={[
                                   styles.modalPlayerIcon,
-                                  isGoalkeeper && styles.modalGoalkeeperIcon,
+                                  isGoalkeeper
+                                    ? styles.modalGoalkeeperIcon
+                                    : !isTeamMember && styles.modalGuestIcon,
                                 ]}
                               >
                                 <Text
@@ -2381,7 +2389,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: "#ff9800",
+    backgroundColor: "#ff9800", // Oranssi kaikille varalla olijoille
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2716,9 +2724,9 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   modalGoalkeeperItem: {
-    backgroundColor: "#fff8e1",
+    backgroundColor: "#e8f5e9", // Vaaleanvihreä tausta maalivahdille
     borderLeftWidth: 3,
-    borderLeftColor: "#ff9800",
+    borderLeftColor: "#4caf50", // Vihreä reunus
   },
   modalReserveItem: {
     backgroundColor: "#fff8f0",
@@ -2729,13 +2737,16 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "#1976d2",
+    backgroundColor: "#1976d2", // Sininen vakiokävijöille
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
   },
   modalGoalkeeperIcon: {
-    backgroundColor: "#ff9800",
+    backgroundColor: "#4caf50", // Vihreä maalivahdille
+  },
+  modalGuestIcon: {
+    backgroundColor: "#ff9800", // Oranssi vierailijoille
   },
   modalReserveIcon: {
     backgroundColor: "#fff8f0",
@@ -2760,7 +2771,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   modalGoalkeeperName: {
-    color: "#ff9800",
+    color: "#4caf50", // Vihreä maalivahdille
     fontWeight: "600",
   },
   modalReserveName: {

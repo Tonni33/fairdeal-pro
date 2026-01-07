@@ -594,3 +594,360 @@ exports.getHCKeLoEmails = onCall(async (request) => {
     throw new HttpsError("internal", error.message);
   }
 });
+
+// ============================================
+// PUSH NOTIFICATIONS FOR ROSTER PROMOTIONS
+// ============================================
+
+const { onDocumentUpdated } = require("firebase-functions/v2/firestore");
+const { Expo } = require("expo-server-sdk");
+
+// Create a new Expo SDK client
+const expo = new Expo();
+
+/**
+ * Cloud Function triggered when an event document is updated
+ * Sends push notification to players who were promoted from reserve to roster
+ */
+exports.onEventUpdated = onDocumentUpdated(
+  "events/{eventId}",
+  async (event) => {
+    const beforeData = event.data.before.data();
+    const afterData = event.data.after.data();
+    const eventId = event.params.eventId;
+
+    // Get players who were in reservePlayers before but are now in registeredPlayers
+    const beforeReserve = beforeData?.reservePlayers || [];
+    const afterReserve = afterData?.reservePlayers || [];
+    const afterRegistered = afterData?.registeredPlayers || [];
+
+    // Find players who were promoted (were in reserve, now in registered, no longer in reserve)
+    const promotedPlayerIds = beforeReserve.filter(
+      (playerId) =>
+        afterRegistered.includes(playerId) && !afterReserve.includes(playerId)
+    );
+
+    if (promotedPlayerIds.length === 0) {
+      return null; // No promotions happened
+    }
+
+    console.log(
+      `[Push] Event ${eventId}: ${promotedPlayerIds.length} players promoted from reserve`
+    );
+
+    // Get event details for notification
+    const eventTitle = afterData?.title || "Tapahtuma";
+    const eventDate = afterData?.date?.toDate
+      ? afterData.date.toDate()
+      : new Date(afterData?.date);
+    const teamId = afterData?.teamId;
+
+    // Get team name
+    let teamName = "Joukkue";
+    if (teamId) {
+      try {
+        const teamDoc = await admin
+          .firestore()
+          .collection("teams")
+          .doc(teamId)
+          .get();
+        if (teamDoc.exists) {
+          teamName = teamDoc.data().name || teamName;
+        }
+      } catch (err) {
+        console.error("[Push] Error getting team:", err);
+      }
+    }
+
+    // Format date for notification
+    const days = ["su", "ma", "ti", "ke", "to", "pe", "la"];
+    const dayName = days[eventDate.getDay()];
+    const dateStr = `${dayName} ${eventDate.getDate()}.${
+      eventDate.getMonth() + 1
+    }.`;
+    const timeStr = eventDate.toLocaleTimeString("fi-FI", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    // Get push tokens for promoted players
+    const messages = [];
+
+    for (const playerId of promotedPlayerIds) {
+      try {
+        const userDoc = await admin
+          .firestore()
+          .collection("users")
+          .doc(playerId)
+          .get();
+
+        if (!userDoc.exists) {
+          console.log(`[Push] User ${playerId} not found`);
+          continue;
+        }
+
+        const userData = userDoc.data();
+        const pushToken = userData.pushToken;
+
+        // Check if user has disabled roster promotion notifications
+        if (userData.notificationSettings?.rosterPromotions === false) {
+          console.log(
+            `[Push] User ${playerId} has disabled roster promotion notifications`
+          );
+          continue;
+        }
+
+        if (!pushToken) {
+          console.log(`[Push] User ${playerId} has no push token`);
+          continue;
+        }
+
+        // Validate Expo push token
+        if (!Expo.isExpoPushToken(pushToken)) {
+          console.log(
+            `[Push] Invalid push token for user ${playerId}: ${pushToken}`
+          );
+          continue;
+        }
+
+        console.log(
+          `[Push] Sending notification to ${userData.name || playerId}`
+        );
+
+        messages.push({
+          to: pushToken,
+          sound: "default",
+          title: "🎉 Pääsit mukaan!",
+          body: `${eventTitle} (${teamName}) - ${dateStr} klo ${timeStr}`,
+          data: {
+            eventId: eventId,
+            type: "roster-promotion",
+            playerId: playerId,
+          },
+          channelId: "roster-updates",
+        });
+      } catch (err) {
+        console.error(`[Push] Error processing player ${playerId}:`, err);
+      }
+    }
+
+    if (messages.length === 0) {
+      console.log("[Push] No valid push tokens found");
+      return null;
+    }
+
+    // Send notifications in chunks (Expo recommends max 100 per request)
+    const chunks = expo.chunkPushNotifications(messages);
+    const tickets = [];
+
+    for (const chunk of chunks) {
+      try {
+        const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+        tickets.push(...ticketChunk);
+        console.log(`[Push] Sent ${ticketChunk.length} notifications`);
+      } catch (err) {
+        console.error("[Push] Error sending notifications:", err);
+      }
+    }
+
+    // Log any errors from tickets
+    tickets.forEach((ticket, index) => {
+      if (ticket.status === "error") {
+        console.error(
+          `[Push] Notification error for ${messages[index]?.to}:`,
+          ticket.message
+        );
+      }
+    });
+
+    console.log(
+      `[Push] Successfully processed ${tickets.length} notifications`
+    );
+    return { sent: tickets.length };
+  }
+);
+
+// ============================================
+// SCHEDULED 24H EVENT REMINDERS
+// ============================================
+
+const { onSchedule } = require("firebase-functions/v2/scheduler");
+
+/**
+ * Scheduled Cloud Function that runs every hour
+ * Sends 24h reminder notifications for upcoming events
+ */
+exports.sendEventReminders = onSchedule(
+  {
+    schedule: "0 * * * *", // Run at the start of every hour
+    timeZone: "Europe/Helsinki",
+    retryCount: 3,
+  },
+  async (event) => {
+    console.log("[Reminder] Starting 24h event reminder check...");
+
+    const now = new Date();
+    const in23Hours = new Date(now.getTime() + 23 * 60 * 60 * 1000);
+    const in25Hours = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+
+    console.log(
+      `[Reminder] Looking for events between ${in23Hours.toISOString()} and ${in25Hours.toISOString()}`
+    );
+
+    try {
+      // Get all events happening in approximately 24 hours (23-25h window)
+      const eventsSnapshot = await admin
+        .firestore()
+        .collection("events")
+        .where("date", ">=", in23Hours)
+        .where("date", "<=", in25Hours)
+        .get();
+
+      if (eventsSnapshot.empty) {
+        console.log("[Reminder] No events found in the 24h window");
+        return null;
+      }
+
+      console.log(
+        `[Reminder] Found ${eventsSnapshot.size} events to send reminders for`
+      );
+
+      const messages = [];
+      const processedPlayers = new Set(); // Avoid duplicate notifications
+
+      for (const eventDoc of eventsSnapshot.docs) {
+        const eventData = eventDoc.data();
+        const eventId = eventDoc.id;
+        const eventTitle = eventData.title || "Tapahtuma";
+        const teamId = eventData.teamId;
+        const registeredPlayers = eventData.registeredPlayers || [];
+
+        if (registeredPlayers.length === 0) {
+          console.log(`[Reminder] Event ${eventId} has no registered players`);
+          continue;
+        }
+
+        // Get team name
+        let teamName = "Joukkue";
+        if (teamId) {
+          try {
+            const teamDoc = await admin
+              .firestore()
+              .collection("teams")
+              .doc(teamId)
+              .get();
+            if (teamDoc.exists) {
+              teamName = teamDoc.data().name || teamName;
+            }
+          } catch (err) {
+            console.error("[Reminder] Error getting team:", err);
+          }
+        }
+
+        // Format time for notification
+        const eventDate = eventData.date.toDate();
+        const timeStr = eventDate.toLocaleTimeString("fi-FI", {
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: "Europe/Helsinki",
+        });
+
+        console.log(
+          `[Reminder] Processing event: ${eventTitle} (${teamName}) - ${registeredPlayers.length} players`
+        );
+
+        // Get push tokens for all registered players
+        for (const playerId of registeredPlayers) {
+          // Skip if we already processed this player (could be in multiple events)
+          const playerEventKey = `${playerId}-${eventId}`;
+          if (processedPlayers.has(playerEventKey)) {
+            continue;
+          }
+          processedPlayers.add(playerEventKey);
+
+          try {
+            const userDoc = await admin
+              .firestore()
+              .collection("users")
+              .doc(playerId)
+              .get();
+
+            if (!userDoc.exists) {
+              continue;
+            }
+
+            const userData = userDoc.data();
+            const pushToken = userData.pushToken;
+
+            // Check if user has disabled event reminder notifications
+            if (userData.notificationSettings?.eventReminders === false) {
+              console.log(
+                `[Reminder] User ${playerId} has disabled event reminders`
+              );
+              continue;
+            }
+
+            if (!pushToken || !Expo.isExpoPushToken(pushToken)) {
+              continue;
+            }
+
+            messages.push({
+              to: pushToken,
+              sound: "default",
+              title: "📅 Tapahtuma huomenna!",
+              body: `${eventTitle} (${teamName}) - klo ${timeStr}`,
+              data: {
+                eventId: eventId,
+                type: "event-reminder",
+                playerId: playerId,
+              },
+              channelId: "event-reminders",
+            });
+          } catch (err) {
+            console.error(
+              `[Reminder] Error processing player ${playerId}:`,
+              err
+            );
+          }
+        }
+      }
+
+      if (messages.length === 0) {
+        console.log("[Reminder] No valid push tokens found");
+        return null;
+      }
+
+      console.log(
+        `[Reminder] Sending ${messages.length} reminder notifications`
+      );
+
+      // Send notifications in chunks
+      const chunks = expo.chunkPushNotifications(messages);
+      let totalSent = 0;
+
+      for (const chunk of chunks) {
+        try {
+          const tickets = await expo.sendPushNotificationsAsync(chunk);
+          totalSent += tickets.length;
+
+          // Log any errors
+          tickets.forEach((ticket, index) => {
+            if (ticket.status === "error") {
+              console.error(`[Reminder] Notification error:`, ticket.message);
+            }
+          });
+        } catch (err) {
+          console.error("[Reminder] Error sending notifications:", err);
+        }
+      }
+
+      console.log(
+        `[Reminder] Successfully sent ${totalSent} reminder notifications`
+      );
+      return { sent: totalSent };
+    } catch (err) {
+      console.error("[Reminder] Error in scheduled function:", err);
+      throw err;
+    }
+  }
+);

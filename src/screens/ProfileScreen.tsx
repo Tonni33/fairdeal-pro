@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Alert,
   Modal,
   TextInput,
+  Switch,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -69,6 +70,65 @@ const ProfileScreen: React.FC = () => {
   const [teamFilter, setTeamFilter] = useState<string | "all">("all");
   const [isTeamFilterModalVisible, setIsTeamFilterModalVisible] =
     useState(false);
+
+  // Notification settings state
+  const [notificationSettings, setNotificationSettings] = useState({
+    eventReminders: true,
+    rosterPromotions: true,
+  });
+  const [notificationSettingsLoading, setNotificationSettingsLoading] =
+    useState(false);
+
+  // Load notification settings from user document
+  useEffect(() => {
+    const loadNotificationSettings = async () => {
+      if (!user?.uid) return;
+      try {
+        const userDoc = await getDocs(
+          query(collection(db, "users"), where("__name__", "==", user.uid))
+        );
+        if (!userDoc.empty) {
+          const userData = userDoc.docs[0].data();
+          setNotificationSettings({
+            eventReminders:
+              userData.notificationSettings?.eventReminders ?? true,
+            rosterPromotions:
+              userData.notificationSettings?.rosterPromotions ?? true,
+          });
+        }
+      } catch (err) {
+        console.error("Error loading notification settings:", err);
+      }
+    };
+    loadNotificationSettings();
+  }, [user?.uid]);
+
+  // Save notification settings to Firestore
+  const saveNotificationSettings = async (
+    key: "eventReminders" | "rosterPromotions",
+    value: boolean
+  ) => {
+    if (!user?.uid) return;
+
+    const newSettings = { ...notificationSettings, [key]: value };
+    setNotificationSettings(newSettings);
+    setNotificationSettingsLoading(true);
+
+    try {
+      const userRef = doc(db, "users", user.uid);
+      await updateDoc(userRef, {
+        notificationSettings: newSettings,
+      });
+      console.log("Notification settings saved:", newSettings);
+    } catch (err) {
+      console.error("Error saving notification settings:", err);
+      // Revert on error
+      setNotificationSettings(notificationSettings);
+      Alert.alert("Virhe", "Asetusten tallentaminen epäonnistui");
+    } finally {
+      setNotificationSettingsLoading(false);
+    }
+  };
 
   // Hae pelaaja käyttäjän sähköpostilla tai ID:llä
   console.log("ProfileScreen: user =", user);
@@ -794,8 +854,60 @@ const ProfileScreen: React.FC = () => {
             color="white"
             style={styles.buttonIcon}
           />
-          <Text style={styles.biometricButtonText}>Turvallisuusasetukset</Text>
+          <Text style={styles.biometricButtonText}>Kirjautumisasetukset</Text>
         </TouchableOpacity>
+
+        {/* Notification Settings */}
+        <View style={styles.notificationSettingsContainer}>
+          <Text style={styles.notificationSettingsTitle}>
+            <Ionicons name="notifications-outline" size={18} color="#333" />{" "}
+            Push-ilmoitukset
+          </Text>
+
+          <View style={styles.notificationSettingRow}>
+            <View style={styles.notificationSettingInfo}>
+              <Text style={styles.notificationSettingLabel}>
+                Tapahtumamuistutukset
+              </Text>
+              <Text style={styles.notificationSettingDescription}>
+                Ilmoitus 24h ennen tapahtumaa
+              </Text>
+            </View>
+            <Switch
+              value={notificationSettings.eventReminders}
+              onValueChange={(value) =>
+                saveNotificationSettings("eventReminders", value)
+              }
+              disabled={notificationSettingsLoading}
+              trackColor={{ false: "#ccc", true: "#4CAF50" }}
+              thumbColor={
+                notificationSettings.eventReminders ? "#fff" : "#f4f3f4"
+              }
+            />
+          </View>
+
+          <View style={styles.notificationSettingRow}>
+            <View style={styles.notificationSettingInfo}>
+              <Text style={styles.notificationSettingLabel}>
+                Pääsit mukaan -ilmoitukset
+              </Text>
+              <Text style={styles.notificationSettingDescription}>
+                Ilmoitus kun pääset varalta osallistujaksi
+              </Text>
+            </View>
+            <Switch
+              value={notificationSettings.rosterPromotions}
+              onValueChange={(value) =>
+                saveNotificationSettings("rosterPromotions", value)
+              }
+              disabled={notificationSettingsLoading}
+              trackColor={{ false: "#ccc", true: "#4CAF50" }}
+              thumbColor={
+                notificationSettings.rosterPromotions ? "#fff" : "#f4f3f4"
+              }
+            />
+          </View>
+        </View>
 
         <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
           <Text style={styles.signOutText}>Kirjaudu ulos</Text>
@@ -1233,6 +1345,40 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontWeight: "bold",
+  },
+  notificationSettingsContainer: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  notificationSettingsTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 16,
+  },
+  notificationSettingRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  notificationSettingInfo: {
+    flex: 1,
+    marginRight: 16,
+  },
+  notificationSettingLabel: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#333",
+  },
+  notificationSettingDescription: {
+    fontSize: 13,
+    color: "#666",
+    marginTop: 2,
   },
   noPlayerContainer: {
     backgroundColor: "white",
