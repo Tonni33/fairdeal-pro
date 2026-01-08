@@ -1,5 +1,7 @@
 package com.fairdeal.pro
 
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import androidx.core.view.WindowCompat
@@ -23,6 +25,16 @@ class MainActivity : ReactActivity() {
     // This ensures proper handling of system bars and insets
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
       WindowCompat.setDecorFitsSystemWindows(window, false)
+    }
+    
+    // Lock to portrait orientation only on phones (small screens)
+    // Allow rotation on tablets and foldables (large screens)
+    val isTablet = (resources.configuration.screenLayout and 
+                   Configuration.SCREENLAYOUT_SIZE_MASK) >= 
+                   Configuration.SCREENLAYOUT_SIZE_LARGE
+    
+    if (!isTablet) {
+      requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
     }
   }
 
