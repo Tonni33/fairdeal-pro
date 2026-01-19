@@ -14,6 +14,7 @@ import LicensesPage from "./pages/LicensesPage";
 import LicenseRequestsPage from "./pages/LicenseRequestsPage";
 import TeamSettingsPage from "./pages/TeamSettingsPage";
 import SettingsPage from "./pages/SettingsPage";
+import TeamBalancerTestPage from "./pages/TeamBalancerTestPage";
 
 const theme = createTheme({
   palette: {
@@ -55,6 +56,10 @@ function App() {
               />
               <Route path="team-settings" element={<TeamSettingsPage />} />
               <Route path="settings" element={<SettingsPage />} />
+              <Route
+                path="team-balancer-test"
+                element={<TeamBalancerTestPage />}
+              />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

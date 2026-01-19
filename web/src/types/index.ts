@@ -61,6 +61,9 @@ export interface Team {
   notificationEnabled?: boolean;
   whatsappGroupName?: string;
   whatsappGroupInviteLink?: string;
+  // Team generation names
+  teamAName?: string; // Custom name for Team A in random team generation
+  teamBName?: string; // Custom name for Team B in random team generation
   createdAt?: string;
   updatedAt?: string;
   updatedBy?: string;
@@ -70,7 +73,7 @@ export interface Team {
 export interface Event {
   id: string;
   title: string;
-  date: string;
+  date: string; // ISO date string
   location: string;
   duration: number;
   description?: string;
@@ -124,4 +127,68 @@ export interface License {
   updatedAt?: string;
   usedAt?: string;
   licenseExpiresAt?: string;
+}
+
+// EnrichedPlayer with computed fields for team generation (web-specific)
+export interface EnrichedPlayer {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  positions: string[];
+  image?: string;
+  isAdmin: boolean;
+  isMasterAdmin?: boolean;
+  teamIds: string[];
+  teams: string[];
+  teamSkills?: User["teamSkills"];
+  teamMember?: User["teamMember"];
+  // Computed fields for team generation
+  category: number;
+  multiplier: number;
+  position: string; // Primary position for this event (H/P/MV)
+  points: number; // Computed: multiplier * 100
+  assignedRole?: "defender" | "attacker";
+  playerId: string; // Required for SharedEnrichedPlayer compatibility
+  createdAt: Date;
+}
+
+// Player type (standalone, not extending User to avoid createdAt conflict)
+export interface Player {
+  id: string;
+  name: string;
+  email: string;
+  positions: string[];
+  teamIds: string[];
+  teams: string[];
+  isAdmin: boolean;
+  createdAt: Date;
+}
+
+// Team generation options
+export interface TeamGenerationOptions {
+  distributionMethod?: "skill-based" | "position-based";
+  maxPlayersPerTeam?: number;
+  balanceGoalkeepers?: boolean;
+}
+
+// Generated team data from TeamBalancer
+export interface GeneratedTeamData {
+  id: string;
+  name: string;
+  adminId: string;
+  adminIds: string[];
+  createdAt: Date;
+  players: EnrichedPlayer[];
+  totalPoints: number;
+  goalkeepers: EnrichedPlayer[];
+  fieldPlayers: EnrichedPlayer[];
+}
+
+// Team balance result
+export interface TeamBalanceResult {
+  teams: GeneratedTeamData[];
+  balanceScore: number;
+  unusedPlayers: EnrichedPlayer[];
+  warnings: string[];
 }

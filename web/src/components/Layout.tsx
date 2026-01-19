@@ -29,6 +29,7 @@ import {
   Event,
   EmojiEvents,
   Timeline,
+  Psychology,
 } from "@mui/icons-material";
 import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
@@ -50,7 +51,7 @@ export default function Layout() {
 
     const q = query(
       collection(db, "licenseRequests"),
-      where("status", "==", "pending")
+      where("status", "==", "pending"),
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -133,6 +134,12 @@ export default function Layout() {
       text: "Asetukset",
       icon: <SettingsApplications />,
       path: "/settings",
+      masterAdminOnly: true,
+    },
+    {
+      text: "TeamBalancer Test",
+      icon: <Psychology />,
+      path: "/team-balancer-test",
       masterAdminOnly: true,
     },
   ];
@@ -226,7 +233,7 @@ export default function Layout() {
           <List>
             {menuItems
               .filter(
-                (item) => !item.masterAdminOnly || userData?.isMasterAdmin
+                (item) => !item.masterAdminOnly || userData?.isMasterAdmin,
               )
               .map((item) => (
                 <ListItem key={item.text} disablePadding>
