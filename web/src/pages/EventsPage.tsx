@@ -81,7 +81,7 @@ export default function EventsPage() {
   // Filters
   const [selectedTeam, setSelectedTeam] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState<"all" | "upcoming" | "past">(
-    "all"
+    "all",
   );
 
   // Column visibility
@@ -160,7 +160,7 @@ export default function EventsPage() {
   useEffect(() => {
     localStorage.setItem(
       "eventsPage-visibleColumns",
-      JSON.stringify(visibleColumns)
+      JSON.stringify(visibleColumns),
     );
   }, [visibleColumns]);
 
@@ -190,15 +190,15 @@ export default function EventsPage() {
       const now = new Date();
       console.log(
         `[Web Varalla promo] 🚀 ALOITETAAN TARKISTUS - Kello: ${now.toLocaleString(
-          "fi-FI"
-        )} - Tapahtumia: ${events.length}`
+          "fi-FI",
+        )} - Tapahtumia: ${events.length}`,
       );
 
       for (const event of events) {
         const team = teams.find((t) => t.id === event.teamId);
         if (!team) {
           console.log(
-            `[Web Varalla promo] Ei joukkuetta tapahtumalle ${event.title}`
+            `[Web Varalla promo] Ei joukkuetta tapahtumalle ${event.title}`,
           );
           continue;
         }
@@ -221,7 +221,7 @@ export default function EventsPage() {
                 : `❌ EI (vielä ${(
                     hoursUntilEvent - guestRegistrationHours
                   ).toFixed(2)}h)`
-            }`
+            }`,
         );
 
         if (hoursUntilEvent <= guestRegistrationHours) {
@@ -232,7 +232,7 @@ export default function EventsPage() {
             `[Web Varalla promo] 🎯 THRESHOLD TÄYTTYI!\n` +
               `  Ilmoittautuneita: ${registered.length}\n` +
               `  Varalla: ${reserves.length}\n` +
-              `  Varalla olevat ID:t: ${reserves.join(", ") || "Ei ketään"}`
+              `  Varalla olevat ID:t: ${reserves.join(", ") || "Ei ketään"}`,
           );
 
           // Helper to check if player is goalkeeper
@@ -249,7 +249,7 @@ export default function EventsPage() {
             // Fall back to user's positions
             const hasMV = user.positions?.includes("MV");
             const hasFieldPosition = user.positions?.some((pos: string) =>
-              ["H", "P", "H/P"].includes(pos)
+              ["H", "P", "H/P"].includes(pos),
             );
             return hasMV && !hasFieldPosition;
           };
@@ -261,7 +261,7 @@ export default function EventsPage() {
           console.log(
             `[Web Varalla promo] Kenttäpelaajia: ${fieldPlayers.length}/${
               event.maxPlayers
-            }, Maalivahteja: ${goalkeepers.length}/${event.maxGoalkeepers || 0}`
+            }, Maalivahteja: ${goalkeepers.length}/${event.maxGoalkeepers || 0}`,
           );
 
           let changed = false;
@@ -269,7 +269,7 @@ export default function EventsPage() {
             const reserveUser = users.find((u) => u.id === reserveId);
             if (!reserveUser) {
               console.log(
-                `[Web Varalla promo] ❌ Ei käyttäjää id: ${reserveId}`
+                `[Web Varalla promo] ❌ Ei käyttäjää id: ${reserveId}`,
               );
               continue;
             }
@@ -283,7 +283,7 @@ export default function EventsPage() {
             console.log(
               `[Web Varalla promo] Tarkistetaan ${reserveUser.name} (${
                 isGoalkeeper ? "MV" : "KP"
-              }), Täynnä: ${isFull}`
+              }), Täynnä: ${isFull}`,
             );
 
             if (!isFull) {
@@ -295,7 +295,7 @@ export default function EventsPage() {
                 });
                 changed = true;
                 console.log(
-                  `[Web Varalla promo] ✅ Siirretty varallaolija ${reserveUser.name} (${reserveId}) osallistujaksi tapahtumaan ${event.title}`
+                  `[Web Varalla promo] ✅ Siirretty varallaolija ${reserveUser.name} (${reserveId}) osallistujaksi tapahtumaan ${event.title}`,
                 );
                 if (isGoalkeeper) goalkeepers.push(reserveId);
                 else fieldPlayers.push(reserveId);
@@ -303,31 +303,31 @@ export default function EventsPage() {
               } catch (err) {
                 console.error(
                   "[Web Varalla promo] ❌ Automaattinen varalla siirto epäonnistui:",
-                  err
+                  err,
                 );
               }
             } else {
               console.log(
-                `[Web Varalla promo] ⚠️ Ei tilaa: ${reserveUser.name} (${reserveId}) tapahtumassa ${event.title}`
+                `[Web Varalla promo] ⚠️ Ei tilaa: ${reserveUser.name} (${reserveId}) tapahtumassa ${event.title}`,
               );
             }
           }
           if (changed) {
             console.log(
-              `[Web Varalla promo] ✅ Varalla olevat siirretty osallistujiksi tapahtumassa ${event.title}`
+              `[Web Varalla promo] ✅ Varalla olevat siirretty osallistujiksi tapahtumassa ${event.title}`,
             );
             // Refresh data to show updated participant lists
             fetchData();
           } else if (reserves.length > 0) {
             console.log(
-              `[Web Varalla promo] ℹ️ Tapahtuma täynnä tai ei varallaolevia siirrettäväksi tapahtumassa ${event.title}`
+              `[Web Varalla promo] ℹ️ Tapahtuma täynnä tai ei varallaolevia siirrettäväksi tapahtumassa ${event.title}`,
             );
           }
         } else {
           console.log(
             `[Web Varalla promo] ⏰ Threshold ei täyttynyt tapahtumassa ${
               event.title
-            } (vielä ${(hoursUntilEvent - guestRegistrationHours).toFixed(1)}h)`
+            } (vielä ${(hoursUntilEvent - guestRegistrationHours).toFixed(1)}h)`,
           );
         }
       }
@@ -371,7 +371,7 @@ export default function EventsPage() {
         }
         eventsQuery = query(
           collection(db, "events"),
-          where("teamId", "in", userTeamIds)
+          where("teamId", "in", userTeamIds),
         );
       }
 
@@ -624,7 +624,7 @@ export default function EventsPage() {
 
       if (isInRegistered) {
         const updatedPlayers = selectedEvent.registeredPlayers.filter(
-          (id) => id !== playerId
+          (id) => id !== playerId,
         );
         await updateDoc(doc(db, "events", selectedEvent.id), {
           registeredPlayers: updatedPlayers,
@@ -635,7 +635,7 @@ export default function EventsPage() {
         });
       } else if (isInReserve) {
         const updatedReserves = (selectedEvent.reservePlayers || []).filter(
-          (id) => id !== playerId
+          (id) => id !== playerId,
         );
         await updateDoc(doc(db, "events", selectedEvent.id), {
           reservePlayers: updatedReserves,
@@ -661,7 +661,7 @@ export default function EventsPage() {
     setSelectedPlayers((prev) =>
       prev.includes(playerId)
         ? prev.filter((id) => id !== playerId)
-        : [...prev, playerId]
+        : [...prev, playerId],
     );
   };
 
@@ -713,9 +713,9 @@ export default function EventsPage() {
 
           const role = window.prompt(
             `${player.name} voi pelata useammalla paikalla: ${roles.join(
-              ", "
+              ", ",
             )}.\n\nValitse rooli tälle tapahtumalle:`,
-            "MV"
+            "MV",
           );
 
           if (!role || !roles.includes(role.toUpperCase())) {
@@ -762,8 +762,23 @@ export default function EventsPage() {
         const shouldBeReserve =
           !isTeamMember && hoursUntilEvent > guestRegistrationHours;
 
-        if (shouldBeReserve || isEventFull) {
+        if (shouldBeReserve) {
+          // Show confirmation for guest threshold redirect
+          const confirmed = window.confirm(
+            `${player.name} ei ole vakiokävijä. Vakiokävijöillä on vielä etuoikeus tapahtumaan.\n\nHaluatko lisätä pelaajan varalle?`,
+          );
+          if (!confirmed) {
+            continue; // Skip this player
+          }
           // Add to reserve list
+          await updateDoc(doc(db, "events", selectedEvent.id), {
+            reservePlayers: arrayUnion(playerId),
+            ...(selectedRole && {
+              [`playerRoles.${playerId}`]: selectedRole,
+            }),
+          });
+        } else if (isEventFull) {
+          // Add to reserve list (event is full)
           await updateDoc(doc(db, "events", selectedEvent.id), {
             reservePlayers: arrayUnion(playerId),
             ...(selectedRole && {
@@ -1033,7 +1048,7 @@ export default function EventsPage() {
           columns: {
             columnVisibilityModel: visibleColumns.reduce(
               (acc, field) => ({ ...acc, [field]: true }),
-              {}
+              {},
             ),
           },
         }}
@@ -1336,7 +1351,7 @@ export default function EventsPage() {
                         <List dense>
                           {team.players.map((player) => {
                             const playerUser = users.find(
-                              (u) => u.id === player.id
+                              (u) => u.id === player.id,
                             );
                             // Check if player is a goalkeeper from their positions
                             const isGoalkeeper =
@@ -1656,7 +1671,7 @@ export default function EventsPage() {
               .filter(
                 (user) =>
                   selectedEvent?.teamId &&
-                  user.teamIds?.includes(selectedEvent.teamId)
+                  user.teamIds?.includes(selectedEvent.teamId),
               )
               .sort((a, b) => {
                 // Sort: Already in event first, then vakiokävijät, then guests, all by last name
@@ -1695,7 +1710,7 @@ export default function EventsPage() {
                 const isInRegistered =
                   selectedEvent?.registeredPlayers?.includes(user.id);
                 const isInReserve = selectedEvent?.reservePlayers?.includes(
-                  user.id
+                  user.id,
                 );
 
                 return (
@@ -1711,17 +1726,17 @@ export default function EventsPage() {
                       border: isInEvent
                         ? "2px solid #4caf50"
                         : isSelected
-                        ? "2px solid #2196f3"
-                        : isTeamMember
-                        ? "2px solid #e0e0e0"
-                        : "2px solid #ff9800",
+                          ? "2px solid #2196f3"
+                          : isTeamMember
+                            ? "2px solid #e0e0e0"
+                            : "2px solid #ff9800",
                       backgroundColor: isInEvent
                         ? "#e8f5e9"
                         : isSelected
-                        ? "#e3f2fd"
-                        : isTeamMember
-                        ? "#fff"
-                        : "#fff3e0",
+                          ? "#e3f2fd"
+                          : isTeamMember
+                            ? "#fff"
+                            : "#fff3e0",
                       opacity: isInEvent ? 0.8 : 1,
                       "&:hover": isInEvent
                         ? {}
@@ -1731,8 +1746,8 @@ export default function EventsPage() {
                             borderColor: isSelected
                               ? "#1976d2"
                               : isTeamMember
-                              ? "#1976d2"
-                              : "#f57c00",
+                                ? "#1976d2"
+                                : "#f57c00",
                           },
                     }}
                     elevation={isInEvent ? 2 : isSelected ? 3 : 1}
@@ -1760,8 +1775,8 @@ export default function EventsPage() {
                               isInRegistered
                                 ? "Tapahtumassa"
                                 : isInReserve
-                                ? "Varalla"
-                                : "Tapahtumassa"
+                                  ? "Varalla"
+                                  : "Tapahtumassa"
                             }
                             size="small"
                             color="success"
@@ -1791,8 +1806,8 @@ export default function EventsPage() {
                             pos === "MV"
                               ? "warning"
                               : pos === "H"
-                              ? "primary"
-                              : "error";
+                                ? "primary"
+                                : "error";
                           return (
                             <Chip
                               key={pos}

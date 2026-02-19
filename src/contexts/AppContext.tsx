@@ -31,7 +31,7 @@ interface AppProviderProps {
 export function getUserTeams(
   user: { email: string; id?: string } | null | undefined,
   teams: Team[],
-  players: Player[] = []
+  players: Player[] = [],
 ): Team[] {
   if (!user || !user.email) return [];
   const email = user.email;
@@ -46,12 +46,12 @@ export function getUserTeams(
       // Check if user is admin by email
       team.adminId === email ||
       // Check if user's player record has this team ID
-      playerTeamIds.includes(team.id)
+      playerTeamIds.includes(team.id),
   );
 
   console.log(
     `getUserTeams: Käyttäjä ${email} (ID: ${userId}) kuuluu ${userTeams.length} joukkueeseen:`,
-    userTeams.map((t) => t.name)
+    userTeams.map((t) => t.name),
   );
   console.log(`getUserTeams: Pelaajan teamIds:`, playerTeamIds);
   return userTeams;
@@ -60,7 +60,7 @@ export function getUserTeams(
 // Palauttaa vain ne joukkueet joissa käyttäjä on admin
 export function getUserAdminTeams(
   user: { uid: string; isMasterAdmin?: boolean } | null | undefined,
-  teams: Team[]
+  teams: Team[],
 ): Team[] {
   if (!user?.uid) return [];
 
@@ -69,12 +69,12 @@ export function getUserAdminTeams(
 
   // Palauta vain joukkueet joissa käyttäjä on admin
   const adminTeams = teams.filter(
-    (team) => team.adminIds?.includes(user.uid) || team.adminId === user.uid
+    (team) => team.adminIds?.includes(user.uid) || team.adminId === user.uid,
   );
 
   console.log(
     `getUserAdminTeams: Käyttäjä ${user.uid} on admin ${adminTeams.length} joukkueessa:`,
-    adminTeams.map((t) => t.name)
+    adminTeams.map((t) => t.name),
   );
   return adminTeams;
 }
@@ -82,7 +82,7 @@ export function getUserAdminTeams(
 // Tarkistaa onko käyttäjä ainoa admin jossain joukkueessa
 export function isUserSoleAdminInAnyTeam(
   user: { uid: string; isMasterAdmin?: boolean } | null | undefined,
-  teams: Team[]
+  teams: Team[],
 ): boolean {
   if (!user?.uid) return false;
 
@@ -106,7 +106,7 @@ export function isUserSoleAdminInAnyTeam(
     // Jos käyttäjä on ainoa admin tässä joukkueessa
     if (adminCount === 1) {
       console.log(
-        `isUserSoleAdminInAnyTeam: Käyttäjä ${user.uid} on ainoa admin joukkueessa ${team.name}`
+        `isUserSoleAdminInAnyTeam: Käyttäjä ${user.uid} on ainoa admin joukkueessa ${team.name}`,
       );
       return true;
     }
@@ -124,7 +124,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
   const [events, setEvents] = useState<Event[]>([]);
   const [teamPlayers, setTeamPlayers] = useState<TeamPlayer[]>([]);
   const [selectedTeamClub, setSelectedTeamClub] = useState<TeamClub | null>(
-    null
+    null,
   );
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -203,14 +203,14 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
           });
           setPlayers(playersData);
           console.log(
-            `AppContext: Loaded ${playersData.length} players from users collection`
+            `AppContext: Loaded ${playersData.length} players from users collection`,
           );
           console.log("AppContext: Current user:", user?.id, user?.email);
         },
         (error) => {
           console.error("Error fetching players from users:", error);
           setError("Failed to load players");
-        }
+        },
       );
       unsubscribes.push(unsubscribeUsers);
 
@@ -263,13 +263,13 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
               name: t.name,
               adminId: t.adminId,
               adminIds: t.adminIds,
-            }))
+            })),
           );
         },
         (error) => {
           console.error("Error fetching teams:", error);
           setError("Failed to load teams");
-        }
+        },
       );
       unsubscribes.push(unsubscribeTeams);
 
@@ -300,7 +300,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 data.players ||
                 [],
               reservePlayers: data.reservePlayers || [],
-              teams: data.teams || [],
+              absentPlayers: data.absentPlayers || [],
+              absentReasons: data.absentReasons || {},
               teamId: data.teamId, // Korjattu: käytetään data.teamId eikä data.teamClubId
               createdBy: data.createdBy,
               createdAt: data.createdAt?.toDate
@@ -326,20 +327,20 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 title: e.title,
                 hasGeneratedTeams: !!e.generatedTeams,
                 teamsCount: e.generatedTeams?.teams?.length || 0,
-              }))
+              })),
           );
         },
         (error) => {
           console.error("Error fetching events:", error);
           setError("Failed to load events");
-        }
+        },
       );
       unsubscribes.push(unsubscribeEvents);
 
       // Listen to team players collection
       const teamPlayersQuery = query(
         collection(db, "teamPlayers"),
-        orderBy("joinedAt", "desc")
+        orderBy("joinedAt", "desc"),
       );
       const unsubscribeTeamPlayers = onSnapshot(
         teamPlayersQuery,
@@ -365,13 +366,13 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
           });
           setTeamPlayers(teamPlayersData);
           console.log(
-            `AppContext: Loaded ${teamPlayersData.length} team players relationships`
+            `AppContext: Loaded ${teamPlayersData.length} team players relationships`,
           );
         },
         (error) => {
           console.error("Error fetching team players:", error);
           setError("Failed to load team players");
-        }
+        },
       );
       unsubscribes.push(unsubscribeTeamPlayers);
 

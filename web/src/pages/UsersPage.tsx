@@ -73,7 +73,7 @@ export default function UsersPage() {
   useEffect(() => {
     localStorage.setItem(
       "usersPage-visibleColumns",
-      JSON.stringify(visibleColumns)
+      JSON.stringify(visibleColumns),
     );
   }, [visibleColumns]);
 
@@ -110,7 +110,7 @@ export default function UsersPage() {
 
   const [error, setError] = useState("");
 
-  const loadTeams = async () => {
+  const loadTeams = async (setDefaultTeam: boolean = false) => {
     try {
       const teamsSnapshot = await getDocs(collection(db, "teams"));
       const teamsData = teamsSnapshot.docs.map((doc) => ({
@@ -119,10 +119,12 @@ export default function UsersPage() {
       })) as Team[];
       setTeams(teamsData);
 
-      // Set HC KeLo as default if it exists
-      const hcKelo = teamsData.find((team) => team.name === "HC KeLo");
-      if (hcKelo) {
-        setSelectedTeam(hcKelo.id);
+      // Set HC KeLo as default only on initial load
+      if (setDefaultTeam) {
+        const hcKelo = teamsData.find((team) => team.name === "HC KeLo");
+        if (hcKelo) {
+          setSelectedTeam(hcKelo.id);
+        }
       }
     } catch (error) {
       console.error("Error loading teams:", error);
@@ -155,7 +157,7 @@ export default function UsersPage() {
   };
 
   useEffect(() => {
-    loadTeams();
+    loadTeams(true); // Set default team on initial load
     loadUsers();
   }, []);
 
@@ -164,7 +166,7 @@ export default function UsersPage() {
       setUsers(allUsers);
     } else {
       const filtered = allUsers.filter((user) =>
-        user.teamIds?.includes(selectedTeam)
+        user.teamIds?.includes(selectedTeam),
       );
 
       // Sort by last name (Finnish alphabetical order)
@@ -240,7 +242,7 @@ export default function UsersPage() {
             if (currentAdminIds.includes(selectedUser.id)) {
               await updateDoc(teamRef, {
                 adminIds: currentAdminIds.filter(
-                  (id: string) => id !== selectedUser.id
+                  (id: string) => id !== selectedUser.id,
                 ),
               });
             }
@@ -250,7 +252,7 @@ export default function UsersPage() {
 
       // Also remove from teams the user no longer belongs to
       const removedTeamIds = (selectedUser.teamIds || []).filter(
-        (id) => !editForm.teamIds.includes(id)
+        (id) => !editForm.teamIds.includes(id),
       );
       for (const teamId of removedTeamIds) {
         const teamRef = doc(db, "teams", teamId);
@@ -263,7 +265,7 @@ export default function UsersPage() {
           if (currentAdminIds.includes(selectedUser.id)) {
             await updateDoc(teamRef, {
               adminIds: currentAdminIds.filter(
-                (id: string) => id !== selectedUser.id
+                (id: string) => id !== selectedUser.id,
               ),
             });
           }
@@ -315,7 +317,7 @@ export default function UsersPage() {
 
       // Build teamSkills object - save only relevant position data
       const hasFieldPosition = addForm.positions.some(
-        (p) => p === "H" || p === "P"
+        (p) => p === "H" || p === "P",
       );
       const hasGoalkeeperPosition = addForm.positions.includes("MV");
 
@@ -350,8 +352,8 @@ export default function UsersPage() {
       const position = addForm.positions.includes("MV")
         ? "MV"
         : addForm.positions.includes("P")
-        ? "P"
-        : "H";
+          ? "P"
+          : "H";
 
       const playerData = {
         name: addForm.name.trim(),
@@ -668,7 +670,7 @@ export default function UsersPage() {
                   .filter(Boolean)
               : columns
             ).filter((col) =>
-              visibleColumns.includes(col!.field)
+              visibleColumns.includes(col!.field),
             ) as GridColDef[]
           }
           loading={loading}
@@ -807,10 +809,10 @@ export default function UsersPage() {
                         setAddForm({
                           ...addForm,
                           teamIds: addForm.teamIds.filter(
-                            (id) => id !== team.id
+                            (id) => id !== team.id,
                           ),
                           teamAdminIds: addForm.teamAdminIds.filter(
-                            (id) => id !== team.id
+                            (id) => id !== team.id,
                           ),
                         });
                       }
@@ -875,7 +877,7 @@ export default function UsersPage() {
                           setAddForm({
                             ...addForm,
                             positions: addForm.positions.filter(
-                              (p) => p !== position
+                              (p) => p !== position,
                             ),
                           });
                         }
@@ -1084,10 +1086,10 @@ export default function UsersPage() {
                               setEditForm({
                                 ...editForm,
                                 teamIds: editForm.teamIds.filter(
-                                  (id) => id !== team.id
+                                  (id) => id !== team.id,
                                 ),
                                 teamAdminIds: editForm.teamAdminIds.filter(
-                                  (id) => id !== team.id
+                                  (id) => id !== team.id,
                                 ),
                                 teamMember: newTeamMember,
                               });
@@ -1160,10 +1162,10 @@ export default function UsersPage() {
                               setEditForm({
                                 ...editForm,
                                 teamIds: editForm.teamIds.filter(
-                                  (id) => id !== selectedTeam
+                                  (id) => id !== selectedTeam,
                                 ),
                                 teamAdminIds: editForm.teamAdminIds.filter(
-                                  (id) => id !== selectedTeam
+                                  (id) => id !== selectedTeam,
                                 ),
                                 teamMember: {
                                   ...editForm.teamMember,
@@ -1212,7 +1214,7 @@ export default function UsersPage() {
                               setEditForm({
                                 ...editForm,
                                 teamAdminIds: editForm.teamAdminIds.filter(
-                                  (id) => id !== selectedTeam
+                                  (id) => id !== selectedTeam,
                                 ),
                               });
                             }
@@ -1272,7 +1274,7 @@ export default function UsersPage() {
                           setEditForm({
                             ...editForm,
                             positions: editForm.positions.filter(
-                              (p) => p !== position
+                              (p) => p !== position,
                             ),
                           });
                         }

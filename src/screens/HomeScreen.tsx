@@ -10,6 +10,7 @@ import {
   Modal,
   Image,
   TextInput,
+  Platform,
 } from "react-native";
 import {
   collection,
@@ -25,6 +26,7 @@ import {
   getDoc,
   addDoc,
   deleteDoc,
+  deleteField,
 } from "firebase/firestore";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -43,10 +45,12 @@ const HomeScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [isRegistered, setIsRegistered] = useState(false);
   const [isReserve, setIsReserve] = useState(false);
+  const [isAbsent, setIsAbsent] = useState(false);
   const [registrationLoading, setRegistrationLoading] = useState(false);
   const [registeredPlayers, setRegisteredPlayers] = useState<Player[]>([]);
   const [imageError, setImageError] = useState(false);
   const [reservePlayers, setReservePlayers] = useState<Player[]>([]);
+  const [absentPlayers, setAbsentPlayers] = useState<Player[]>([]);
   const [isTeamModalVisible, setIsTeamModalVisible] = useState(false);
   const [isPlayersModalVisible, setIsPlayersModalVisible] = useState(false);
   const [isMessageModalVisible, setIsMessageModalVisible] = useState(false);
@@ -57,6 +61,9 @@ const HomeScreen: React.FC = () => {
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [isRoleSelectionModalVisible, setIsRoleSelectionModalVisible] =
     useState(false);
+  const [isAbsentReasonModalVisible, setIsAbsentReasonModalVisible] =
+    useState(false);
+  const [absentReasonText, setAbsentReasonText] = useState("");
   const [pendingRegistrationEventId, setPendingRegistrationEventId] = useState<
     string | null
   >(null);
@@ -66,17 +73,20 @@ const HomeScreen: React.FC = () => {
 
   // Helper function to get registration status for current user
   const getRegistrationStatus = (
-    event: Event
-  ): "registered" | "reserve" | "not-registered" => {
+    event: Event,
+  ): "registered" | "reserve" | "absent" | "not-registered" => {
     if (!currentPlayer?.id) return "not-registered";
 
     const registeredPlayers = event.registeredPlayers || [];
     const reservePlayers = event.reservePlayers || [];
+    const absentPlayers = event.absentPlayers || [];
 
     if (registeredPlayers.includes(currentPlayer.id)) {
       return "registered";
     } else if (reservePlayers.includes(currentPlayer.id)) {
       return "reserve";
+    } else if (absentPlayers.includes(currentPlayer.id)) {
+      return "absent";
     }
     return "not-registered";
   };
@@ -117,7 +127,7 @@ const HomeScreen: React.FC = () => {
       // Count as goalkeeper ONLY if they ONLY have MV position (no field positions)
       const hasMV = player.positions.includes("MV");
       const hasFieldPosition = player.positions.some((pos) =>
-        ["H", "P", "H/P"].includes(pos)
+        ["H", "P", "H/P"].includes(pos),
       );
       return hasMV && !hasFieldPosition;
     });
@@ -141,8 +151,12 @@ const HomeScreen: React.FC = () => {
     if (!player || !player.positions || player.positions.length === 0) {
       return false;
     }
-    // Player needs role selection only if they have MV as one of their positions
-    return player.positions.includes("MV");
+    // Player needs role selection only if they have BOTH MV AND field position (H or P)
+    const hasMV = player.positions.includes("MV");
+    const hasFieldPosition = player.positions.some((p: string) =>
+      ["H", "P"].includes(p),
+    );
+    return hasMV && hasFieldPosition;
   };
 
   // Hae nykyinen pelaaja käyttäjän sähköpostilla
@@ -154,7 +168,7 @@ const HomeScreen: React.FC = () => {
   // Filtteröi joukkueet joissa nykyinen käyttäjä on mukana (sähköpostilla)
   const userTeams = useMemo(
     () => getUserTeams(user, teams, players),
-    [user, teams, players]
+    [user, teams, players],
   );
 
   const getSelectedTeamName = () => {
@@ -169,7 +183,7 @@ const HomeScreen: React.FC = () => {
     console.log("HomeScreen: events count:", events.length);
     console.log(
       "HomeScreen: userTeams:",
-      userTeams.map((t) => ({ id: t.id, name: t.name }))
+      userTeams.map((t) => ({ id: t.id, name: t.name })),
     );
     console.log("HomeScreen: selectedTeamId:", selectedTeamId);
 
@@ -179,11 +193,11 @@ const HomeScreen: React.FC = () => {
     // Jos käyttäjä on valinnut tietyn joukkueen, näytä sen tapahtumat
     if (selectedTeamId) {
       filteredEvents = events.filter(
-        (event) => event.teamId === selectedTeamId
+        (event) => event.teamId === selectedTeamId,
       );
       console.log(
         "HomeScreen: filtered by selectedTeamId, count:",
-        filteredEvents.length
+        filteredEvents.length,
       );
     } else {
       // Jos joukkuetta ei ole valittu, näytä vain niiden joukkueiden tapahtumat joissa käyttäjä on jäsenenä
@@ -191,11 +205,11 @@ const HomeScreen: React.FC = () => {
         const userTeamIds = userTeams.map((team) => team.id);
         console.log("HomeScreen: userTeamIds:", userTeamIds);
         filteredEvents = events.filter(
-          (event) => event.teamId && userTeamIds.includes(event.teamId)
+          (event) => event.teamId && userTeamIds.includes(event.teamId),
         );
         console.log(
           "HomeScreen: filtered by user teams, count:",
-          filteredEvents.length
+          filteredEvents.length,
         );
         if (filteredEvents.length > 0) {
           console.log(
@@ -204,7 +218,7 @@ const HomeScreen: React.FC = () => {
               id: e.id,
               teamId: e.teamId,
               title: e.title,
-            }))
+            })),
           );
         }
       } else {
@@ -223,7 +237,7 @@ const HomeScreen: React.FC = () => {
       "HomeScreen: nextEvent result:",
       result
         ? { id: result.id, teamId: result.teamId, title: result.title }
-        : null
+        : null,
     );
     return result;
   }, [events, selectedTeamId, userTeams]);
@@ -239,20 +253,20 @@ const HomeScreen: React.FC = () => {
           name: p.name,
           email: p.email,
           playerId: p.playerId,
-        }))
+        })),
       );
       console.log(
         "HomeScreen: nextEvent.registeredPlayers:",
-        nextEvent.registeredPlayers
+        nextEvent.registeredPlayers,
       );
       console.log(
         "HomeScreen: nextEvent.reservePlayers:",
-        nextEvent.reservePlayers
+        nextEvent.reservePlayers,
       );
       console.log("HomeScreen: currentPlayer.id:", currentPlayer.id);
       console.log(
         "HomeScreen: currentPlayer.playerId:",
-        currentPlayer.playerId
+        currentPlayer.playerId,
       );
       console.log("HomeScreen: currentPlayer.email:", currentPlayer.email);
 
@@ -264,7 +278,7 @@ const HomeScreen: React.FC = () => {
           nextEvent.registeredPlayers?.includes(currentPlayer.id) ||
           nextEvent.registeredPlayers?.includes(currentPlayer.playerId) ||
           nextEvent.registeredPlayers?.includes(currentPlayer.email) ||
-          false
+          false,
       );
       setIsReserve(
         (userIdForCheck &&
@@ -272,7 +286,14 @@ const HomeScreen: React.FC = () => {
           nextEvent.reservePlayers?.includes(currentPlayer.id) ||
           nextEvent.reservePlayers?.includes(currentPlayer.playerId) ||
           nextEvent.reservePlayers?.includes(currentPlayer.email) ||
-          false
+          false,
+      );
+      setIsAbsent(
+        (userIdForCheck && nextEvent.absentPlayers?.includes(userIdForCheck)) ||
+          nextEvent.absentPlayers?.includes(currentPlayer.id) ||
+          nextEvent.absentPlayers?.includes(currentPlayer.playerId) ||
+          nextEvent.absentPlayers?.includes(currentPlayer.email) ||
+          false,
       );
 
       // Helper function to find player by various IDs and enrich with legacy data
@@ -282,7 +303,9 @@ const HomeScreen: React.FC = () => {
         // Etsi pelaaja ensisijaisesti ID:n perusteella
         let foundPlayer = players.find(
           (p) =>
-            p.id === searchId || p.playerId === searchId || p.email === searchId
+            p.id === searchId ||
+            p.playerId === searchId ||
+            p.email === searchId,
         );
 
         // Jos löytyi Firebase Auth dokumentti mutta siinä ei ole nimeä, etsi legacy dokumentti
@@ -291,7 +314,7 @@ const HomeScreen: React.FC = () => {
             (p) =>
               p.email === foundPlayer!.email &&
               p.name &&
-              p.name !== foundPlayer!.name
+              p.name !== foundPlayer!.name,
           );
 
           if (legacyPlayer) {
@@ -319,7 +342,7 @@ const HomeScreen: React.FC = () => {
                 email: foundPlayer.email,
                 playerId: foundPlayer.playerId,
               }
-            : "NOT FOUND"
+            : "NOT FOUND",
         );
         return foundPlayer;
       };
@@ -327,7 +350,7 @@ const HomeScreen: React.FC = () => {
       // Update registered players list
       console.log(
         "HomeScreen: nextEvent.registeredPlayers:",
-        nextEvent.registeredPlayers
+        nextEvent.registeredPlayers,
       );
       const registeredPlayerData = (nextEvent.registeredPlayers || [])
         .map((playerId) => findPlayerByAnyId(playerId))
@@ -337,12 +360,18 @@ const HomeScreen: React.FC = () => {
       // Update reserve players list
       console.log(
         "HomeScreen: nextEvent.reservePlayers:",
-        nextEvent.reservePlayers
+        nextEvent.reservePlayers,
       );
       const reservePlayerData = (nextEvent.reservePlayers || [])
         .map((playerId) => findPlayerByAnyId(playerId))
         .filter(Boolean) as any[];
       setReservePlayers(reservePlayerData);
+
+      // Update absent players list
+      const absentPlayerData = (nextEvent.absentPlayers || [])
+        .map((playerId) => findPlayerByAnyId(playerId))
+        .filter(Boolean) as any[];
+      setAbsentPlayers(absentPlayerData);
 
       console.log(
         "HomeScreen: registeredPlayerData:",
@@ -351,7 +380,7 @@ const HomeScreen: React.FC = () => {
           name: p.name,
           email: p.email,
           playerId: p.playerId,
-        }))
+        })),
       );
       console.log(
         "HomeScreen: reservePlayerData:",
@@ -360,13 +389,15 @@ const HomeScreen: React.FC = () => {
           name: p.name,
           email: p.email,
           playerId: p.playerId,
-        }))
+        })),
       );
     } else {
       setIsRegistered(false);
       setIsReserve(false);
+      setIsAbsent(false);
       setRegisteredPlayers([]);
       setReservePlayers([]);
+      setAbsentPlayers([]);
     }
     setLoading(false);
   }, [nextEvent, currentPlayer, players]);
@@ -381,7 +412,7 @@ const HomeScreen: React.FC = () => {
     setMessagesLoading(true);
     const messagesQuery = query(
       collection(db, "messages"),
-      where("eventId", "==", nextEvent.id)
+      where("eventId", "==", nextEvent.id),
     );
 
     const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
@@ -405,7 +436,7 @@ const HomeScreen: React.FC = () => {
 
       // Sort messages by creation date (newest first) on the client side
       messagesData.sort(
-        (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+        (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
       );
 
       setMessages(messagesData);
@@ -432,7 +463,7 @@ const HomeScreen: React.FC = () => {
       console.log(
         `[HomeScreen Promo] 📅 ${nextEvent.title}\n` +
           `  Threshold: ${guestRegistrationHours}h\n` +
-          `  Aikaa: ${hoursUntilEvent.toFixed(2)}h`
+          `  Aikaa: ${hoursUntilEvent.toFixed(2)}h`,
       );
 
       // Tarkista vain jos threshold täyttyy
@@ -460,7 +491,7 @@ const HomeScreen: React.FC = () => {
             // Skip if player is already registered
             if (registered.includes(reserveId)) {
               console.log(
-                `[HomeScreen Promo] ⏭️ ${reservePlayer.name} on jo ilmoittautunut, ohitetaan`
+                `[HomeScreen Promo] ⏭️ ${reservePlayer.name} on jo ilmoittautunut, ohitetaan`,
               );
               continue;
             }
@@ -479,7 +510,7 @@ const HomeScreen: React.FC = () => {
                   reservePlayers: arrayRemove(reserveId),
                 });
                 console.log(
-                  `[HomeScreen Promo] ✅ Siirretty ${reservePlayer.name}`
+                  `[HomeScreen Promo] ✅ Siirretty ${reservePlayer.name}`,
                 );
                 // Push notification is sent automatically by Cloud Function
 
@@ -508,7 +539,7 @@ const HomeScreen: React.FC = () => {
     if (eventDate < now && !isAdmin) {
       Alert.alert(
         "Tapahtuma on mennyt",
-        "Et voi enää muokata ilmoittautumista menneeseen tapahtumaan. Ota yhteyttä adminiin jos tarvitset muutoksia."
+        "Et voi enää muokata ilmoittautumista menneeseen tapahtumaan. Ota yhteyttä adminiin jos tarvitset muutoksia.",
       );
       return;
     }
@@ -549,7 +580,7 @@ const HomeScreen: React.FC = () => {
                 isTeamMember,
                 hasTeamMemberField: !!userData.teamMember,
                 allTeamMemberData: userData.teamMember,
-              }
+              },
             );
           } else {
             console.log("⚠️ User document not found:", playerIdToUse);
@@ -624,7 +655,7 @@ const HomeScreen: React.FC = () => {
             });
 
             const promotedPlayer = players.find(
-              (p) => p.id === suitableReserve
+              (p) => p.id === suitableReserve,
             );
 
             // NOTE: Local notification cannot be sent to other users
@@ -635,7 +666,7 @@ const HomeScreen: React.FC = () => {
               "Ilmoittautuminen peruttu",
               `Paikkasi otettiin varalla ilmoittautuneelta pelaajalta: ${
                 promotedPlayer?.name || "Tuntematon"
-              }`
+              }`,
             );
           } else {
             Alert.alert("Onnistui", "Ilmoittautuminen peruttu");
@@ -653,6 +684,14 @@ const HomeScreen: React.FC = () => {
         setIsReserve(false);
         Alert.alert("Onnistui", "Varalla-ilmoittautuminen peruttu");
       } else {
+        // If currently marked as absent, remove absent status first
+        if (isAbsent) {
+          await updateDoc(eventRef, {
+            absentPlayers: arrayRemove(playerIdToUse),
+          });
+          setIsAbsent(false);
+        }
+
         // Check if event is full based on player position
         const eventDoc = await getDoc(eventRef);
         const eventData = eventDoc.data();
@@ -667,11 +706,11 @@ const HomeScreen: React.FC = () => {
 
         const currentFieldPlayers = getFieldPlayers(
           currentRegistered,
-          eventWithRoles
+          eventWithRoles,
         );
         const currentGoalkeepers = getGoalkeepers(
           currentRegistered,
-          eventWithRoles
+          eventWithRoles,
         );
 
         const isGoalkeeper = currentPlayer.positions.includes("MV");
@@ -698,7 +737,7 @@ const HomeScreen: React.FC = () => {
         ) {
           // Guest trying to register too early - redirect to waitlist
           console.log(
-            "❌ Blocking guest registration - redirecting to waitlist"
+            "❌ Blocking guest registration - redirecting to waitlist",
           );
           Alert.alert(
             "Vakiokävijöillä etuoikeus",
@@ -732,7 +771,7 @@ const HomeScreen: React.FC = () => {
                       } catch (error) {
                         console.error(
                           `Error fetching teamMember status for ${playerId}:`,
-                          error
+                          error,
                         );
                         teamMemberStatus[playerId] = false;
                       }
@@ -769,12 +808,12 @@ const HomeScreen: React.FC = () => {
                     console.error("Error registering as reserve:", error);
                     Alert.alert(
                       "Virhe",
-                      "Varalla-ilmoittautuminen epäonnistui"
+                      "Varalla-ilmoittautuminen epäonnistui",
                     );
                   }
                 },
               },
-            ]
+            ],
           );
         } else if (isEventFull) {
           // Event is full - offer reserve position
@@ -809,7 +848,7 @@ const HomeScreen: React.FC = () => {
                         } catch (error) {
                           console.error(
                             `Error fetching teamMember status for ${playerId}:`,
-                            error
+                            error,
                           );
                           teamMemberStatus[playerId] = false;
                         }
@@ -853,12 +892,12 @@ const HomeScreen: React.FC = () => {
                     console.error("Error registering as reserve:", error);
                     Alert.alert(
                       "Virhe",
-                      "Varalla-ilmoittautuminen epäonnistui"
+                      "Varalla-ilmoittautuminen epäonnistui",
                     );
                   }
                 },
               },
-            ]
+            ],
           );
         } else if (
           isEventFull &&
@@ -891,7 +930,7 @@ const HomeScreen: React.FC = () => {
             } catch (error) {
               console.error(
                 `Error checking guest status for ${playerId}:`,
-                error
+                error,
               );
             }
           }
@@ -930,7 +969,7 @@ const HomeScreen: React.FC = () => {
                         "Onnistui",
                         `Ilmoittautuminen tallennettu. ${
                           bumpedPlayer?.name || "Vieras"
-                        } siirrettiin varalistalle.`
+                        } siirrettiin varalistalle.`,
                       );
                     } catch (error) {
                       console.error("Error bumping guest:", error);
@@ -938,7 +977,7 @@ const HomeScreen: React.FC = () => {
                     }
                   },
                 },
-              ]
+              ],
             );
           } else {
             // No guests to bump - team member goes to reserve (all are team members)
@@ -965,12 +1004,12 @@ const HomeScreen: React.FC = () => {
                       console.error("Error registering as reserve:", error);
                       Alert.alert(
                         "Virhe",
-                        "Varamies-ilmoittautuminen epäonnistui"
+                        "Varamies-ilmoittautuminen epäonnistui",
                       );
                     }
                   },
                 },
-              ]
+              ],
             );
           }
           setRegistrationLoading(false);
@@ -1000,7 +1039,7 @@ const HomeScreen: React.FC = () => {
           });
           Alert.alert(
             "Virhe",
-            "Odottamaton tilanne ilmoittautumisessa. Yritä uudelleen."
+            "Odottamaton tilanne ilmoittautumisessa. Yritä uudelleen.",
           );
         }
       }
@@ -1060,6 +1099,76 @@ const HomeScreen: React.FC = () => {
     setTimeout(() => setRefreshing(false), 1000);
   };
 
+  const handleAbsentRegistration = async () => {
+    if (!nextEvent || !currentPlayer) return;
+
+    if (new Date(nextEvent.date) < new Date() && !isAdmin) {
+      Alert.alert(
+        "Tapahtuma on mennyt",
+        "Et voi enää muokata ilmoittautumista menneeseen tapahtumaan.",
+      );
+      return;
+    }
+
+    if (isAbsent) {
+      // Cancel absence directly
+      const playerIdToUse =
+        currentPlayer.id || currentPlayer.playerId || currentPlayer.email;
+      if (!playerIdToUse) return;
+
+      setRegistrationLoading(true);
+      try {
+        const eventRef = doc(db, "events", nextEvent.id);
+        await updateDoc(eventRef, {
+          absentPlayers: arrayRemove(playerIdToUse),
+          [`absentReasons.${playerIdToUse}`]: deleteField(),
+        });
+        setIsAbsent(false);
+        Alert.alert("Onnistui", "Poissaolo-ilmoittautuminen peruttu");
+      } catch (error) {
+        console.error("Error canceling absent registration:", error);
+        Alert.alert(
+          "Virhe",
+          "Poissaolo-ilmoittautumisen peruminen epäonnistui",
+        );
+      } finally {
+        setRegistrationLoading(false);
+      }
+    } else {
+      // Open modal to enter reason
+      setAbsentReasonText("");
+      setIsAbsentReasonModalVisible(true);
+    }
+  };
+
+  const handleConfirmAbsent = async () => {
+    if (!nextEvent || !currentPlayer) return;
+
+    const playerIdToUse =
+      currentPlayer.id || currentPlayer.playerId || currentPlayer.email;
+    if (!playerIdToUse) return;
+
+    setRegistrationLoading(true);
+    setIsAbsentReasonModalVisible(false);
+    try {
+      const eventRef = doc(db, "events", nextEvent.id);
+      const updateData: any = {
+        absentPlayers: arrayUnion(playerIdToUse),
+      };
+      if (absentReasonText.trim()) {
+        updateData[`absentReasons.${playerIdToUse}`] = absentReasonText.trim();
+      }
+      await updateDoc(eventRef, updateData);
+      setIsAbsent(true);
+      Alert.alert("Onnistui", "Ilmoittautunut poissaolevaksi");
+    } catch (error) {
+      console.error("Error updating absent registration:", error);
+      Alert.alert("Virhe", "Poissaolo-ilmoittautumisen tallennus epäonnistui");
+    } finally {
+      setRegistrationLoading(false);
+    }
+  };
+
   const formatDate = (date: Date) => {
     return date.toLocaleDateString("fi-FI", {
       weekday: "short",
@@ -1113,7 +1222,7 @@ const HomeScreen: React.FC = () => {
     console.log("================");
     Alert.alert(
       "User Debug",
-      `Role: ${user?.role}\nisAdmin: ${user?.isAdmin}\nCalculated isAdmin: ${isAdmin}`
+      `Role: ${user?.role}\nisAdmin: ${user?.isAdmin}\nCalculated isAdmin: ${isAdmin}`,
     );
   }; // Message handling functions
   const handleEditMessage = () => {
@@ -1199,7 +1308,7 @@ const HomeScreen: React.FC = () => {
     } else {
       Alert.alert(
         "Tulossa pian",
-        `${screen} -toiminto toteutetaan seuraavaksi`
+        `${screen} -toiminto toteutetaan seuraavaksi`,
       );
     }
   };
@@ -1234,10 +1343,10 @@ const HomeScreen: React.FC = () => {
     const eventDay = new Date(
       date.getFullYear(),
       date.getMonth(),
-      date.getDate()
+      date.getDate(),
     );
     const daysDiff = Math.round(
-      (eventDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+      (eventDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
     );
 
     if (daysDiff === 0) {
@@ -1331,28 +1440,41 @@ const HomeScreen: React.FC = () => {
 
             {/* Registration status */}
             {(() => {
-              const status = getRegistrationStatus(nextEvent);
-              const statusConfig =
-                status === "registered"
-                  ? {
-                      icon: "checkmark-circle" as const,
-                      color: "#4CAF50",
-                      text: "Olet ilmoittautunut",
-                    }
-                  : status === "reserve"
+              const statusConfig = isRegistered
+                ? {
+                    icon: "checkmark-circle" as const,
+                    color: "#4CAF50",
+                    bg: "#e8f5e9",
+                    text: "Olet ilmoittautunut",
+                  }
+                : isReserve
                   ? {
                       icon: "time-outline" as const,
                       color: "#ff9800",
+                      bg: "#fff3e0",
                       text: "Olet varasijoilla",
                     }
-                  : {
-                      icon: "ellipse-outline" as const,
-                      color: "#f44336",
-                      text: "Et ole ilmoittautunut",
-                    };
+                  : isAbsent
+                    ? {
+                        icon: "close-circle" as const,
+                        color: "#f44336",
+                        bg: "#ffebee",
+                        text: "Olet ilmoittautunut poissaolevaksi",
+                      }
+                    : {
+                        icon: "ellipse-outline" as const,
+                        color: "#9e9e9e",
+                        bg: "#f5f5f5",
+                        text: "Et ole ilmoittautunut",
+                      };
 
               return (
-                <View style={styles.registrationStatusContainer}>
+                <View
+                  style={[
+                    styles.registrationStatusContainer,
+                    { backgroundColor: statusConfig.bg },
+                  ]}
+                >
                   <Ionicons
                     name={statusConfig.icon}
                     size={18}
@@ -1372,7 +1494,7 @@ const HomeScreen: React.FC = () => {
 
             {(() => {
               const eventTeam = teams.find(
-                (team) => team.id === nextEvent.teamId
+                (team) => team.id === nextEvent.teamId,
               );
               return (
                 <Text
@@ -1426,24 +1548,23 @@ const HomeScreen: React.FC = () => {
                       {
                         getFieldPlayers(
                           nextEvent.registeredPlayers || [],
-                          nextEvent
+                          nextEvent,
                         ).length
                       }{" "}
                       / {nextEvent.maxPlayers} KP
                     </Text>
-                    {nextEvent.maxGoalkeepers &&
-                      nextEvent.maxGoalkeepers > 0 && (
-                        <Text style={{ color: "#4caf50", fontWeight: "500" }}>
-                          {" • "}
-                          {
-                            getGoalkeepers(
-                              nextEvent.registeredPlayers || [],
-                              nextEvent
-                            ).length
-                          }{" "}
-                          / {nextEvent.maxGoalkeepers} MV
-                        </Text>
-                      )}
+                    {(nextEvent.maxGoalkeepers ?? 0) > 0 && (
+                      <Text style={{ color: "#4caf50", fontWeight: "500" }}>
+                        {" • "}
+                        {
+                          getGoalkeepers(
+                            nextEvent.registeredPlayers || [],
+                            nextEvent,
+                          ).length
+                        }{" "}
+                        / {nextEvent.maxGoalkeepers} MV
+                      </Text>
+                    )}
                   </Text>
                   <View style={styles.capacityBar}>
                     <View
@@ -1453,42 +1574,42 @@ const HomeScreen: React.FC = () => {
                           width: `${Math.min(
                             ((getFieldPlayers(
                               nextEvent.registeredPlayers || [],
-                              nextEvent
+                              nextEvent,
                             ).length +
                               getGoalkeepers(
                                 nextEvent.registeredPlayers || [],
-                                nextEvent
+                                nextEvent,
                               ).length) /
                               (nextEvent.maxPlayers +
                                 (nextEvent.maxGoalkeepers || 0))) *
                               100,
-                            100
+                            100,
                           )}%`,
                           backgroundColor:
                             getFieldPlayers(
                               nextEvent.registeredPlayers || [],
-                              nextEvent
+                              nextEvent,
                             ).length +
                               getGoalkeepers(
                                 nextEvent.registeredPlayers || [],
-                                nextEvent
+                                nextEvent,
                               ).length >=
                             nextEvent.maxPlayers +
                               (nextEvent.maxGoalkeepers || 0)
                               ? "#f44336"
                               : (getFieldPlayers(
-                                  nextEvent.registeredPlayers || [],
-                                  nextEvent
-                                ).length +
-                                  getGoalkeepers(
                                     nextEvent.registeredPlayers || [],
-                                    nextEvent
-                                  ).length) /
-                                  (nextEvent.maxPlayers +
-                                    (nextEvent.maxGoalkeepers || 0)) >
-                                0.8
-                              ? "#ff9800"
-                              : "#4caf50",
+                                    nextEvent,
+                                  ).length +
+                                    getGoalkeepers(
+                                      nextEvent.registeredPlayers || [],
+                                      nextEvent,
+                                    ).length) /
+                                    (nextEvent.maxPlayers +
+                                      (nextEvent.maxGoalkeepers || 0)) >
+                                  0.8
+                                ? "#ff9800"
+                                : "#4caf50",
                         },
                       ]}
                     />
@@ -1509,8 +1630,8 @@ const HomeScreen: React.FC = () => {
                 isRegistered
                   ? styles.unregisterButton
                   : isReserve
-                  ? styles.reserveButton
-                  : styles.registerButton,
+                    ? styles.reserveButton
+                    : styles.registerButton,
                 (registrationLoading ||
                   (new Date(nextEvent.date) < new Date() && !isAdmin)) &&
                   styles.disabledButton,
@@ -1526,8 +1647,8 @@ const HomeScreen: React.FC = () => {
                   isRegistered
                     ? "checkmark-circle"
                     : isReserve
-                    ? "time-outline"
-                    : "add-circle"
+                      ? "time-outline"
+                      : "add-circle"
                 }
                 size={20}
                 color="white"
@@ -1537,12 +1658,44 @@ const HomeScreen: React.FC = () => {
                 {registrationLoading
                   ? "Tallennetaan..."
                   : isRegistered
-                  ? "Peru ilmoittautuminen"
-                  : isReserve
-                  ? "Peru ilmoittautuminen"
-                  : "Ilmoittaudu"}
+                    ? "Peru ilmoittautuminen"
+                    : isReserve
+                      ? "Peru ilmoittautuminen"
+                      : "Ilmoittaudu"}
               </Text>
             </TouchableOpacity>
+
+            {/* Absent registration button - only shown when not registered, reserve, or absent */}
+            {!isRegistered && !isReserve && !isAbsent && (
+              <TouchableOpacity
+                style={[
+                  styles.registrationButton,
+                  isAbsent ? styles.cancelAbsentButton : styles.absentButton,
+                  (registrationLoading ||
+                    (new Date(nextEvent.date) < new Date() && !isAdmin)) &&
+                    styles.disabledButton,
+                ]}
+                onPress={handleAbsentRegistration}
+                disabled={
+                  registrationLoading ||
+                  (new Date(nextEvent.date) < new Date() && !isAdmin)
+                }
+              >
+                <Ionicons
+                  name={isAbsent ? "close-circle" : "close-circle-outline"}
+                  size={20}
+                  color="white"
+                  style={styles.buttonIcon}
+                />
+                <Text style={styles.buttonText}>
+                  {registrationLoading
+                    ? "Tallennetaan..."
+                    : isAbsent
+                      ? "Peru poissaoloilmoittautuminen"
+                      : "Ilmoittaudu poissaolevaksi"}
+                </Text>
+              </TouchableOpacity>
+            )}
 
             {/* Reserve players list */}
             {nextEvent.reservePlayers &&
@@ -1577,6 +1730,61 @@ const HomeScreen: React.FC = () => {
                   </View>
                 </View>
               )}
+
+            {/* Absent players list */}
+            {nextEvent.absentPlayers && nextEvent.absentPlayers.length > 0 && (
+              <View style={styles.absentPlayersSection}>
+                <View style={styles.absentPlayersHeader}>
+                  <Ionicons name="close-circle" size={18} color="#f44336" />
+                  <Text style={styles.absentPlayersTitle}>
+                    Poissaolijat ({absentPlayers.length})
+                  </Text>
+                </View>
+                <View style={styles.absentPlayersList}>
+                  {absentPlayers.map((player, index) => {
+                    const reason = nextEvent.absentReasons?.[player.id];
+                    return (
+                      <View
+                        key={player.id}
+                        style={styles.absentPlayersListItem}
+                      >
+                        <View style={styles.absentPlayerNumber}>
+                          <Text style={styles.absentPlayerNumberText}>
+                            {index + 1}
+                          </Text>
+                        </View>
+                        <Text style={styles.absentPlayersListName}>
+                          {player.name}
+                        </Text>
+                        {reason ? (
+                          <TouchableOpacity
+                            onPress={() => {
+                              if (Platform.OS === "web") {
+                                window.alert(
+                                  `${player.name} - poissaolon syy\n\n${reason}`,
+                                );
+                              } else {
+                                Alert.alert(
+                                  `${player.name} - poissaolon syy`,
+                                  reason,
+                                );
+                              }
+                            }}
+                            style={styles.absentReasonIcon}
+                          >
+                            <Ionicons
+                              name="chatbubble-ellipses"
+                              size={18}
+                              color="#f44336"
+                            />
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
 
             {/* Generated teams banner */}
             {nextEvent.generatedTeams &&
@@ -1627,26 +1835,25 @@ const HomeScreen: React.FC = () => {
                             {
                               getFieldPlayers(
                                 nextEvent.registeredPlayers || [],
-                                nextEvent
+                                nextEvent,
                               ).length
                             }{" "}
                             / {nextEvent.maxPlayers} KP
                           </Text>
-                          {nextEvent.maxGoalkeepers &&
-                            nextEvent.maxGoalkeepers > 0 && (
-                              <Text
-                                style={{ color: "#4caf50", fontWeight: "500" }}
-                              >
-                                {" • "}
-                                {
-                                  getGoalkeepers(
-                                    nextEvent.registeredPlayers || [],
-                                    nextEvent
-                                  ).length
-                                }{" "}
-                                / {nextEvent.maxGoalkeepers} MV
-                              </Text>
-                            )}
+                          {(nextEvent.maxGoalkeepers ?? 0) > 0 && (
+                            <Text
+                              style={{ color: "#4caf50", fontWeight: "500" }}
+                            >
+                              {" • "}
+                              {
+                                getGoalkeepers(
+                                  nextEvent.registeredPlayers || [],
+                                  nextEvent,
+                                ).length
+                              }{" "}
+                              / {nextEvent.maxGoalkeepers} MV
+                            </Text>
+                          )}
                           {nextEvent.reservePlayers &&
                             nextEvent.reservePlayers.length > 0 && (
                               <Text style={styles.reserveCount}>
@@ -1703,6 +1910,54 @@ const HomeScreen: React.FC = () => {
           </View>
         )}
       </ScrollView>
+
+      {/* Poissaolon syy modal */}
+      <Modal
+        visible={isAbsentReasonModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setIsAbsentReasonModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.absentReasonModal}>
+            <View style={styles.absentReasonModalHeader}>
+              <Ionicons name="close-circle" size={24} color="#f44336" />
+              <Text style={styles.absentReasonModalTitle}>
+                Ilmoittaudu poissaolevaksi
+              </Text>
+            </View>
+            <Text style={styles.absentReasonModalSubtitle}>
+              Voit halutessasi kertoa syyn poissaolollesi (vapaaehtoinen)
+            </Text>
+            <TextInput
+              style={styles.absentReasonInput}
+              placeholder="Esim. Lomamatka, työkiireet..."
+              placeholderTextColor="#999"
+              value={absentReasonText}
+              onChangeText={setAbsentReasonText}
+              multiline
+              numberOfLines={3}
+              maxLength={200}
+            />
+            <View style={styles.absentReasonModalButtons}>
+              <TouchableOpacity
+                style={styles.absentReasonCancelButton}
+                onPress={() => setIsAbsentReasonModalVisible(false)}
+              >
+                <Text style={styles.absentReasonCancelButtonText}>Peruuta</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.absentReasonConfirmButton}
+                onPress={handleConfirmAbsent}
+              >
+                <Text style={styles.absentReasonConfirmButtonText}>
+                  Ilmoita poissaolo
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Roolin valinta modal */}
       <Modal
@@ -1892,11 +2147,11 @@ const HomeScreen: React.FC = () => {
                             name: p.name,
                             email: p.email,
                             playerId: p.playerId,
-                          }))
+                          })),
                         );
                         return sortPlayersByPosition(
                           registeredPlayers,
-                          nextEvent
+                          nextEvent,
                         ).map((player, index) => {
                           console.log("HomeScreen Modal: rendering player:", {
                             id: player.id,
@@ -1910,7 +2165,8 @@ const HomeScreen: React.FC = () => {
                             playerRole === "MV" ||
                             (!playerRole && player?.positions.includes("MV"));
                           const teamId = nextEvent?.teamId || "";
-                          const isTeamMember = teamId && player?.teamMember?.[teamId] === true;
+                          const isTeamMember =
+                            teamId && player?.teamMember?.[teamId] === true;
                           return (
                             <View
                               key={player.id}
@@ -2026,6 +2282,66 @@ const HomeScreen: React.FC = () => {
                           </View>
                         );
                       })}
+                    </View>
+                  </View>
+                )}
+
+              {nextEvent &&
+                nextEvent.absentPlayers &&
+                nextEvent.absentPlayers.length > 0 && (
+                  <View style={styles.modalPlayersSection}>
+                    <Text
+                      style={[
+                        styles.modalSectionTitle,
+                        styles.modalAbsentTitle,
+                      ]}
+                    >
+                      Poissaolijat ({absentPlayers.length})
+                    </Text>
+
+                    <View style={styles.modalPlayersList}>
+                      {absentPlayers.map((player) => (
+                        <View
+                          key={player.id}
+                          style={[
+                            styles.modalPlayerItem,
+                            styles.modalAbsentItem,
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.modalPlayerIcon,
+                              styles.modalAbsentIcon,
+                            ]}
+                          >
+                            <Ionicons
+                              name="close-circle"
+                              size={16}
+                              color="#f44336"
+                            />
+                          </View>
+                          <View style={styles.modalPlayerInfo}>
+                            <Text
+                              style={[
+                                styles.modalPlayerName,
+                                styles.modalAbsentName,
+                              ]}
+                            >
+                              {player.name}
+                            </Text>
+                            {player.email && (
+                              <Text
+                                style={[
+                                  styles.modalPlayerEmail,
+                                  styles.modalAbsentEmail,
+                                ]}
+                              >
+                                {player.email}
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                      ))}
                     </View>
                   </View>
                 )}
@@ -2824,21 +3140,21 @@ const styles = StyleSheet.create({
   },
   messageItem: {
     backgroundColor: "#f8f9fa",
-    padding: 16,
+    padding: 10,
     borderRadius: 8,
-    marginBottom: 12,
+    marginBottom: 8,
     borderLeftWidth: 3,
     borderLeftColor: "#1976d2",
   },
   messageHeader: {
     flexDirection: "column",
-    marginBottom: 8,
+    marginBottom: 4,
   },
   messageHeaderTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 8,
+    marginBottom: 4,
   },
   deleteButton: {
     padding: 4,
@@ -2847,18 +3163,18 @@ const styles = StyleSheet.create({
   },
   messageContent: {
     backgroundColor: "#f8f9fa",
-    padding: 16,
+    padding: 10,
     borderRadius: 8,
-    margin: 16,
+    margin: 12,
   },
   messageText: {
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: 14,
+    lineHeight: 20,
     color: "#333",
   },
   messageFooter: {
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: 6,
+    paddingTop: 6,
     borderTopWidth: 1,
     borderTopColor: "#e0e0e0",
   },
@@ -3045,6 +3361,144 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
+  },
+  absentButton: {
+    backgroundColor: "#f44336",
+  },
+  cancelAbsentButton: {
+    backgroundColor: "#b71c1c",
+  },
+  absentPlayersSection: {
+    marginTop: 16,
+    backgroundColor: "#ffebee",
+    borderRadius: 8,
+    padding: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: "#f44336",
+  },
+  absentPlayersHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+    gap: 6,
+  },
+  absentPlayersTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#c62828",
+    marginLeft: 6,
+  },
+  absentPlayersList: {
+    gap: 6,
+  },
+  absentPlayersListItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  absentPlayerNumber: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#f44336",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  absentPlayerNumberText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  absentPlayersListName: {
+    fontSize: 14,
+    color: "#333",
+    flex: 1,
+  },
+  modalAbsentTitle: {
+    color: "#f44336",
+  },
+  modalAbsentItem: {
+    backgroundColor: "#fff5f5",
+    borderLeftWidth: 3,
+    borderLeftColor: "#f44336",
+  },
+  modalAbsentIcon: {
+    backgroundColor: "#fff5f5",
+    borderColor: "#f44336",
+    borderWidth: 1.5,
+  },
+  modalAbsentName: {
+    color: "#c62828",
+  },
+  modalAbsentEmail: {
+    color: "#e57373",
+  },
+  absentReasonIcon: {
+    padding: 4,
+  },
+  absentReasonModal: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 24,
+    width: "90%",
+    maxWidth: 400,
+  },
+  absentReasonModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  absentReasonModalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#c62828",
+  },
+  absentReasonModalSubtitle: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 16,
+  },
+  absentReasonInput: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 15,
+    minHeight: 80,
+    textAlignVertical: "top",
+    marginBottom: 16,
+    backgroundColor: "#fafafa",
+  },
+  absentReasonModalButtons: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  absentReasonCancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: "#f5f5f5",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  absentReasonCancelButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#666",
+  },
+  absentReasonConfirmButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: "#f44336",
+    alignItems: "center",
+  },
+  absentReasonConfirmButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "white",
   },
 });
 

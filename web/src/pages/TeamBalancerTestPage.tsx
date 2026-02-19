@@ -36,6 +36,7 @@ import {
   ContentCopy as ContentCopyIcon,
   History as HistoryIcon,
   Upcoming as UpcomingIcon,
+  Save as SaveIcon,
 } from "@mui/icons-material";
 import { db } from "../services/firebase";
 import {
@@ -46,8 +47,10 @@ import {
   orderBy,
   query,
   where,
+  updateDoc,
 } from "firebase/firestore";
-import type { Team } from "../types";
+import type { Team, GeneratedTeamsData } from "../types";
+import { useAuth } from "../contexts/AuthContext";
 // Import types from shared source for TeamBalancer compatibility
 import type { EnrichedPlayer as SharedEnrichedPlayer } from "@shared/types";
 import { TeamBalancer } from "@shared/utils/teamBalancer";
@@ -93,12 +96,29 @@ interface PairInfo {
   wasRandomized?: boolean;
 }
 
+// Saved teams display interface
+interface SavedTeamData {
+  name: string;
+  players: Array<{
+    id: string;
+    name: string;
+    position: string;
+    category: number;
+    multiplier: number;
+    points: number;
+  }>;
+  totalPoints: number;
+  color: string;
+}
+
 export default function TeamBalancerTestPage() {
+  const { user } = useAuth();
   const [teams, setTeams] = useState<Team[]>([]);
   const [events, setEvents] = useState<EventData[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [selectedEventId, setSelectedEventId] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [generationSteps, setGenerationSteps] = useState<TeamGenerationStep[]>(
     [],
   );
@@ -106,6 +126,7 @@ export default function TeamBalancerTestPage() {
     teams: Array<{
       name: string;
       players: Array<{
+        id: string;
         name: string;
         position: string;
         category: number;
@@ -116,11 +137,21 @@ export default function TeamBalancerTestPage() {
     }>;
     balanceScore: number;
   } | null>(null);
+  const [savedTeams, setSavedTeams] = useState<{
+    teams: SavedTeamData[];
+    balanceScore: number;
+    generatedAt: Date | null;
+    generatedBy: string;
+    distributionMethod: string;
+  } | null>(null);
   const [consoleOutput, setConsoleOutput] = useState<string[]>([]);
   const [distributionMethod, setDistributionMethod] = useState<
     "position-based" | "skill-based"
   >("position-based");
   const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState(
+    "Kopioitu leikepöydälle",
+  );
   const [eventFilter, setEventFilter] = useState<"all" | "upcoming" | "past">(
     "all",
   );
@@ -137,6 +168,129 @@ export default function TeamBalancerTestPage() {
       loadEvents(selectedTeamId);
     }
   }, [selectedTeamId]);
+
+  // Load saved teams when event is selected
+  useEffect(() => {
+    if (selectedEventId) {
+      loadSavedTeams(selectedEventId);
+    } else {
+      setSavedTeams(null);
+    }
+  }, [selectedEventId]);
+
+  // Load saved teams from Firebase
+  const loadSavedTeams = async (eventId: string) => {
+    try {
+      const eventRef = doc(db, "events", eventId);
+      const eventDoc = await getDoc(eventRef);
+
+      if (!eventDoc.exists()) {
+        setSavedTeams(null);
+        return;
+      }
+
+      const eventData = eventDoc.data();
+      const generatedTeamsData = eventData.generatedTeams as
+        | GeneratedTeamsData
+        | undefined;
+
+      if (
+        !generatedTeamsData ||
+        !generatedTeamsData.teams ||
+        generatedTeamsData.teams.length === 0
+      ) {
+        setSavedTeams(null);
+        return;
+      }
+
+      // Load user data to get player names
+      const usersRef = collection(db, "users");
+      const usersSnapshot = await getDocs(usersRef);
+      const usersMap = new Map<string, Record<string, unknown>>();
+      usersSnapshot.docs.forEach((doc) => {
+        usersMap.set(doc.id, { id: doc.id, ...doc.data() });
+      });
+
+      // Enrich saved teams with player details
+      const enrichedTeams: SavedTeamData[] = generatedTeamsData.teams.map(
+        (team) => {
+          const playerIds =
+            team.playerIds ||
+            team.players?.map((p: { id: string }) => p.id) ||
+            [];
+          const players = playerIds.map((playerId: string) => {
+            const userData = usersMap.get(playerId);
+            if (!userData) {
+              return {
+                id: playerId,
+                name: "Tuntematon",
+                position: "H",
+                category: 2,
+                multiplier: 2.0,
+                points: 200,
+              };
+            }
+
+            // Get team-specific skills
+            const teamSkills = (
+              userData.teamSkills as Record<
+                string,
+                {
+                  field?: { category?: number; multiplier?: number };
+                  goalkeeper?: { category?: number; multiplier?: number };
+                }
+              >
+            )?.[selectedTeamId];
+            const playerRole = eventData.playerRoles?.[playerId];
+            const isGoalkeeper = playerRole === "MV";
+            const roleSkills = isGoalkeeper
+              ? teamSkills?.goalkeeper
+              : teamSkills?.field;
+
+            return {
+              id: playerId,
+              name: (userData.name as string) || "Tuntematon",
+              position:
+                playerRole || (userData.positions as string[])?.[0] || "H",
+              category: roleSkills?.category || 2,
+              multiplier: roleSkills?.multiplier || 2.0,
+              points: (roleSkills?.multiplier || 2.0) * 100,
+            };
+          });
+
+          return {
+            name: team.name,
+            players,
+            totalPoints: team.totalPoints,
+            color: team.color,
+          };
+        },
+      );
+
+      // Parse generatedAt
+      let generatedAt: Date | null = null;
+      if (generatedTeamsData.generatedAt) {
+        if (
+          typeof (generatedTeamsData.generatedAt as any).toDate === "function"
+        ) {
+          generatedAt = (generatedTeamsData.generatedAt as any).toDate();
+        } else if (typeof generatedTeamsData.generatedAt === "string") {
+          generatedAt = new Date(generatedTeamsData.generatedAt);
+        }
+      }
+
+      setSavedTeams({
+        teams: enrichedTeams,
+        balanceScore: generatedTeamsData.balanceScore || 0,
+        generatedAt,
+        generatedBy: generatedTeamsData.generatedBy || "",
+        distributionMethod: generatedTeamsData.distributionMethod || "unknown",
+      });
+    } catch (error) {
+      console.error("Error loading saved teams:", error);
+      setSavedTeams(null);
+    }
+  };
 
   const loadTeams = async () => {
     try {
@@ -748,6 +902,7 @@ export default function TeamBalancerTestPage() {
         teams: result.teams.map((t) => ({
           name: t.name,
           players: t.players.map((p) => ({
+            id: p.id || p.playerId || "",
             name: p.name,
             position: p.position,
             category: p.category,
@@ -774,7 +929,54 @@ export default function TeamBalancerTestPage() {
 
   const copyConsoleOutput = () => {
     navigator.clipboard.writeText(consoleOutput.join("\n"));
+    setSnackbarMessage("Kopioitu leikepöydälle");
     setSnackbarOpen(true);
+  };
+
+  // Save generated teams to Firebase
+  const saveGeneratedTeams = async () => {
+    if (!generatedTeams || !selectedEventId || !selectedTeamId) return;
+
+    setSaving(true);
+    try {
+      const eventRef = doc(db, "events", selectedEventId);
+
+      // Build teams data structure matching the app's format
+      const teamsData = {
+        eventId: selectedEventId,
+        teams: generatedTeams.teams.map((team, index) => ({
+          name: team.name,
+          players: team.players.map((p) => ({
+            id: p.id,
+            assignedRole: p.position,
+          })),
+          playerIds: team.players.map((p) => p.id),
+          totalPoints: team.totalPoints,
+          color: index === 0 ? "#1976d2" : "#d32f2f",
+        })),
+        generatedAt: new Date(),
+        generatedBy: user?.email || "",
+        balanceScore: generatedTeams.balanceScore,
+        distributionMethod: distributionMethod,
+      };
+
+      await updateDoc(eventRef, {
+        generatedTeams: teamsData,
+        lastTeamGeneration: new Date(),
+      });
+
+      // Reload saved teams to show the update
+      await loadSavedTeams(selectedEventId);
+
+      setSnackbarMessage("Joukkueet tallennettu tapahtumaan!");
+      setSnackbarOpen(true);
+    } catch (error) {
+      console.error("Error saving teams:", error);
+      setSnackbarMessage("Virhe tallennettaessa joukkueita");
+      setSnackbarOpen(true);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const selectedEvent = events.find((e) => e.id === selectedEventId);
@@ -1406,12 +1608,164 @@ export default function TeamBalancerTestPage() {
         </Paper>
       )}
 
+      {/* Saved Teams from Firebase (from App or previous web generation) */}
+      {savedTeams && savedTeams.teams.length > 0 && (
+        <Paper sx={{ p: 3, mb: 3, borderRadius: 2, bgcolor: "#f8f9fa" }}>
+          <Typography
+            variant="h6"
+            gutterBottom
+            sx={{ display: "flex", alignItems: "center", gap: 1 }}
+          >
+            📁 Tallennettu joukkuejako
+          </Typography>
+
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <Box>
+              <Typography variant="body2">
+                Tasapainoindeksi: {savedTeams.balanceScore}% | Menetelmä:{" "}
+                {savedTeams.distributionMethod === "position-based"
+                  ? "Positiopohjainen"
+                  : savedTeams.distributionMethod === "skill-based"
+                    ? "Taitopohjainen"
+                    : savedTeams.distributionMethod}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Luonut: {savedTeams.generatedBy || "Tuntematon"} |
+                {savedTeams.generatedAt
+                  ? ` ${savedTeams.generatedAt.toLocaleDateString("fi-FI")} klo ${savedTeams.generatedAt.toLocaleTimeString("fi-FI", { hour: "2-digit", minute: "2-digit" })}`
+                  : ""}
+              </Typography>
+            </Box>
+          </Alert>
+
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+              gap: 3,
+            }}
+          >
+            {savedTeams.teams.map((team, teamIndex) => (
+              <Card
+                key={teamIndex}
+                elevation={2}
+                sx={{
+                  bgcolor: teamIndex === 0 ? "#e8f5e9" : "#fff3e0",
+                  borderTop: `4px solid ${teamIndex === 0 ? "#4caf50" : "#ff9800"}`,
+                }}
+              >
+                <CardContent>
+                  <Typography
+                    variant="h6"
+                    gutterBottom
+                    sx={{
+                      color: teamIndex === 0 ? "#2e7d32" : "#ef6c00",
+                    }}
+                  >
+                    {team.name} ({team.players.length} pelaajaa)
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    Kokonaispisteet: {team.totalPoints.toFixed(2)}
+                  </Typography>
+                  <Divider sx={{ my: 1 }} />
+
+                  <Box
+                    sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}
+                  >
+                    {[...team.players]
+                      .sort((a, b) => {
+                        if (a.position === "MV" && b.position !== "MV")
+                          return 1;
+                        if (a.position !== "MV" && b.position === "MV")
+                          return -1;
+                        return a.multiplier - b.multiplier;
+                      })
+                      .map((player, idx) => (
+                        <Box
+                          key={idx}
+                          sx={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            py: 0.25,
+                          }}
+                        >
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              fontWeight: player.category === 1 ? 600 : 400,
+                              color:
+                                player.position === "MV" ? "#666" : "inherit",
+                            }}
+                          >
+                            {player.name}
+                          </Typography>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              gap: 1,
+                              alignItems: "center",
+                            }}
+                          >
+                            <Chip
+                              label={player.position}
+                              size="small"
+                              sx={{
+                                minWidth: 35,
+                                height: 20,
+                                fontSize: "11px",
+                              }}
+                            />
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                fontFamily: "monospace",
+                                fontSize: "12px",
+                                minWidth: 50,
+                                textAlign: "right",
+                              }}
+                            >
+                              {player.multiplier.toFixed(3)}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      ))}
+                  </Box>
+                </CardContent>
+              </Card>
+            ))}
+          </Box>
+        </Paper>
+      )}
+
       {/* Generated Teams */}
       {generatedTeams && (
         <Paper sx={{ p: 3, mb: 3, borderRadius: 2 }}>
-          <Typography variant="h6" gutterBottom>
-            Luodut joukkueet
-          </Typography>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              mb: 2,
+            }}
+          >
+            <Typography variant="h6">Luodut joukkueet</Typography>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={
+                saving ? (
+                  <CircularProgress size={20} color="inherit" />
+                ) : (
+                  <SaveIcon />
+                )
+              }
+              onClick={saveGeneratedTeams}
+              disabled={saving}
+            >
+              {saving ? "Tallennetaan..." : "Tallenna tapahtumaan"}
+            </Button>
+          </Box>
 
           <Alert
             severity={generatedTeams.balanceScore >= 90 ? "success" : "warning"}
@@ -1596,9 +1950,9 @@ export default function TeamBalancerTestPage() {
 
       <Snackbar
         open={snackbarOpen}
-        autoHideDuration={2000}
+        autoHideDuration={3000}
         onClose={() => setSnackbarOpen(false)}
-        message="Kopioitu leikepoydale"
+        message={snackbarMessage}
       />
     </Box>
   );

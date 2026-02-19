@@ -29,6 +29,36 @@ import { db } from "../services/firebase";
 import { useApp, getUserAdminTeams } from "../contexts/AppContext";
 import { useAuth } from "../contexts/AuthContext";
 
+// Web-compatible confirm dialog (Alert.alert doesn't support multiple buttons on web)
+const webConfirm = (title: string, message: string): boolean => {
+  return window.confirm(`${title}\n\n${message}`);
+};
+
+// Web-compatible prompt for role selection
+const webPromptRole = (
+  title: string,
+  message: string,
+  options: string[],
+): string | null => {
+  const result = window.prompt(
+    `${title}\n\n${message}\n\nVaihtoehdot: ${options.join(", ")}`,
+    options[0],
+  );
+  if (!result) return null;
+  const upper = result.toUpperCase().trim();
+  // Map common inputs
+  if (
+    upper === "KENTTÄPELAAJA" ||
+    upper === "KENTTAPELAAJA" ||
+    upper === "H" ||
+    upper === "P" ||
+    upper === "H/P"
+  )
+    return "field";
+  if (upper === "MAALIVAHTI" || upper === "MV") return "MV";
+  return null;
+};
+
 const EventManagementScreen: React.FC = () => {
   const navigation = useNavigation();
   const { user } = useAuth();
@@ -46,7 +76,7 @@ const EventManagementScreen: React.FC = () => {
   const [isAddingMultiplePlayers, setIsAddingMultiplePlayers] = useState(false);
   const [showPastEvents, setShowPastEvents] = useState(false);
   const [selectedTeamFilter, setSelectedTeamFilter] = useState<string | null>(
-    null
+    null,
   ); // null = kaikki joukkueet
   const [isTeamFilterModalVisible, setIsTeamFilterModalVisible] =
     useState(false);
@@ -58,7 +88,7 @@ const EventManagementScreen: React.FC = () => {
   const getPlayerEventSkills = (
     player: any,
     eventTeamId?: string,
-    playerRole?: string
+    playerRole?: string,
   ) => {
     if (!eventTeamId || !player.teamSkills?.[eventTeamId]) {
       // Return default player skills
@@ -74,7 +104,7 @@ const EventManagementScreen: React.FC = () => {
     const teamSkills = player.teamSkills[eventTeamId];
     console.log(
       `📋 EventManagement: Using team skills for ${player.name} in event team ${eventTeamId}:`,
-      teamSkills
+      teamSkills,
     );
 
     // Determine which role's skills to use
@@ -108,7 +138,7 @@ const EventManagementScreen: React.FC = () => {
     return players.filter(
       (player) =>
         player.teamIds?.includes(selectedEvent.teamId) ||
-        player.teams?.includes(selectedEvent.teamId)
+        player.teams?.includes(selectedEvent.teamId),
     );
   };
 
@@ -127,7 +157,7 @@ const EventManagementScreen: React.FC = () => {
     if (player.positions && player.positions.length > 0) {
       const hasMV = player.positions.includes("MV");
       const hasFieldPosition = player.positions.some((p: string) =>
-        ["H", "P"].includes(p)
+        ["H", "P"].includes(p),
       );
       console.log("✅ Using positions array:", { hasMV, hasFieldPosition });
       return hasMV && hasFieldPosition;
@@ -189,16 +219,16 @@ const EventManagementScreen: React.FC = () => {
   const getPlayerIconColor = (
     player: any,
     teamId?: string,
-    isTeamMember?: boolean
+    isTeamMember?: boolean,
   ) => {
     // Debug logging
     console.log(
-      `[getPlayerIconColor] Player: ${player?.name}, ID: ${player?.id}`
+      `[getPlayerIconColor] Player: ${player?.name}, ID: ${player?.id}`,
     );
     console.log(`[getPlayerIconColor] Positions:`, player?.positions);
     console.log(
       `[getPlayerIconColor] Has MV:`,
-      player?.positions?.includes("MV")
+      player?.positions?.includes("MV"),
     );
 
     // Check if player is actually registered to the event
@@ -261,7 +291,7 @@ const EventManagementScreen: React.FC = () => {
   useFocusEffect(
     React.useCallback(() => {
       fetchEvents();
-    }, [])
+    }, []),
   );
 
   const fetchEvents = async () => {
@@ -324,7 +354,7 @@ const EventManagementScreen: React.FC = () => {
       // Update selectedEvent if it exists to reflect latest data
       if (selectedEvent) {
         const updatedSelectedEvent = sortedEvents.find(
-          (event: any) => event.id === selectedEvent.id
+          (event: any) => event.id === selectedEvent.id,
         );
         if (updatedSelectedEvent) {
           setSelectedEvent(updatedSelectedEvent);
@@ -365,7 +395,7 @@ const EventManagementScreen: React.FC = () => {
         dateObj && !isNaN(dateObj.getTime())
           ? `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(
               2,
-              "0"
+              "0",
             )}-${String(dateObj.getDate()).padStart(2, "0")}`
           : "",
       time:
@@ -383,7 +413,7 @@ const EventManagementScreen: React.FC = () => {
 
   const handleAddPlayerToEvent = async (
     playerId: string,
-    selectedRole?: string
+    selectedRole?: string,
   ) => {
     if (!selectedEvent) return;
     setAddingPlayerId(playerId);
@@ -430,6 +460,29 @@ const EventManagementScreen: React.FC = () => {
 
       // Ask for role if player has multiple positions including MV
       if (!selectedRole && needsRoleSelection(player)) {
+        if (Platform.OS === "web") {
+          const role = webPromptRole(
+            "Valitse rooli",
+            "Pelaaja voi pelata useassa roolissa. Missä roolissa lisätään tähän tapahtumaan?",
+            ["Kenttäpelaaja", "Maalivahti"],
+          );
+          if (!role) {
+            setAddingPlayerId(null);
+            return;
+          }
+          if (role === "MV") {
+            handleAddPlayerToEvent(playerId, "MV");
+          } else {
+            const hasH = player.positions?.includes("H");
+            const hasP = player.positions?.includes("P");
+            let fieldPosition = "H";
+            if (hasH && hasP) fieldPosition = "H/P";
+            else if (hasP) fieldPosition = "P";
+            else if (hasH) fieldPosition = "H";
+            handleAddPlayerToEvent(playerId, fieldPosition);
+          }
+          return;
+        }
         Alert.alert(
           "Valitse rooli",
           "Pelaaja voi pelata useassa roolissa. Missä roolissa lisätään tähän tapahtumaan?",
@@ -467,7 +520,7 @@ const EventManagementScreen: React.FC = () => {
               onPress: () => handleAddPlayerToEvent(playerId, "MV"),
             },
           ],
-          { cancelable: false }
+          { cancelable: false },
         );
         return;
       }
@@ -494,34 +547,11 @@ const EventManagementScreen: React.FC = () => {
             const userData = userSnap.data();
             const teamMemberValue = userData.teamMember?.[teamId];
             isTeamMember = teamMemberValue === true;
-            console.log("🔍 EventManagement - TeamMember check:", {
-              playerId,
-              playerName: player.name,
-              teamId,
-              teamMemberValue,
-              isTeamMember,
-              hasTeamMemberField: !!userData.teamMember,
-              allTeamMemberData: userData.teamMember,
-            });
-          } else {
-            console.log("⚠️ Player document not found in Firestore:", playerId);
           }
         } catch (error) {
-          console.error("❌ Error fetching teamMember status:", error);
+          console.error("Error fetching teamMember status:", error);
         }
-      } else {
-        console.log("⚠️ Missing teamId or playerId:", { teamId, playerId });
       }
-
-      console.log("🎯 Admin adding player - threshold check:", {
-        playerName: player.name,
-        isTeamMember,
-        hoursUntilEvent: hoursUntilEvent.toFixed(1),
-        guestRegistrationHours,
-        shouldRedirectToReserve:
-          !isTeamMember && hoursUntilEvent > guestRegistrationHours,
-        willBlock: !isTeamMember && hoursUntilEvent > guestRegistrationHours,
-      });
 
       // Use selected role or player's primary position
       const playerRole = selectedRole || player.positions[0];
@@ -533,6 +563,28 @@ const EventManagementScreen: React.FC = () => {
           currentGoalkeepers.length >= selectedEvent.maxGoalkeepers
         ) {
           // Offer reserve position for goalkeepers
+          if (Platform.OS === "web") {
+            const confirmed = webConfirm(
+              "Maalivahdin paikat täynnä",
+              "Haluatko lisätä pelaajan varalle?",
+            );
+            if (confirmed) {
+              try {
+                await updateDoc(eventRef, {
+                  reservePlayers: [
+                    ...(selectedEvent.reservePlayers || []),
+                    playerId,
+                  ],
+                });
+                alert("Pelaaja lisätty varalle");
+                await fetchEvents();
+              } catch (error) {
+                alert("Varalle lisääminen epäonnistui");
+              }
+            }
+            setAddingPlayerId(null);
+            return;
+          }
           Alert.alert(
             "Maalivahdin paikat täynnä",
             "Haluatko lisätä pelaajan varalle?",
@@ -555,7 +607,7 @@ const EventManagementScreen: React.FC = () => {
                   }
                 },
               },
-            ]
+            ],
           );
           setAddingPlayerId(null);
           return;
@@ -567,6 +619,28 @@ const EventManagementScreen: React.FC = () => {
           currentFieldPlayers.length >= selectedEvent.maxPlayers
         ) {
           // Offer reserve position for field players
+          if (Platform.OS === "web") {
+            const confirmed = webConfirm(
+              "Kenttäpelaajien paikat täynnä",
+              "Haluatko lisätä pelaajan varalle?",
+            );
+            if (confirmed) {
+              try {
+                await updateDoc(eventRef, {
+                  reservePlayers: [
+                    ...(selectedEvent.reservePlayers || []),
+                    playerId,
+                  ],
+                });
+                alert("Pelaaja lisätty varalle");
+                await fetchEvents();
+              } catch (error) {
+                alert("Varalle lisääminen epäonnistui");
+              }
+            }
+            setAddingPlayerId(null);
+            return;
+          }
           Alert.alert(
             "Kenttäpelaajien paikat täynnä",
             "Haluatko lisätä pelaajan varalle?",
@@ -589,15 +663,37 @@ const EventManagementScreen: React.FC = () => {
                   }
                 },
               },
-            ]
+            ],
           );
           setAddingPlayerId(null);
           return;
         }
       }
 
-      // Check if guest is trying to register before 24h threshold
+      // Check if guest is trying to register before threshold
       if (!isTeamMember && hoursUntilEvent > guestRegistrationHours) {
+        if (Platform.OS === "web") {
+          const confirmed = webConfirm(
+            "Vakiokävijöillä etuoikeus",
+            `${player.name} ei ole vakiokävijä. Vakiokävijöillä on vielä etuoikeus tapahtumaan. Haluatko lisätä pelaajan varalle?`,
+          );
+          if (confirmed) {
+            try {
+              await updateDoc(eventRef, {
+                reservePlayers: [
+                  ...(selectedEvent.reservePlayers || []),
+                  playerId,
+                ],
+              });
+              alert("Pelaaja lisätty varallistalle");
+              await fetchEvents();
+            } catch (error) {
+              alert("Varalle lisääminen epäonnistui");
+            }
+          }
+          setAddingPlayerId(null);
+          return;
+        }
         Alert.alert(
           "Vakiokävijöillä etuoikeus",
           `${player.name} ei ole vakiokävijä. Vakiokävijöillä on vielä etuoikeus tapahtumaan. Haluatko lisätä pelaajan varalle?`,
@@ -625,7 +721,7 @@ const EventManagementScreen: React.FC = () => {
                 setAddingPlayerId(null);
               },
             },
-          ]
+          ],
         );
         return;
       }
@@ -675,13 +771,13 @@ const EventManagementScreen: React.FC = () => {
 
       // Filter out players already in the event
       const playersToAdd = selectedPlayerIds.filter(
-        (id) => !currentPlayers.includes(id)
+        (id) => !currentPlayers.includes(id),
       );
 
       if (playersToAdd.length === 0) {
         Alert.alert(
           "Ei lisättäviä",
-          "Kaikki valitut pelaajat ovat jo tapahtumassa"
+          "Kaikki valitut pelaajat ovat jo tapahtumassa",
         );
         setIsAddingMultiplePlayers(false);
         return;
@@ -698,14 +794,14 @@ const EventManagementScreen: React.FC = () => {
       });
 
       const multiPositionPlayers = playersData.filter((p) =>
-        needsRoleSelection(p)
+        needsRoleSelection(p),
       );
 
       if (multiPositionPlayers.length > 0) {
         Alert.alert(
           "Valitse roolit erikseen",
           `${multiPositionPlayers.length} pelaajalla on useita positioita. Ole hyvä ja lisää heidät yksi kerrallaan valitsemalla rooli jokaiselle.`,
-          [{ text: "OK", onPress: () => setIsAddingMultiplePlayers(false) }]
+          [{ text: "OK", onPress: () => setIsAddingMultiplePlayers(false) }],
         );
         setSelectedPlayerIds([]);
         setIsAddingMultiplePlayers(false);
@@ -714,10 +810,10 @@ const EventManagementScreen: React.FC = () => {
 
       // Separate players by position
       const fieldPlayersToAdd = playersData.filter((p) =>
-        p.positions.some((pos) => ["H", "P", "H/P"].includes(pos))
+        p.positions.some((pos) => ["H", "P", "H/P"].includes(pos)),
       );
       const goalkeepersToAdd = playersData.filter((p) =>
-        p.positions.includes("MV")
+        p.positions.includes("MV"),
       );
 
       console.log("🔍 handleAddMultiplePlayersToEvent - position split:", {
@@ -746,29 +842,18 @@ const EventManagementScreen: React.FC = () => {
             const userSnap = await getDoc(userRef);
             if (userSnap.exists()) {
               const userData = userSnap.data();
-              const teamMemberValue = userData.teamMember?.[teamId];
-              teamMemberStatus[p.id] = teamMemberValue === true;
+              teamMemberStatus[p.id] = userData.teamMember?.[teamId] === true;
             } else {
               teamMemberStatus[p.id] = false;
             }
           } catch (error) {
-            console.error(
-              "❌ Error fetching teamMember status in multi-add:",
-              error
-            );
+            console.error("Error fetching teamMember status:", error);
             teamMemberStatus[p.id] = false;
           }
         }
       }
 
-      console.log("🎯 handleAddMultiplePlayersToEvent - threshold check:", {
-        hoursUntilEvent: hoursUntilEvent.toFixed(1),
-        guestRegistrationHours,
-        teamId,
-        teamMemberStatus,
-      });
-
-      // Separate players into main list and reserves based on limits
+      // Separate players into main list and reserves based on limits and threshold
       const playersToMainList: string[] = [];
       const playersToReserve: string[] = [];
 
@@ -779,8 +864,7 @@ const EventManagementScreen: React.FC = () => {
         const fieldPlayerIds = fieldPlayersToAdd.map((p) => p.id);
 
         fieldPlayerIds.forEach((id, index) => {
-          const isTeamMember = teamMemberStatus[id] === true;
-          const isGuest = !isTeamMember;
+          const isGuest = !teamMemberStatus[id];
           const shouldRedirectToReserve =
             isGuest && hoursUntilEvent > guestRegistrationHours;
 
@@ -796,10 +880,9 @@ const EventManagementScreen: React.FC = () => {
           }
         });
       } else {
-        // No limit, add all to main list (except guests before threshold)
+        // No limit, but check guest threshold
         fieldPlayersToAdd.forEach((p) => {
-          const isTeamMember = teamMemberStatus[p.id] === true;
-          const isGuest = !isTeamMember;
+          const isGuest = !teamMemberStatus[p.id];
           const shouldRedirectToReserve =
             isGuest && hoursUntilEvent > guestRegistrationHours;
 
@@ -818,8 +901,7 @@ const EventManagementScreen: React.FC = () => {
         const goalkeeperIds = goalkeepersToAdd.map((p) => p.id);
 
         goalkeeperIds.forEach((id, index) => {
-          const isTeamMember = teamMemberStatus[id] === true;
-          const isGuest = !isTeamMember;
+          const isGuest = !teamMemberStatus[id];
           const shouldRedirectToReserve =
             isGuest && hoursUntilEvent > guestRegistrationHours;
 
@@ -835,10 +917,9 @@ const EventManagementScreen: React.FC = () => {
           }
         });
       } else {
-        // No limit, add all to main list (except guests before threshold)
+        // No limit, but check guest threshold
         goalkeepersToAdd.forEach((p) => {
-          const isTeamMember = teamMemberStatus[p.id] === true;
-          const isGuest = !isTeamMember;
+          const isGuest = !teamMemberStatus[p.id];
           const shouldRedirectToReserve =
             isGuest && hoursUntilEvent > guestRegistrationHours;
 
@@ -853,6 +934,14 @@ const EventManagementScreen: React.FC = () => {
       // Show info if some players will be added to reserves
       if (playersToReserve.length > 0) {
         const proceed = await new Promise<boolean>((resolve) => {
+          if (Platform.OS === "web") {
+            const confirmed = webConfirm(
+              "Lisätään varalle",
+              `${playersToMainList.length} pelaajaa lisätään tapahtumaan ja ${playersToReserve.length} pelaajaa lisätään varalle joko täynnä olevien paikkojen tai vakiokävijöiden etuoikeuden vuoksi. Jatketaanko?`,
+            );
+            resolve(confirmed);
+            return;
+          }
           Alert.alert(
             "Lisätään varalle",
             `${playersToMainList.length} pelaajaa lisätään tapahtumaan ja ${playersToReserve.length} pelaajaa lisätään varalle joko täynnä olevien paikkojen tai vakiokävijöiden etuoikeuden vuoksi. Jatketaanko?`,
@@ -863,7 +952,7 @@ const EventManagementScreen: React.FC = () => {
                 onPress: () => resolve(false),
               },
               { text: "Jatka", onPress: () => resolve(true) },
-            ]
+            ],
           );
         });
 
@@ -919,6 +1008,26 @@ const EventManagementScreen: React.FC = () => {
   const handlePlayerClick = (player: any) => {
     // Check if player needs role selection
     if (needsRoleSelection(player)) {
+      if (Platform.OS === "web") {
+        const role = webPromptRole(
+          "Valitse rooli",
+          `${player.name} voi pelata useassa roolissa. Missä roolissa lisätään tähän tapahtumaan?`,
+          ["Kenttäpelaaja", "Maalivahti"],
+        );
+        if (!role) return;
+        if (role === "MV") {
+          handleAddPlayerToEvent(player.id, "MV");
+        } else {
+          const hasH = player.positions?.includes("H");
+          const hasP = player.positions?.includes("P");
+          let fieldPosition = "H";
+          if (hasH && hasP) fieldPosition = "H/P";
+          else if (hasP) fieldPosition = "P";
+          else if (hasH) fieldPosition = "H";
+          handleAddPlayerToEvent(player.id, fieldPosition);
+        }
+        return;
+      }
       // Show role selection dialog and add player directly
       Alert.alert(
         "Valitse rooli",
@@ -955,7 +1064,7 @@ const EventManagementScreen: React.FC = () => {
             text: "Maalivahti",
             onPress: () => handleAddPlayerToEvent(player.id, "MV"),
           },
-        ]
+        ],
       );
     } else {
       // Normal toggle for multi-select
@@ -1053,7 +1162,7 @@ const EventManagementScreen: React.FC = () => {
             "Pelaaja poistettu",
             `Varamies ${
               promotedPlayer?.name || "Tuntematon"
-            } siirrettiin automaattisesti mukaan.`
+            } siirrettiin automaattisesti mukaan.`,
           );
         } else {
           Alert.alert("Onnistui", "Pelaaja poistettu tapahtumasta");
@@ -1066,7 +1175,7 @@ const EventManagementScreen: React.FC = () => {
       const updatedEvent = {
         ...selectedEvent,
         registeredPlayers: currentPlayers.filter(
-          (id: string) => id !== playerId
+          (id: string) => id !== playerId,
         ),
       };
       setSelectedEvent(updatedEvent);
@@ -1151,7 +1260,7 @@ const EventManagementScreen: React.FC = () => {
             }
           },
         },
-      ]
+      ],
     );
   };
 
@@ -1420,7 +1529,7 @@ const EventManagementScreen: React.FC = () => {
             <View style={styles.eventHeaderTop}>
               {(() => {
                 const eventTeam = teams.find(
-                  (team) => team.id === selectedEvent.teamId
+                  (team) => team.id === selectedEvent.teamId,
                 );
                 return (
                   <Text
@@ -1501,18 +1610,17 @@ const EventManagementScreen: React.FC = () => {
                   </Text>
                 </View>
 
-                {selectedEvent.maxGoalkeepers &&
-                  selectedEvent.maxGoalkeepers > 0 && (
-                    <View style={[styles.playerCountBadge, { marginLeft: 8 }]}>
-                      <Text style={styles.goalkeeperBadgeEmoji}>🥅</Text>
-                      <Text style={styles.playerCountNumber}>
-                        {
-                          getGoalkeepers(selectedEvent.registeredPlayers || [])
-                            .length
-                        }
-                      </Text>
-                    </View>
-                  )}
+                {(selectedEvent.maxGoalkeepers ?? 0) > 0 && (
+                  <View style={[styles.playerCountBadge, { marginLeft: 8 }]}>
+                    <Text style={styles.goalkeeperBadgeEmoji}>🥅</Text>
+                    <Text style={styles.playerCountNumber}>
+                      {
+                        getGoalkeepers(selectedEvent.registeredPlayers || [])
+                          .length
+                      }
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
           </View>
@@ -1544,7 +1652,7 @@ const EventManagementScreen: React.FC = () => {
                 </View>
               ) : (
                 sortPlayersByPosition(
-                  selectedEvent.registeredPlayers || []
+                  selectedEvent.registeredPlayers || [],
                 ).map((pid: string) => {
                   const player = players.find((p) => p.id === pid);
                   // Check playerRole from event first, then fall back to player's positions
@@ -1576,7 +1684,7 @@ const EventManagementScreen: React.FC = () => {
                           color={getPlayerIconColor(
                             player,
                             selectedEvent.teamId,
-                            isTeamMember
+                            isTeamMember,
                           )}
                         />
                         <View style={styles.playerDetails}>
@@ -1624,7 +1732,7 @@ const EventManagementScreen: React.FC = () => {
                     Varalla ({selectedEvent.reservePlayers.length})
                   </Text>
                   {sortPlayersByPosition(
-                    selectedEvent.reservePlayers || []
+                    selectedEvent.reservePlayers || [],
                   ).map((pid: string) => {
                     const player = players.find((p) => p.id === pid);
                     if (!player) return null;
@@ -1970,9 +2078,9 @@ const EventManagementScreen: React.FC = () => {
                 .filter(
                   (player) =>
                     !(selectedEvent?.registeredPlayers || []).includes(
-                      player.id
+                      player.id,
                     ) &&
-                    !(selectedEvent?.reservePlayers || []).includes(player.id)
+                    !(selectedEvent?.reservePlayers || []).includes(player.id),
                 )
                 .sort((a, b) => {
                   // Sort goalkeepers to the end
@@ -2030,7 +2138,7 @@ const EventManagementScreen: React.FC = () => {
                             color={getPlayerIconColor(
                               player,
                               selectedEvent?.teamId,
-                              isTeamMember
+                              isTeamMember,
                             )}
                             style={styles.playerIcon}
                           />
@@ -2068,7 +2176,7 @@ const EventManagementScreen: React.FC = () => {
                 })}
               {getTeamPlayers().filter(
                 (player) =>
-                  !(selectedEvent?.registeredPlayers || []).includes(player.id)
+                  !(selectedEvent?.registeredPlayers || []).includes(player.id),
               ).length === 0 && (
                 <View style={styles.noPlayersContainer}>
                   <Text style={styles.noPlayersText}>

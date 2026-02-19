@@ -170,6 +170,8 @@ export interface Event {
   maxGoalkeepers?: number; // Maximum number of goalkeepers
   registeredPlayers?: string[]; // User/Player IDs from users collection
   reservePlayers?: string[]; // User/Player IDs in reserve queue
+  absentPlayers?: string[]; // User/Player IDs who have registered as absent
+  absentReasons?: Record<string, string>; // Player ID -> reason for absence
   playerRoles?: Record<string, string>; // Player ID -> selected role for this event (H, P, or MV)
   teams?: Team[];
   teamId?: string; // Associated team ID
@@ -244,8 +246,10 @@ export interface TeamGenerationOptions {
 }
 
 // Team type for team generation with enriched players
-export interface GeneratedTeamData
-  extends Omit<Team, "players" | "goalkeepers" | "fieldPlayers"> {
+export interface GeneratedTeamData extends Omit<
+  Team,
+  "players" | "goalkeepers" | "fieldPlayers"
+> {
   players: EnrichedPlayer[];
   goalkeepers?: EnrichedPlayer[];
   fieldPlayers?: EnrichedPlayer[];
@@ -324,7 +328,7 @@ export interface AuthContextType {
   signUp: (
     email: string,
     password: string,
-    displayName?: string
+    displayName?: string,
   ) => Promise<void>;
   signOut: () => Promise<void>;
   changePassword: (newPassword: string) => Promise<void>;
@@ -345,11 +349,11 @@ export interface AppContextType {
   refreshData: () => Promise<void>;
   getUserAdminTeams: (
     user: { uid: string; isMasterAdmin?: boolean } | null | undefined,
-    teams: Team[]
+    teams: Team[],
   ) => Team[];
   isUserSoleAdminInAnyTeam: (
     user: { uid: string; isMasterAdmin?: boolean } | null | undefined,
-    teams: Team[]
+    teams: Team[],
   ) => boolean;
 }
 

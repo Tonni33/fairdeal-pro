@@ -82,6 +82,8 @@ export interface Event {
   createdAt: string;
   registeredPlayers: string[];
   reservePlayers?: string[];
+  absentPlayers?: string[];
+  absentReasons?: Record<string, string>;
   playerRoles?: {
     [playerId: string]: string;
   };
