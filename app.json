@@ -2,7 +2,7 @@
   "expo": {
     "name": "FairDealPro",
     "slug": "fairdeal-pro",
-    "version": "1.0.12",
+    "version": "1.0.13",
     "orientation": "portrait",
     "icon": "./assets/fairdealLogo.png",
     "userInterfaceStyle": "light",
