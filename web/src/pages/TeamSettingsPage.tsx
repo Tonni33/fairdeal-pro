@@ -61,7 +61,7 @@ export default function TeamSettingsPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedSettings, setSelectedSettings] = useState<TeamSettings | null>(
-    null
+    null,
   );
   const [editForm, setEditForm] = useState({
     teamName: "",
@@ -114,14 +114,14 @@ export default function TeamSettingsPage() {
   useEffect(() => {
     localStorage.setItem(
       "teamSettingsPage-visibleColumns",
-      JSON.stringify(visibleColumns)
+      JSON.stringify(visibleColumns),
     );
   }, [visibleColumns]);
 
   useEffect(() => {
     localStorage.setItem(
       "teamSettingsPage-columnOrder",
-      JSON.stringify(columnOrder)
+      JSON.stringify(columnOrder),
     );
   }, [columnOrder]);
 
@@ -170,6 +170,7 @@ export default function TeamSettingsPage() {
           return {
             id: doc.id,
             ...data,
+            autoCreateTeams: data.autoCreateTeams ?? false,
             guestRegistrationHours,
             defaultMaxPlayers,
             defaultMaxGoalkeepers,
@@ -214,7 +215,7 @@ export default function TeamSettingsPage() {
       teamName: setting.teamName,
       teamCode: setting.teamCode,
       teamColor: setting.teamColor,
-      autoCreateTeams: setting.autoCreateTeams,
+      autoCreateTeams: setting.autoCreateTeams ?? false,
       defaultLocation: setting.defaultLocation,
       defaultTime: setting.defaultTime,
       defaultTitle: setting.defaultTitle,
@@ -241,7 +242,7 @@ export default function TeamSettingsPage() {
       await updateDoc(doc(db, "settings", selectedSettings.id), {
         teamName: editForm.teamName,
         teamCode: editForm.teamCode,
-        autoCreateTeams: editForm.autoCreateTeams,
+        autoCreateTeams: editForm.autoCreateTeams ?? false,
         defaultLocation: editForm.defaultLocation,
         defaultTime: editForm.defaultTime,
         defaultTitle: editForm.defaultTitle,
@@ -327,7 +328,7 @@ export default function TeamSettingsPage() {
         } catch (teamDeleteError) {
           console.error("Error deleting team:", teamDeleteError);
           setError(
-            "Joukkue-asetukset poistettu, mutta joukkueen poisto epäonnistui"
+            "Joukkue-asetukset poistettu, mutta joukkueen poisto epäonnistui",
           );
           return;
         }
@@ -548,7 +549,7 @@ export default function TeamSettingsPage() {
                   .filter(Boolean)
               : columns
             ).filter((col) =>
-              visibleColumns.includes(col!.field)
+              visibleColumns.includes(col!.field),
             ) as GridColDef[]
           }
           loading={loading}
