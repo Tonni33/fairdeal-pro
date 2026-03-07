@@ -78,9 +78,10 @@ export default function RankingsPage() {
     loadUsers();
   }, []);
 
-  // Get admin teams for current user
+  // Get admin teams for current user (master admin sees all teams)
   const adminTeams = useMemo(() => {
     if (!userData) return [];
+    if (userData.isMasterAdmin) return teams;
     return teams.filter((team) => team.adminIds?.includes(userData.id));
   }, [teams, userData]);
 
@@ -90,7 +91,7 @@ export default function RankingsPage() {
     if (!selectedTeam) return [];
 
     const filtered = users.filter((user) =>
-      user.teamIds?.includes(selectedTeam)
+      user.teamIds?.includes(selectedTeam),
     );
 
     // Process each player - if they have both roles, create two entries
@@ -144,7 +145,7 @@ export default function RankingsPage() {
     playerId: string,
     category: number,
     multiplier: number,
-    isGoalkeeper: boolean
+    isGoalkeeper: boolean,
   ) => {
     if (!selectedTeam) return;
 
@@ -315,7 +316,7 @@ export default function RankingsPage() {
                       params.row.id,
                       newCategory,
                       newMultiplier,
-                      isGoalkeeper
+                      isGoalkeeper,
                     );
 
                     setEditingRows((prev) => {
