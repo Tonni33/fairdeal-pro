@@ -24,13 +24,13 @@ const DEFAULT_SETTINGS: EventDefaults = {
 };
 
 export const getEventDefaults = async (
-  teamId?: string
+  teamId?: string,
 ): Promise<EventDefaults> => {
   try {
     // If teamId is provided, try to get team-specific settings first
     if (teamId) {
       const teamSettingsDoc = await getDoc(
-        doc(db, "settings", `team-${teamId}`)
+        doc(db, "settings", `team-${teamId}`),
       );
       if (teamSettingsDoc.exists()) {
         return {
@@ -65,7 +65,7 @@ export const formatTimeString = (time: string): string => {
 
 export const calculateEventEndTime = (
   startTime: string,
-  duration: number
+  duration: number,
 ): string => {
   try {
     const [hours, minutes] = startTime.split(":").map(Number);

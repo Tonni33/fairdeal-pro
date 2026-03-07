@@ -208,21 +208,21 @@ export default function TeamSettingsPage() {
   const handleEdit = (setting: TeamSettings) => {
     setSelectedSettings(setting);
     setEditForm({
-      teamName: setting.teamName,
-      teamCode: setting.teamCode,
-      teamColor: setting.teamColor,
-      defaultLocation: setting.defaultLocation,
-      defaultTime: setting.defaultTime,
-      defaultTitle: setting.defaultTitle,
-      eventDuration: setting.eventDuration,
-      maxGoalkeepers: setting.maxGoalkeepers,
-      maxPlayers: setting.maxPlayers,
+      teamName: setting.teamName ?? "",
+      teamCode: setting.teamCode ?? "",
+      teamColor: setting.teamColor ?? "#38d219",
+      defaultLocation: setting.defaultLocation ?? "",
+      defaultTime: setting.defaultTime ?? "16:00",
+      defaultTitle: setting.defaultTitle ?? "Jäävuoro",
+      eventDuration: setting.eventDuration ?? 50,
+      maxGoalkeepers: setting.maxGoalkeepers ?? 2,
+      maxPlayers: setting.maxPlayers ?? 20,
       defaultMaxGoalkeepers: setting.defaultMaxGoalkeepers ?? 2,
       defaultMaxPlayers: setting.defaultMaxPlayers ?? 20,
-      notificationEnabled: setting.notificationEnabled,
-      teamAName: setting.teamAName || "",
-      teamBName: setting.teamBName || "",
-      guestRegistrationHours: setting.guestRegistrationHours || 24,
+      notificationEnabled: setting.notificationEnabled ?? true,
+      teamAName: setting.teamAName ?? "",
+      teamBName: setting.teamBName ?? "",
+      guestRegistrationHours: setting.guestRegistrationHours ?? 24,
     });
     setEditOpen(true);
   };
@@ -235,17 +235,17 @@ export default function TeamSettingsPage() {
 
       // Update settings collection (without guestRegistrationHours)
       await updateDoc(doc(db, "settings", selectedSettings.id), {
-        teamName: editForm.teamName,
-        teamCode: editForm.teamCode,
-        defaultLocation: editForm.defaultLocation,
-        defaultTime: editForm.defaultTime,
-        defaultTitle: editForm.defaultTitle,
-        eventDuration: editForm.eventDuration,
-        maxGoalkeepers: editForm.maxGoalkeepers,
-        maxPlayers: editForm.maxPlayers,
-        notificationEnabled: editForm.notificationEnabled,
-        teamAName: editForm.teamAName,
-        teamBName: editForm.teamBName,
+        teamName: editForm.teamName ?? "",
+        teamCode: editForm.teamCode ?? "",
+        defaultLocation: editForm.defaultLocation ?? "",
+        defaultTime: editForm.defaultTime ?? "16:00",
+        defaultTitle: editForm.defaultTitle ?? "",
+        eventDuration: editForm.eventDuration ?? 50,
+        maxGoalkeepers: editForm.maxGoalkeepers ?? 2,
+        maxPlayers: editForm.maxPlayers ?? 20,
+        notificationEnabled: editForm.notificationEnabled ?? true,
+        teamAName: editForm.teamAName ?? "",
+        teamBName: editForm.teamBName ?? "",
         updatedAt: new Date(),
       });
 
