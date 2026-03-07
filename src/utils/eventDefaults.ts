@@ -8,7 +8,6 @@ export interface EventDefaults {
   defaultTime: string;
   eventDuration: number; // minuutteina
   defaultTitle: string; // Oletusnimi tapahtumalle
-  autoCreateTeams: boolean;
   teamSize: number;
   notificationEnabled: boolean;
 }
@@ -20,7 +19,6 @@ const DEFAULT_SETTINGS: EventDefaults = {
   defaultTime: "19:00",
   eventDuration: 90,
   defaultTitle: "",
-  autoCreateTeams: true,
   teamSize: 10,
   notificationEnabled: true,
 };

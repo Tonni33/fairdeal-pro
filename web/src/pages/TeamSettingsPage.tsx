@@ -35,7 +35,6 @@ interface TeamSettings {
   teamName: string;
   teamCode: string;
   teamColor: string;
-  autoCreateTeams: boolean;
   defaultLocation: string;
   defaultTime: string;
   defaultTitle: string;
@@ -67,7 +66,6 @@ export default function TeamSettingsPage() {
     teamName: "",
     teamCode: "",
     teamColor: "#38d219",
-    autoCreateTeams: false,
     defaultLocation: "",
     defaultTime: "16:00",
     defaultTitle: "Jäävuoro",
@@ -88,7 +86,6 @@ export default function TeamSettingsPage() {
   const defaultColumns = [
     "teamName",
     "teamColor",
-    "autoCreateTeams",
     "defaultLocation",
     "defaultTime",
     "defaultTitle",
@@ -170,7 +167,6 @@ export default function TeamSettingsPage() {
           return {
             id: doc.id,
             ...data,
-            autoCreateTeams: data.autoCreateTeams ?? false,
             guestRegistrationHours,
             defaultMaxPlayers,
             defaultMaxGoalkeepers,
@@ -215,7 +211,6 @@ export default function TeamSettingsPage() {
       teamName: setting.teamName,
       teamCode: setting.teamCode,
       teamColor: setting.teamColor,
-      autoCreateTeams: setting.autoCreateTeams ?? false,
       defaultLocation: setting.defaultLocation,
       defaultTime: setting.defaultTime,
       defaultTitle: setting.defaultTitle,
@@ -242,7 +237,6 @@ export default function TeamSettingsPage() {
       await updateDoc(doc(db, "settings", selectedSettings.id), {
         teamName: editForm.teamName,
         teamCode: editForm.teamCode,
-        autoCreateTeams: editForm.autoCreateTeams ?? false,
         defaultLocation: editForm.defaultLocation,
         defaultTime: editForm.defaultTime,
         defaultTitle: editForm.defaultTitle,
@@ -363,18 +357,6 @@ export default function TeamSettingsPage() {
             bgcolor: params.value || "#38d219",
             border: "1.5px solid rgba(0,0,0,0.1)",
           }}
-        />
-      ),
-    },
-    {
-      field: "autoCreateTeams",
-      headerName: "Automaattiset joukkueet",
-      width: 180,
-      renderCell: (params) => (
-        <Chip
-          label={params.value ? "Päällä" : "Pois"}
-          color={params.value ? "success" : "default"}
-          size="small"
         />
       ),
     },
@@ -809,21 +791,6 @@ export default function TeamSettingsPage() {
               }}
               fullWidth
               helperText="Montako tuntia ennen tapahtumaa vieraat (ei-vakiokävijät) voivat ilmoittautua. Vakiokävijät voivat ilmoittautua aina."
-            />
-
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={editForm.autoCreateTeams}
-                  onChange={(e) =>
-                    setEditForm({
-                      ...editForm,
-                      autoCreateTeams: e.target.checked,
-                    })
-                  }
-                />
-              }
-              label="Automaattinen joukkueiden luonti"
             />
 
             <FormControlLabel
