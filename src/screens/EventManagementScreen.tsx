@@ -1651,9 +1651,38 @@ const EventManagementScreen: React.FC = () => {
                   </Text>
                 </View>
               ) : (
-                sortPlayersByPosition(
-                  selectedEvent.registeredPlayers || [],
-                ).map((pid: string) => {
+                [...(selectedEvent.registeredPlayers || [])]
+                  .sort((aId, bId) => {
+                    const a = players.find((p) => p.id === aId);
+                    const b = players.find((p) => p.id === bId);
+                    const teamId = selectedEvent?.teamId || "";
+                    const aRole = selectedEvent?.playerRoles?.[aId];
+                    const bRole = selectedEvent?.playerRoles?.[bId];
+                    const aIsGK =
+                      aRole === "MV" ||
+                      (!aRole &&
+                        a?.positions?.includes("MV") &&
+                        !a?.positions?.some((p: string) =>
+                          ["H", "P", "H/P"].includes(p),
+                        ));
+                    const bIsGK =
+                      bRole === "MV" ||
+                      (!bRole &&
+                        b?.positions?.includes("MV") &&
+                        !b?.positions?.some((p: string) =>
+                          ["H", "P", "H/P"].includes(p),
+                        ));
+                    if (aIsGK && !bIsGK) return 1;
+                    if (!aIsGK && bIsGK) return -1;
+                    const aIsMember = teamId && a?.teamMember?.[teamId] === true;
+                    const bIsMember = teamId && b?.teamMember?.[teamId] === true;
+                    if (aIsMember && !bIsMember) return -1;
+                    if (!aIsMember && bIsMember) return 1;
+                    const aLast = (a?.name || "").split(" ").pop() || "";
+                    const bLast = (b?.name || "").split(" ").pop() || "";
+                    return aLast.localeCompare(bLast, "fi");
+                  })
+                  .map((pid: string) => {
                   const player = players.find((p) => p.id === pid);
                   // Check playerRole from event first, then fall back to player's positions
                   const playerRole = selectedEvent?.playerRoles?.[pid];
@@ -1731,9 +1760,38 @@ const EventManagementScreen: React.FC = () => {
                   >
                     Varalla ({selectedEvent.reservePlayers.length})
                   </Text>
-                  {sortPlayersByPosition(
-                    selectedEvent.reservePlayers || [],
-                  ).map((pid: string) => {
+                  {[...(selectedEvent.reservePlayers || [])]
+                    .sort((aId, bId) => {
+                      const a = players.find((p) => p.id === aId);
+                      const b = players.find((p) => p.id === bId);
+                      const teamId = selectedEvent?.teamId || "";
+                      const aRole = selectedEvent?.playerRoles?.[aId];
+                      const bRole = selectedEvent?.playerRoles?.[bId];
+                      const aIsGK =
+                        aRole === "MV" ||
+                        (!aRole &&
+                          a?.positions?.includes("MV") &&
+                          !a?.positions?.some((p: string) =>
+                            ["H", "P", "H/P"].includes(p),
+                          ));
+                      const bIsGK =
+                        bRole === "MV" ||
+                        (!bRole &&
+                          b?.positions?.includes("MV") &&
+                          !b?.positions?.some((p: string) =>
+                            ["H", "P", "H/P"].includes(p),
+                          ));
+                      if (aIsGK && !bIsGK) return 1;
+                      if (!aIsGK && bIsGK) return -1;
+                      const aIsMember = teamId && a?.teamMember?.[teamId] === true;
+                      const bIsMember = teamId && b?.teamMember?.[teamId] === true;
+                      if (aIsMember && !bIsMember) return -1;
+                      if (!aIsMember && bIsMember) return 1;
+                      const aLast = (a?.name || "").split(" ").pop() || "";
+                      const bLast = (b?.name || "").split(" ").pop() || "";
+                      return aLast.localeCompare(bLast, "fi");
+                    })
+                    .map((pid: string) => {
                     const player = players.find((p) => p.id === pid);
                     if (!player) return null;
                     const playerRole = selectedEvent?.playerRoles?.[player.id];
@@ -1749,10 +1807,10 @@ const EventManagementScreen: React.FC = () => {
                         key={player.id}
                         style={[
                           styles.playerCard,
-                          {
+                          !isGoalkeeper && {
                             borderLeftWidth: 4,
-                            borderLeftColor: "#ff9800",
-                            backgroundColor: "#fff3e0",
+                            borderLeftColor: isTeamMember ? "#1976d2" : "#ff9800",
+                            backgroundColor: isTeamMember ? "#e3f2fd" : "#fff3e0",
                           },
                           isGoalkeeper && styles.goalkeeperCard,
                         ]}
@@ -1761,17 +1819,22 @@ const EventManagementScreen: React.FC = () => {
                           <Ionicons
                             name="person"
                             size={20}
-                            color={isGoalkeeper ? "#4caf50" : "#ff9800"}
+                            color={getPlayerIconColor(
+                              player,
+                              selectedEvent.teamId,
+                              isTeamMember,
+                            )}
                           />
                           <View style={styles.playerDetails}>
                             <Text
                               style={[
                                 styles.playerName,
                                 isGoalkeeper && styles.goalkeeperName,
-                                !isGoalkeeper && {
-                                  color: "#ff9800",
-                                  fontWeight: "500",
-                                },
+                                !isGoalkeeper &&
+                                  !isTeamMember && {
+                                    color: "#ff9800",
+                                    fontWeight: "500",
+                                  },
                               ]}
                             >
                               {player.name}
@@ -2083,12 +2146,26 @@ const EventManagementScreen: React.FC = () => {
                     !(selectedEvent?.reservePlayers || []).includes(player.id),
                 )
                 .sort((a, b) => {
-                  // Sort goalkeepers to the end
-                  if (a.positions.includes("MV") && !b.positions.includes("MV"))
-                    return 1;
-                  if (!a.positions.includes("MV") && b.positions.includes("MV"))
-                    return -1;
-                  return (a.name || "").localeCompare(b.name || "");
+                  const teamId = selectedEvent?.teamId || "";
+                  const aIsGK =
+                    a.positions?.includes("MV") &&
+                    !a.positions?.some((p: string) =>
+                      ["H", "P", "H/P"].includes(p),
+                    );
+                  const bIsGK =
+                    b.positions?.includes("MV") &&
+                    !b.positions?.some((p: string) =>
+                      ["H", "P", "H/P"].includes(p),
+                    );
+                  if (aIsGK && !bIsGK) return 1;
+                  if (!aIsGK && bIsGK) return -1;
+                  const aIsMember = teamId && a?.teamMember?.[teamId] === true;
+                  const bIsMember = teamId && b?.teamMember?.[teamId] === true;
+                  if (aIsMember && !bIsMember) return -1;
+                  if (!aIsMember && bIsMember) return 1;
+                  const aLast = (a.name || "").split(" ").pop() || "";
+                  const bLast = (b.name || "").split(" ").pop() || "";
+                  return aLast.localeCompare(bLast, "fi");
                 })
                 .map((player) => {
                   const isGoalkeeper = player.positions.includes("MV");
