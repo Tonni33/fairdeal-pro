@@ -146,6 +146,27 @@ const HomeScreen: React.FC = () => {
     });
   };
 
+  // Sort players: vakiokävijät first (in registration order), vierailijat last
+  const sortMembersFirst = (playerList: any[], teamId: string) => {
+    const members = playerList.filter(
+      (p) => teamId && p?.teamMember?.[teamId] === true,
+    );
+    const guests = playerList.filter(
+      (p) => !teamId || p?.teamMember?.[teamId] !== true,
+    );
+    return { sorted: [...members, ...guests], members, guests };
+  };
+
+  // Check if guest registration threshold has been met for an event
+  const isGuestThresholdMet = (event: any) => {
+    const team = teams.find((t) => t.id === event?.teamId);
+    const guestHours = team?.guestRegistrationHours || 24;
+    const eventDate = new Date(event?.date);
+    const hoursUntil =
+      (eventDate.getTime() - new Date().getTime()) / (1000 * 60 * 60);
+    return hoursUntil <= guestHours;
+  };
+
   // Helper function to check if player needs role selection
   const needsRoleSelection = (player: Player | null): boolean => {
     if (!player || !player.positions || player.positions.length === 0) {
@@ -1717,8 +1738,7 @@ const HomeScreen: React.FC = () => {
                         (p) => !teamId || p?.teamMember?.[teamId] !== true,
                       );
                       const renderItem = (player: any, index: number) => {
-                        const isGoalkeeper =
-                          player?.positions.includes("MV");
+                        const isGoalkeeper = player?.positions.includes("MV");
                         return (
                           <View
                             key={player.id}
@@ -2173,22 +2193,18 @@ const HomeScreen: React.FC = () => {
                     <View style={styles.modalPlayersList}>
                       {(() => {
                         const teamId = nextEvent?.teamId || "";
-                        const members = registeredPlayers.filter(
-                          (p) => teamId && p?.teamMember?.[teamId] === true,
+                        const { sorted } = sortMembersFirst(
+                          registeredPlayers,
+                          teamId,
                         );
-                        const guests = registeredPlayers.filter(
-                          (p) => !teamId || p?.teamMember?.[teamId] !== true,
-                        );
-                        const renderItem = (
-                          player: any,
-                          index: number,
-                          isGuest: boolean,
-                        ) => {
+                        return sorted.map((player, index) => {
                           const playerRole =
                             nextEvent?.playerRoles?.[player.id];
                           const isGoalkeeper =
                             playerRole === "MV" ||
                             (!playerRole && player?.positions.includes("MV"));
+                          const isGuest =
+                            !teamId || player?.teamMember?.[teamId] !== true;
                           return (
                             <View
                               key={player.id}
@@ -2235,29 +2251,7 @@ const HomeScreen: React.FC = () => {
                               </View>
                             </View>
                           );
-                        };
-                        return (
-                          <>
-                            {members.length > 0 && (
-                              <>
-                                {guests.length > 0 && (
-                                  <Text style={styles.playerGroupTitle}>
-                                    Vakiokävijät ({members.length})
-                                  </Text>
-                                )}
-                                {members.map((p, i) => renderItem(p, i, false))}
-                              </>
-                            )}
-                            {guests.length > 0 && (
-                              <>
-                                <Text style={styles.playerGroupTitle}>
-                                  Ulkopuoliset ({guests.length})
-                                </Text>
-                                {guests.map((p, i) => renderItem(p, i, true))}
-                              </>
-                            )}
-                          </>
-                        );
+                        });
                       })()}
                     </View>
                   </View>
@@ -2279,15 +2273,14 @@ const HomeScreen: React.FC = () => {
                     <View style={styles.modalPlayersList}>
                       {(() => {
                         const teamId = nextEvent?.teamId || "";
-                        const members = reservePlayers.filter(
-                          (p) => teamId && p?.teamMember?.[teamId] === true,
-                        );
-                        const guests = reservePlayers.filter(
-                          (p) => !teamId || p?.teamMember?.[teamId] !== true,
-                        );
-                        const renderItem = (player: any, index: number) => {
-                          const isGoalkeeper =
-                            player?.positions.includes("MV");
+                        const thresholdMet = isGuestThresholdMet(nextEvent);
+                        const orderedPlayers = thresholdMet
+                          ? reservePlayers
+                          : sortMembersFirst(reservePlayers, teamId).sorted;
+                        return orderedPlayers.map((player, index) => {
+                          const isGoalkeeper = player?.positions.includes("MV");
+                          const isGuest =
+                            !teamId || player?.teamMember?.[teamId] !== true;
                           return (
                             <View
                               key={player.id}
@@ -2300,7 +2293,9 @@ const HomeScreen: React.FC = () => {
                               <View
                                 style={[
                                   styles.modalPlayerIcon,
-                                  styles.modalReserveIcon,
+                                  isGuest
+                                    ? styles.modalGuestReserveIcon
+                                    : styles.modalReserveIcon,
                                   isGoalkeeper && styles.modalGoalkeeperIcon,
                                 ]}
                               >
@@ -2336,29 +2331,7 @@ const HomeScreen: React.FC = () => {
                               </View>
                             </View>
                           );
-                        };
-                        return (
-                          <>
-                            {members.length > 0 && (
-                              <>
-                                {guests.length > 0 && (
-                                  <Text style={styles.playerGroupTitle}>
-                                    Vakiokävijät ({members.length})
-                                  </Text>
-                                )}
-                                {members.map((p, i) => renderItem(p, i))}
-                              </>
-                            )}
-                            {guests.length > 0 && (
-                              <>
-                                <Text style={styles.playerGroupTitle}>
-                                  Ulkopuoliset ({guests.length})
-                                </Text>
-                                {guests.map((p, i) => renderItem(p, i))}
-                              </>
-                            )}
-                          </>
-                        );
+                        });
                       })()}
                     </View>
                   </View>
@@ -2787,6 +2760,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  reserveGuestNumber: {
+    backgroundColor: "#e65100",
+  },
   reservePlayerNumberText: {
     color: "white",
     fontSize: 12,
@@ -3155,6 +3131,11 @@ const styles = StyleSheet.create({
   modalReserveIcon: {
     backgroundColor: "#fff8f0",
     borderColor: "#ff9800",
+    borderWidth: 1.5,
+  },
+  modalGuestReserveIcon: {
+    backgroundColor: "#fff3e0",
+    borderColor: "#e65100",
     borderWidth: 1.5,
   },
   modalPlayerNumber: {

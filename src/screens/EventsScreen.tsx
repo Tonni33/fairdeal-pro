@@ -127,6 +127,27 @@ const EventsScreen: React.FC = () => {
     });
   };
 
+  // Helper: sort members before guests, returning { sorted, members, guests }
+  const sortMembersFirst = (playerList: any[], teamId: string) => {
+    const members = playerList.filter(
+      (p) => teamId && p?.teamMember?.[teamId] === true,
+    );
+    const guests = playerList.filter(
+      (p) => !teamId || p?.teamMember?.[teamId] !== true,
+    );
+    return { sorted: [...members, ...guests], members, guests };
+  };
+
+  // Helper: has guest registration threshold been reached?
+  const isGuestThresholdMet = (event: any) => {
+    const team = teams.find((t) => t.id === event?.teamId);
+    const guestHours = team?.guestRegistrationHours || 24;
+    const hoursUntil =
+      (new Date(event?.date).getTime() - new Date().getTime()) /
+      (1000 * 60 * 60);
+    return hoursUntil <= guestHours;
+  };
+
   // Helper function to check if player needs role selection
   const needsRoleSelection = (player: any): boolean => {
     console.log("🔍 needsRoleSelection check:", {
@@ -2070,18 +2091,14 @@ const EventsScreen: React.FC = () => {
                         <View style={styles.playersList}>
                           {(() => {
                             const teamId = selectedEvent?.teamId || "";
-                            const members = registeredPlayers.filter(
-                              (p) => teamId && p?.teamMember?.[teamId] === true,
+                            const { sorted } = sortMembersFirst(
+                              registeredPlayers,
+                              teamId,
                             );
-                            const guests = registeredPlayers.filter(
-                              (p) =>
-                                !teamId || p?.teamMember?.[teamId] !== true,
-                            );
-                            const renderItem = (
-                              player: any,
-                              index: number,
-                              isGuest: boolean,
-                            ) => {
+                            return sorted.map((player, index) => {
+                              const isGuest =
+                                !teamId ||
+                                player?.teamMember?.[teamId] !== true;
                               const playerRole =
                                 selectedEvent?.playerRoles?.[player.id];
                               const isGoalkeeper =
@@ -2138,33 +2155,7 @@ const EventsScreen: React.FC = () => {
                                   </View>
                                 </View>
                               );
-                            };
-                            return (
-                              <>
-                                {members.length > 0 && (
-                                  <>
-                                    {guests.length > 0 && (
-                                      <Text style={styles.playerGroupTitle}>
-                                        Vakiokävijät ({members.length})
-                                      </Text>
-                                    )}
-                                    {members.map((p, i) =>
-                                      renderItem(p, i, false),
-                                    )}
-                                  </>
-                                )}
-                                {guests.length > 0 && (
-                                  <>
-                                    <Text style={styles.playerGroupTitle}>
-                                      Ulkopuoliset ({guests.length})
-                                    </Text>
-                                    {guests.map((p, i) =>
-                                      renderItem(p, i, true),
-                                    )}
-                                  </>
-                                )}
-                              </>
-                            );
+                            });
                           })()}
                         </View>
                       </View>
@@ -2187,14 +2178,15 @@ const EventsScreen: React.FC = () => {
                         <View style={styles.reservePlayersList}>
                           {(() => {
                             const teamId = selectedEvent?.teamId || "";
-                            const members = reservePlayers.filter(
-                              (p) => teamId && p?.teamMember?.[teamId] === true,
-                            );
-                            const guests = reservePlayers.filter(
-                              (p) =>
-                                !teamId || p?.teamMember?.[teamId] !== true,
-                            );
-                            const renderItem = (player: any, index: number) => {
+                            const thresholdMet =
+                              isGuestThresholdMet(selectedEvent);
+                            const { sorted } = thresholdMet
+                              ? { sorted: reservePlayers }
+                              : sortMembersFirst(reservePlayers, teamId);
+                            return sorted.map((player, index) => {
+                              const isGuest =
+                                !teamId ||
+                                player?.teamMember?.[teamId] !== true;
                               const playerRole =
                                 selectedEvent?.playerRoles?.[player.id];
                               const isGoalkeeper =
@@ -2219,11 +2211,14 @@ const EventsScreen: React.FC = () => {
                                   <View
                                     style={[
                                       styles.reservePlayerNumber,
-                                      isGoalkeeper &&
-                                        styles.reserveGoalkeeperNumber,
+                                      isGoalkeeper
+                                        ? styles.reserveGoalkeeperNumber
+                                        : isGuest && styles.reserveGuestNumber,
                                     ]}
                                   >
-                                    <Text style={styles.reservePlayerNumberText}>
+                                    <Text
+                                      style={styles.reservePlayerNumberText}
+                                    >
                                       {index + 1}
                                     </Text>
                                   </View>
@@ -2243,29 +2238,7 @@ const EventsScreen: React.FC = () => {
                                   </Text>
                                 </View>
                               );
-                            };
-                            return (
-                              <>
-                                {members.length > 0 && (
-                                  <>
-                                    {guests.length > 0 && (
-                                      <Text style={styles.playerGroupTitle}>
-                                        Vakiokävijät ({members.length})
-                                      </Text>
-                                    )}
-                                    {members.map((p, i) => renderItem(p, i))}
-                                  </>
-                                )}
-                                {guests.length > 0 && (
-                                  <>
-                                    <Text style={styles.playerGroupTitle}>
-                                      Ulkopuoliset ({guests.length})
-                                    </Text>
-                                    {guests.map((p, i) => renderItem(p, i))}
-                                  </>
-                                )}
-                              </>
-                            );
+                            });
                           })()}
                         </View>
                       </View>
@@ -2868,6 +2841,9 @@ const styles = StyleSheet.create({
   },
   reserveGoalkeeperNumber: {
     backgroundColor: "#4caf50", // Vihreä maalivahdille
+  },
+  reserveGuestNumber: {
+    backgroundColor: "#e65100", // Oranssi vierailijoille varalla
   },
   reservePlayerNumberText: {
     color: "white",
