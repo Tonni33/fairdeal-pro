@@ -1109,96 +1109,139 @@ export default function EventsPage() {
                 gap: 2,
               }}
             >
-              {selectedEvent?.registeredPlayers.map((playerId) => {
-                const playerUser = users.find((u) => u.id === playerId);
-                // Get the role selected for THIS event from playerRoles, or fallback to user's positions
-                const eventRole = selectedEvent.playerRoles?.[playerId];
-                const userPositions = playerUser?.positions || [];
+              {[...(selectedEvent?.registeredPlayers || [])]
+                .sort((aId, bId) => {
+                  const a = users.find((u) => u.id === aId);
+                  const b = users.find((u) => u.id === bId);
+                  const teamId = selectedEvent?.teamId || "";
+                  const aRole = selectedEvent?.playerRoles?.[aId];
+                  const bRole = selectedEvent?.playerRoles?.[bId];
+                  const aIsGK =
+                    aRole === "MV" ||
+                    (!aRole &&
+                      a?.positions?.includes("MV") &&
+                      !a?.positions?.some((p: string) =>
+                        ["H", "P", "H/P"].includes(p),
+                      ));
+                  const bIsGK =
+                    bRole === "MV" ||
+                    (!bRole &&
+                      b?.positions?.includes("MV") &&
+                      !b?.positions?.some((p: string) =>
+                        ["H", "P", "H/P"].includes(p),
+                      ));
+                  if (aIsGK && !bIsGK) return 1;
+                  if (!aIsGK && bIsGK) return -1;
+                  const aIsMember = a?.teamMember?.[teamId] === true;
+                  const bIsMember = b?.teamMember?.[teamId] === true;
+                  if (aIsMember && !bIsMember) return -1;
+                  if (!aIsMember && bIsMember) return 1;
+                  const aLast = (a?.name || "").split(" ").pop() || "";
+                  const bLast = (b?.name || "").split(" ").pop() || "";
+                  return aLast.localeCompare(bLast, "fi");
+                })
+                .map((playerId) => {
+                  const playerUser = users.find((u) => u.id === playerId);
+                  // Get the role selected for THIS event from playerRoles, or fallback to user's positions
+                  const eventRole = selectedEvent?.playerRoles?.[playerId];
+                  const userPositions = playerUser?.positions || [];
+                  const isTeamMember =
+                    playerUser?.teamMember?.[selectedEvent?.teamId || ""] ===
+                    true;
 
-                // Determine role color and label
-                // Colors: Maalivahti=Orange, Hyökkääjä=Blue, Puolustaja=Red, H+P=Green
-                const getRoleInfo = () => {
-                  // If event role is set, use it
-                  if (eventRole === "MV") {
-                    return { label: "MV", color: "warning" as const }; // Orange
-                  } else if (eventRole === "H") {
-                    return { label: "H", color: "primary" as const }; // Blue
-                  } else if (eventRole === "P") {
-                    return { label: "P", color: "error" as const }; // Red
-                  }
+                  // Determine role color and label
+                  // Colors: Maalivahti=Orange, Hyökkääjä=Blue, Puolustaja=Red, H+P=Green
+                  const getRoleInfo = () => {
+                    // If event role is set, use it
+                    if (eventRole === "MV") {
+                      return { label: "MV", color: "warning" as const }; // Orange
+                    } else if (eventRole === "H") {
+                      return { label: "H", color: "primary" as const }; // Blue
+                    } else if (eventRole === "P") {
+                      return { label: "P", color: "error" as const }; // Red
+                    }
 
-                  // No event role set, check user's positions
-                  const hasH = userPositions.includes("H");
-                  const hasP = userPositions.includes("P");
-                  const hasMV = userPositions.includes("MV");
+                    // No event role set, check user's positions
+                    const hasH = userPositions.includes("H");
+                    const hasP = userPositions.includes("P");
+                    const hasMV = userPositions.includes("MV");
 
-                  if (hasMV) {
-                    return { label: "MV", color: "warning" as const }; // Orange
-                  } else if (hasH && hasP) {
-                    return {
-                      label: "H/P",
-                      color: "success" as const,
-                    }; // Green
-                  } else if (hasH) {
-                    return { label: "H", color: "primary" as const }; // Blue
-                  } else if (hasP) {
-                    return { label: "P", color: "error" as const }; // Red
-                  }
+                    if (hasMV) {
+                      return { label: "MV", color: "warning" as const }; // Orange
+                    } else if (hasH && hasP) {
+                      return {
+                        label: "H/P",
+                        color: "success" as const,
+                      }; // Green
+                    } else if (hasH) {
+                      return { label: "H", color: "primary" as const }; // Blue
+                    } else if (hasP) {
+                      return { label: "P", color: "error" as const }; // Red
+                    }
 
-                  return null;
-                };
+                    return null;
+                  };
 
-                const roleInfo = getRoleInfo();
+                  const roleInfo = getRoleInfo();
 
-                return (
-                  <Paper
-                    key={playerId}
-                    sx={{
-                      p: 2,
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 1,
-                      position: "relative",
-                    }}
-                    elevation={2}
-                  >
-                    <Box
+                  return (
+                    <Paper
+                      key={playerId}
                       sx={{
+                        p: 2,
                         display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
+                        flexDirection: "column",
+                        gap: 1,
+                        position: "relative",
+                        borderLeft: "4px solid",
+                        borderLeftColor: isTeamMember ? "#1976d2" : "#f57c00",
                       }}
+                      elevation={2}
                     >
-                      <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                        {playerUser?.name || playerId}
-                      </Typography>
                       <Box
-                        sx={{ display: "flex", gap: 0.5, alignItems: "center" }}
+                        sx={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                        }}
                       >
-                        {roleInfo && (
-                          <Chip
-                            label={roleInfo.label}
-                            color={roleInfo.color}
-                            size="small"
-                          />
-                        )}
-                        <IconButton
-                          size="small"
-                          onClick={() => handleRemovePlayer(playerId)}
-                          color="error"
+                        <Typography
+                          variant="subtitle1"
+                          sx={{ fontWeight: 600 }}
                         >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
+                          {playerUser?.name || playerId}
+                        </Typography>
+                        <Box
+                          sx={{
+                            display: "flex",
+                            gap: 0.5,
+                            alignItems: "center",
+                          }}
+                        >
+                          {roleInfo && (
+                            <Chip
+                              label={roleInfo.label}
+                              color={roleInfo.color}
+                              size="small"
+                            />
+                          )}
+                          <IconButton
+                            size="small"
+                            onClick={() => handleRemovePlayer(playerId)}
+                            color="error"
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Box>
                       </Box>
-                    </Box>
-                    {playerUser?.email && (
-                      <Typography variant="caption" color="text.secondary">
-                        {playerUser.email}
-                      </Typography>
-                    )}
-                  </Paper>
-                );
-              })}
+                      {playerUser?.email && (
+                        <Typography variant="caption" color="text.secondary">
+                          {playerUser.email}
+                        </Typography>
+                      )}
+                    </Paper>
+                  );
+                })}
             </Box>
 
             {selectedEvent?.reservePlayers &&
@@ -1215,99 +1258,139 @@ export default function EventsPage() {
                       gap: 2,
                     }}
                   >
-                    {selectedEvent.reservePlayers.map((playerId) => {
-                      const playerUser = users.find((u) => u.id === playerId);
-                      const eventRole = selectedEvent.playerRoles?.[playerId];
-                      const userPositions = playerUser?.positions || [];
+                    {[...(selectedEvent.reservePlayers || [])]
+                      .sort((aId, bId) => {
+                        const a = users.find((u) => u.id === aId);
+                        const b = users.find((u) => u.id === bId);
+                        const teamId = selectedEvent?.teamId || "";
+                        const aRole = selectedEvent?.playerRoles?.[aId];
+                        const bRole = selectedEvent?.playerRoles?.[bId];
+                        const aIsGK =
+                          aRole === "MV" ||
+                          (!aRole &&
+                            a?.positions?.includes("MV") &&
+                            !a?.positions?.some((p: string) =>
+                              ["H", "P", "H/P"].includes(p),
+                            ));
+                        const bIsGK =
+                          bRole === "MV" ||
+                          (!bRole &&
+                            b?.positions?.includes("MV") &&
+                            !b?.positions?.some((p: string) =>
+                              ["H", "P", "H/P"].includes(p),
+                            ));
+                        if (aIsGK && !bIsGK) return 1;
+                        if (!aIsGK && bIsGK) return -1;
+                        const aIsMember = a?.teamMember?.[teamId] === true;
+                        const bIsMember = b?.teamMember?.[teamId] === true;
+                        if (aIsMember && !bIsMember) return -1;
+                        if (!aIsMember && bIsMember) return 1;
+                        const aLast = (a?.name || "").split(" ").pop() || "";
+                        const bLast = (b?.name || "").split(" ").pop() || "";
+                        return aLast.localeCompare(bLast, "fi");
+                      })
+                      .map((playerId) => {
+                        const playerUser = users.find((u) => u.id === playerId);
+                        const eventRole =
+                          selectedEvent?.playerRoles?.[playerId];
+                        const userPositions = playerUser?.positions || [];
+                        const isTeamMember =
+                          playerUser?.teamMember?.[
+                            selectedEvent?.teamId || ""
+                          ] === true;
 
-                      // Same role logic as registered players
-                      const getRoleInfo = () => {
-                        if (eventRole === "MV") {
-                          return { label: "MV", color: "warning" as const };
-                        } else if (eventRole === "H") {
-                          return { label: "H", color: "primary" as const };
-                        } else if (eventRole === "P") {
-                          return { label: "P", color: "error" as const };
-                        }
+                        // Same role logic as registered players
+                        const getRoleInfo = () => {
+                          if (eventRole === "MV") {
+                            return { label: "MV", color: "warning" as const };
+                          } else if (eventRole === "H") {
+                            return { label: "H", color: "primary" as const };
+                          } else if (eventRole === "P") {
+                            return { label: "P", color: "error" as const };
+                          }
 
-                        const hasH = userPositions.includes("H");
-                        const hasP = userPositions.includes("P");
-                        const hasMV = userPositions.includes("MV");
+                          const hasH = userPositions.includes("H");
+                          const hasP = userPositions.includes("P");
+                          const hasMV = userPositions.includes("MV");
 
-                        if (hasMV) {
-                          return { label: "MV", color: "warning" as const };
-                        } else if (hasH && hasP) {
-                          return { label: "H/P", color: "success" as const };
-                        } else if (hasH) {
-                          return { label: "H", color: "primary" as const };
-                        } else if (hasP) {
-                          return { label: "P", color: "error" as const };
-                        }
+                          if (hasMV) {
+                            return { label: "MV", color: "warning" as const };
+                          } else if (hasH && hasP) {
+                            return { label: "H/P", color: "success" as const };
+                          } else if (hasH) {
+                            return { label: "H", color: "primary" as const };
+                          } else if (hasP) {
+                            return { label: "P", color: "error" as const };
+                          }
 
-                        return null;
-                      };
+                          return null;
+                        };
 
-                      const roleInfo = getRoleInfo();
+                        const roleInfo = getRoleInfo();
 
-                      return (
-                        <Paper
-                          key={playerId}
-                          sx={{
-                            p: 2,
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 1,
-                            bgcolor: "grey.50",
-                          }}
-                          elevation={1}
-                        >
-                          <Box
+                        return (
+                          <Paper
+                            key={playerId}
                             sx={{
+                              p: 2,
                               display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
+                              flexDirection: "column",
+                              gap: 1,
+                              bgcolor: "grey.50",
+                              borderLeft: "4px solid",
+                              borderLeftColor: isTeamMember
+                                ? "#1976d2"
+                                : "#f57c00",
                             }}
+                            elevation={1}
                           >
-                            <Typography
-                              variant="subtitle1"
-                              sx={{ fontWeight: 600 }}
-                            >
-                              {playerUser?.name || playerId}
-                            </Typography>
                             <Box
                               sx={{
                                 display: "flex",
-                                gap: 0.5,
+                                justifyContent: "space-between",
                                 alignItems: "center",
                               }}
                             >
-                              {roleInfo && (
-                                <Chip
-                                  label={roleInfo.label}
-                                  color={roleInfo.color}
-                                  size="small"
-                                />
-                              )}
-                              <IconButton
-                                size="small"
-                                onClick={() => handleRemovePlayer(playerId)}
-                                color="error"
+                              <Typography
+                                variant="subtitle1"
+                                sx={{ fontWeight: 600 }}
                               >
-                                <DeleteIcon fontSize="small" />
-                              </IconButton>
+                                {playerUser?.name || playerId}
+                              </Typography>
+                              <Box
+                                sx={{
+                                  display: "flex",
+                                  gap: 0.5,
+                                  alignItems: "center",
+                                }}
+                              >
+                                {roleInfo && (
+                                  <Chip
+                                    label={roleInfo.label}
+                                    color={roleInfo.color}
+                                    size="small"
+                                  />
+                                )}
+                                <IconButton
+                                  size="small"
+                                  onClick={() => handleRemovePlayer(playerId)}
+                                  color="error"
+                                >
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              </Box>
                             </Box>
-                          </Box>
-                          {playerUser?.email && (
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              {playerUser.email}
-                            </Typography>
-                          )}
-                        </Paper>
-                      );
-                    })}
+                            {playerUser?.email && (
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                {playerUser.email}
+                              </Typography>
+                            )}
+                          </Paper>
+                        );
+                      })}
                   </Box>
                 </>
               )}
@@ -1674,7 +1757,8 @@ export default function EventsPage() {
                   user.teamIds?.includes(selectedEvent.teamId),
               )
               .sort((a, b) => {
-                // Sort: Already in event first, then vakiokävijät, then guests, all by last name
+                // Sort: Already in event first, then non-GK before GK,
+                // then vakiokävijät before vieraat, then last name
                 const aInEvent =
                   selectedEvent?.registeredPlayers?.includes(a.id) ||
                   selectedEvent?.reservePlayers?.includes(a.id);
@@ -1682,20 +1766,39 @@ export default function EventsPage() {
                   selectedEvent?.registeredPlayers?.includes(b.id) ||
                   selectedEvent?.reservePlayers?.includes(b.id);
 
-                // Already in event comes first
                 if (aInEvent && !bInEvent) return -1;
                 if (!aInEvent && bInEvent) return 1;
 
-                // Then sort by team member status
-                const aIsTeamMember =
-                  a.teamMember?.[selectedEvent?.teamId || ""] === true;
-                const bIsTeamMember =
-                  b.teamMember?.[selectedEvent?.teamId || ""] === true;
+                // Goalkeeper check
+                const teamId = selectedEvent?.teamId || "";
+                const aRole = selectedEvent?.playerRoles?.[a.id];
+                const bRole = selectedEvent?.playerRoles?.[b.id];
+                const aIsGK =
+                  aRole === "MV" ||
+                  (!aRole &&
+                    a.positions?.includes("MV") &&
+                    !a.positions?.some((p: string) =>
+                      ["H", "P", "H/P"].includes(p),
+                    ));
+                const bIsGK =
+                  bRole === "MV" ||
+                  (!bRole &&
+                    b.positions?.includes("MV") &&
+                    !b.positions?.some((p: string) =>
+                      ["H", "P", "H/P"].includes(p),
+                    ));
+
+                if (aIsGK && !bIsGK) return 1;
+                if (!aIsGK && bIsGK) return -1;
+
+                // Vakiokävijät before vieraat
+                const aIsTeamMember = a.teamMember?.[teamId] === true;
+                const bIsTeamMember = b.teamMember?.[teamId] === true;
 
                 if (aIsTeamMember && !bIsTeamMember) return -1;
                 if (!aIsTeamMember && bIsTeamMember) return 1;
 
-                // Sort by last name (assume format "FirstName LastName")
+                // Last name alphabetical
                 const aLastName = a.name.split(" ").pop() || a.name;
                 const bLastName = b.name.split(" ").pop() || b.name;
                 return aLastName.localeCompare(bLastName, "fi");
