@@ -2068,71 +2068,104 @@ const EventsScreen: React.FC = () => {
                         </Text>
 
                         <View style={styles.playersList}>
-                          {sortPlayersByPosition(
-                            registeredPlayers,
-                            selectedEvent,
-                          ).map((player, index) => {
-                            // Check playerRole from event first, then fall back to player.positions
-                            const playerRole =
-                              selectedEvent?.playerRoles?.[player.id];
-                            const isGoalkeeper =
-                              playerRole === "MV" ||
-                              (!playerRole &&
-                                player?.positions?.includes("MV") &&
-                                !player?.positions?.some((pos: string) =>
-                                  ["H", "P", "H/P"].includes(pos),
-                                ));
+                          {(() => {
                             const teamId = selectedEvent?.teamId || "";
-                            const isTeamMember =
-                              teamId && player?.teamMember?.[teamId] === true;
-                            return (
-                              <View
-                                key={player.id}
-                                style={[
-                                  styles.playerItem,
-                                  isGoalkeeper && {
-                                    borderLeftWidth: 4,
-                                    borderLeftColor: "#4caf50",
-                                    backgroundColor: "#e8f5e9",
-                                  },
-                                ]}
-                              >
+                            const members = registeredPlayers.filter(
+                              (p) => teamId && p?.teamMember?.[teamId] === true,
+                            );
+                            const guests = registeredPlayers.filter(
+                              (p) =>
+                                !teamId || p?.teamMember?.[teamId] !== true,
+                            );
+                            const renderItem = (
+                              player: any,
+                              index: number,
+                              isGuest: boolean,
+                            ) => {
+                              const playerRole =
+                                selectedEvent?.playerRoles?.[player.id];
+                              const isGoalkeeper =
+                                playerRole === "MV" ||
+                                (!playerRole &&
+                                  player?.positions?.includes("MV") &&
+                                  !player?.positions?.some((pos: string) =>
+                                    ["H", "P", "H/P"].includes(pos),
+                                  ));
+                              return (
                                 <View
+                                  key={player.id}
                                   style={[
-                                    styles.playerIcon,
-                                    isGoalkeeper
-                                      ? styles.goalkeeperIcon
-                                      : !isTeamMember && styles.guestIcon,
+                                    styles.playerItem,
+                                    isGoalkeeper && {
+                                      borderLeftWidth: 4,
+                                      borderLeftColor: "#4caf50",
+                                      backgroundColor: "#e8f5e9",
+                                    },
                                   ]}
                                 >
-                                  <Text style={[styles.playerNumber]}>
-                                    {index + 1}
-                                  </Text>
-                                </View>
-                                <View style={styles.playerInfo}>
-                                  <Text
+                                  <View
                                     style={[
-                                      styles.playerName,
-                                      isGoalkeeper && {
-                                        color: "#4caf50",
-                                        fontWeight: "600",
-                                      },
+                                      styles.playerIcon,
+                                      isGoalkeeper
+                                        ? styles.goalkeeperIcon
+                                        : isGuest && styles.guestIcon,
                                     ]}
                                   >
-                                    {player.name ||
-                                      player.email ||
-                                      `ID: ${player.id}`}
-                                    {isGoalkeeper && " 🥅"}
-                                  </Text>
-                                  {player.email && (
-                                    <Text style={styles.playerEmail}>
-                                      {player.email}
+                                    <Text style={styles.playerNumber}>
+                                      {index + 1}
                                     </Text>
-                                  )}
+                                  </View>
+                                  <View style={styles.playerInfo}>
+                                    <Text
+                                      style={[
+                                        styles.playerName,
+                                        isGoalkeeper && {
+                                          color: "#4caf50",
+                                          fontWeight: "600",
+                                        },
+                                      ]}
+                                    >
+                                      {player.name ||
+                                        player.email ||
+                                        `ID: ${player.id}`}
+                                      {isGoalkeeper && " 🥅"}
+                                    </Text>
+                                    {player.email && (
+                                      <Text style={styles.playerEmail}>
+                                        {player.email}
+                                      </Text>
+                                    )}
+                                  </View>
                                 </View>
-                              </View>
+                              );
+                            };
+                            return (
+                              <>
+                                {members.length > 0 && (
+                                  <>
+                                    {guests.length > 0 && (
+                                      <Text style={styles.playerGroupTitle}>
+                                        Vakiokävijät ({members.length})
+                                      </Text>
+                                    )}
+                                    {members.map((p, i) =>
+                                      renderItem(p, i, false),
+                                    )}
+                                  </>
+                                )}
+                                {guests.length > 0 && (
+                                  <>
+                                    <Text style={styles.playerGroupTitle}>
+                                      Ulkopuoliset ({guests.length})
+                                    </Text>
+                                    {guests.map((p, i) =>
+                                      renderItem(p, i, true),
+                                    )}
+                                  </>
+                                )}
+                              </>
                             );
-                          })}
+                          })()}
                         </View>
                       </View>
                     )}
@@ -2152,60 +2185,88 @@ const EventsScreen: React.FC = () => {
                         </View>
 
                         <View style={styles.reservePlayersList}>
-                          {sortPlayersByPosition(
-                            reservePlayers,
-                            selectedEvent,
-                          ).map((player, index) => {
-                            // Check playerRole from event first, then fall back to player.positions
-                            const playerRole =
-                              selectedEvent?.playerRoles?.[player.id];
-                            const isGoalkeeper =
-                              playerRole === "MV" ||
-                              (!playerRole &&
-                                player?.positions?.includes("MV") &&
-                                !player?.positions?.some((pos: string) =>
-                                  ["H", "P", "H/P"].includes(pos),
-                                ));
-                            return (
-                              <View
-                                key={player.id}
-                                style={[
-                                  styles.reservePlayersListItem,
-                                  isGoalkeeper && {
-                                    borderLeftWidth: 4,
-                                    borderLeftColor: "#4caf50",
-                                    backgroundColor: "#e8f5e9",
-                                  },
-                                ]}
-                              >
+                          {(() => {
+                            const teamId = selectedEvent?.teamId || "";
+                            const members = reservePlayers.filter(
+                              (p) => teamId && p?.teamMember?.[teamId] === true,
+                            );
+                            const guests = reservePlayers.filter(
+                              (p) =>
+                                !teamId || p?.teamMember?.[teamId] !== true,
+                            );
+                            const renderItem = (player: any, index: number) => {
+                              const playerRole =
+                                selectedEvent?.playerRoles?.[player.id];
+                              const isGoalkeeper =
+                                playerRole === "MV" ||
+                                (!playerRole &&
+                                  player?.positions?.includes("MV") &&
+                                  !player?.positions?.some((pos: string) =>
+                                    ["H", "P", "H/P"].includes(pos),
+                                  ));
+                              return (
                                 <View
+                                  key={player.id}
                                   style={[
-                                    styles.reservePlayerNumber,
-                                    isGoalkeeper &&
-                                      styles.reserveGoalkeeperNumber,
-                                  ]}
-                                >
-                                  <Text style={styles.reservePlayerNumberText}>
-                                    {index + 1}
-                                  </Text>
-                                </View>
-                                <Text
-                                  style={[
-                                    styles.reservePlayersListName,
+                                    styles.reservePlayersListItem,
                                     isGoalkeeper && {
-                                      color: "#4caf50",
-                                      fontWeight: "600",
+                                      borderLeftWidth: 4,
+                                      borderLeftColor: "#4caf50",
+                                      backgroundColor: "#e8f5e9",
                                     },
                                   ]}
                                 >
-                                  {player.name ||
-                                    player.email ||
-                                    `ID: ${player.id}`}
-                                  {isGoalkeeper && " 🥅"}
-                                </Text>
-                              </View>
+                                  <View
+                                    style={[
+                                      styles.reservePlayerNumber,
+                                      isGoalkeeper &&
+                                        styles.reserveGoalkeeperNumber,
+                                    ]}
+                                  >
+                                    <Text style={styles.reservePlayerNumberText}>
+                                      {index + 1}
+                                    </Text>
+                                  </View>
+                                  <Text
+                                    style={[
+                                      styles.reservePlayersListName,
+                                      isGoalkeeper && {
+                                        color: "#4caf50",
+                                        fontWeight: "600",
+                                      },
+                                    ]}
+                                  >
+                                    {player.name ||
+                                      player.email ||
+                                      `ID: ${player.id}`}
+                                    {isGoalkeeper && " 🥅"}
+                                  </Text>
+                                </View>
+                              );
+                            };
+                            return (
+                              <>
+                                {members.length > 0 && (
+                                  <>
+                                    {guests.length > 0 && (
+                                      <Text style={styles.playerGroupTitle}>
+                                        Vakiokävijät ({members.length})
+                                      </Text>
+                                    )}
+                                    {members.map((p, i) => renderItem(p, i))}
+                                  </>
+                                )}
+                                {guests.length > 0 && (
+                                  <>
+                                    <Text style={styles.playerGroupTitle}>
+                                      Ulkopuoliset ({guests.length})
+                                    </Text>
+                                    {guests.map((p, i) => renderItem(p, i))}
+                                  </>
+                                )}
+                              </>
                             );
-                          })}
+                          })()}
                         </View>
                       </View>
                     )}
@@ -2711,6 +2772,16 @@ const styles = StyleSheet.create({
   },
   guestIcon: {
     backgroundColor: "#ff9800", // Oranssi vierailijoille
+  },
+  playerGroupTitle: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#888",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 8,
+    marginBottom: 2,
+    paddingHorizontal: 4,
   },
   playerNumber: {
     color: "white",

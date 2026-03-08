@@ -1708,25 +1708,57 @@ const HomeScreen: React.FC = () => {
                     </Text>
                   </View>
                   <View style={styles.reservePlayersList}>
-                    {reservePlayers.map((player, index) => {
-                      const isGoalkeeper = player?.positions.includes("MV");
-                      return (
-                        <View
-                          key={player.id}
-                          style={styles.reservePlayersListItem}
-                        >
-                          <View style={styles.reservePlayerNumber}>
-                            <Text style={styles.reservePlayerNumberText}>
-                              {index + 1}
+                    {(() => {
+                      const teamId = nextEvent?.teamId || "";
+                      const members = reservePlayers.filter(
+                        (p) => teamId && p?.teamMember?.[teamId] === true,
+                      );
+                      const guests = reservePlayers.filter(
+                        (p) => !teamId || p?.teamMember?.[teamId] !== true,
+                      );
+                      const renderItem = (player: any, index: number) => {
+                        const isGoalkeeper =
+                          player?.positions.includes("MV");
+                        return (
+                          <View
+                            key={player.id}
+                            style={styles.reservePlayersListItem}
+                          >
+                            <View style={styles.reservePlayerNumber}>
+                              <Text style={styles.reservePlayerNumberText}>
+                                {index + 1}
+                              </Text>
+                            </View>
+                            <Text style={styles.reservePlayersListName}>
+                              {player.name}
+                              {isGoalkeeper && " 🥅"}
                             </Text>
                           </View>
-                          <Text style={styles.reservePlayersListName}>
-                            {player.name}
-                            {isGoalkeeper && " 🥅"}
-                          </Text>
-                        </View>
+                        );
+                      };
+                      return (
+                        <>
+                          {members.length > 0 && (
+                            <>
+                              {guests.length > 0 && (
+                                <Text style={styles.playerGroupTitle}>
+                                  Vakiokävijät ({members.length})
+                                </Text>
+                              )}
+                              {members.map((p, i) => renderItem(p, i))}
+                            </>
+                          )}
+                          {guests.length > 0 && (
+                            <>
+                              <Text style={styles.playerGroupTitle}>
+                                Ulkopuoliset ({guests.length})
+                              </Text>
+                              {guests.map((p, i) => renderItem(p, i))}
+                            </>
+                          )}
+                        </>
                       );
-                    })}
+                    })()}
                   </View>
                 </View>
               )}
@@ -2140,33 +2172,23 @@ const HomeScreen: React.FC = () => {
 
                     <View style={styles.modalPlayersList}>
                       {(() => {
-                        console.log(
-                          "HomeScreen Modal: registeredPlayers state:",
-                          registeredPlayers.map((p) => ({
-                            id: p.id,
-                            name: p.name,
-                            email: p.email,
-                            playerId: p.playerId,
-                          })),
+                        const teamId = nextEvent?.teamId || "";
+                        const members = registeredPlayers.filter(
+                          (p) => teamId && p?.teamMember?.[teamId] === true,
                         );
-                        return sortPlayersByPosition(
-                          registeredPlayers,
-                          nextEvent,
-                        ).map((player, index) => {
-                          console.log("HomeScreen Modal: rendering player:", {
-                            id: player.id,
-                            name: player.name,
-                            email: player.email,
-                          });
-                          // Check playerRole from event first, then fall back to player.position
+                        const guests = registeredPlayers.filter(
+                          (p) => !teamId || p?.teamMember?.[teamId] !== true,
+                        );
+                        const renderItem = (
+                          player: any,
+                          index: number,
+                          isGuest: boolean,
+                        ) => {
                           const playerRole =
                             nextEvent?.playerRoles?.[player.id];
                           const isGoalkeeper =
                             playerRole === "MV" ||
                             (!playerRole && player?.positions.includes("MV"));
-                          const teamId = nextEvent?.teamId || "";
-                          const isTeamMember =
-                            teamId && player?.teamMember?.[teamId] === true;
                           return (
                             <View
                               key={player.id}
@@ -2180,7 +2202,7 @@ const HomeScreen: React.FC = () => {
                                   styles.modalPlayerIcon,
                                   isGoalkeeper
                                     ? styles.modalGoalkeeperIcon
-                                    : !isTeamMember && styles.modalGuestIcon,
+                                    : isGuest && styles.modalGuestIcon,
                                 ]}
                               >
                                 <Text
@@ -2213,7 +2235,29 @@ const HomeScreen: React.FC = () => {
                               </View>
                             </View>
                           );
-                        });
+                        };
+                        return (
+                          <>
+                            {members.length > 0 && (
+                              <>
+                                {guests.length > 0 && (
+                                  <Text style={styles.playerGroupTitle}>
+                                    Vakiokävijät ({members.length})
+                                  </Text>
+                                )}
+                                {members.map((p, i) => renderItem(p, i, false))}
+                              </>
+                            )}
+                            {guests.length > 0 && (
+                              <>
+                                <Text style={styles.playerGroupTitle}>
+                                  Ulkopuoliset ({guests.length})
+                                </Text>
+                                {guests.map((p, i) => renderItem(p, i, true))}
+                              </>
+                            )}
+                          </>
+                        );
                       })()}
                     </View>
                   </View>
@@ -2233,55 +2277,89 @@ const HomeScreen: React.FC = () => {
                     </Text>
 
                     <View style={styles.modalPlayersList}>
-                      {reservePlayers.map((player, index) => {
-                        const isGoalkeeper = player?.positions.includes("MV");
-                        return (
-                          <View
-                            key={player.id}
-                            style={[
-                              styles.modalPlayerItem,
-                              styles.modalReserveItem,
-                              isGoalkeeper && styles.modalGoalkeeperItem,
-                            ]}
-                          >
+                      {(() => {
+                        const teamId = nextEvent?.teamId || "";
+                        const members = reservePlayers.filter(
+                          (p) => teamId && p?.teamMember?.[teamId] === true,
+                        );
+                        const guests = reservePlayers.filter(
+                          (p) => !teamId || p?.teamMember?.[teamId] !== true,
+                        );
+                        const renderItem = (player: any, index: number) => {
+                          const isGoalkeeper =
+                            player?.positions.includes("MV");
+                          return (
                             <View
+                              key={player.id}
                               style={[
-                                styles.modalPlayerIcon,
-                                styles.modalReserveIcon,
-                                isGoalkeeper && styles.modalGoalkeeperIcon,
+                                styles.modalPlayerItem,
+                                styles.modalReserveItem,
+                                isGoalkeeper && styles.modalGoalkeeperItem,
                               ]}
                             >
-                              <Ionicons
-                                name="time-outline"
-                                size={16}
-                                color={isGoalkeeper ? "#fff" : "#ff9800"}
-                              />
-                            </View>
-                            <View style={styles.modalPlayerInfo}>
-                              <Text
+                              <View
                                 style={[
-                                  styles.modalPlayerName,
-                                  styles.modalReserveName,
-                                  isGoalkeeper && styles.modalGoalkeeperName,
+                                  styles.modalPlayerIcon,
+                                  styles.modalReserveIcon,
+                                  isGoalkeeper && styles.modalGoalkeeperIcon,
                                 ]}
                               >
-                                {player.name}
-                                {isGoalkeeper && " 🥅"}
-                              </Text>
-                              {player.email && (
+                                <Ionicons
+                                  name="time-outline"
+                                  size={16}
+                                  color={isGoalkeeper ? "#fff" : "#ff9800"}
+                                />
+                              </View>
+                              <View style={styles.modalPlayerInfo}>
                                 <Text
                                   style={[
-                                    styles.modalPlayerEmail,
-                                    styles.modalReserveEmail,
+                                    styles.modalPlayerName,
+                                    styles.modalReserveName,
+                                    isGoalkeeper && styles.modalGoalkeeperName,
                                   ]}
                                 >
-                                  {player.email}
+                                  {player.name ||
+                                    player.email ||
+                                    `ID: ${player.id}`}
+                                  {isGoalkeeper && " 🥅"}
                                 </Text>
-                              )}
+                                {player.email && (
+                                  <Text
+                                    style={[
+                                      styles.modalPlayerEmail,
+                                      styles.modalReserveEmail,
+                                    ]}
+                                  >
+                                    {player.email}
+                                  </Text>
+                                )}
+                              </View>
                             </View>
-                          </View>
+                          );
+                        };
+                        return (
+                          <>
+                            {members.length > 0 && (
+                              <>
+                                {guests.length > 0 && (
+                                  <Text style={styles.playerGroupTitle}>
+                                    Vakiokävijät ({members.length})
+                                  </Text>
+                                )}
+                                {members.map((p, i) => renderItem(p, i))}
+                              </>
+                            )}
+                            {guests.length > 0 && (
+                              <>
+                                <Text style={styles.playerGroupTitle}>
+                                  Ulkopuoliset ({guests.length})
+                                </Text>
+                                {guests.map((p, i) => renderItem(p, i))}
+                              </>
+                            )}
+                          </>
                         );
-                      })}
+                      })()}
                     </View>
                   </View>
                 )}
@@ -3063,6 +3141,16 @@ const styles = StyleSheet.create({
   },
   modalGuestIcon: {
     backgroundColor: "#ff9800", // Oranssi vierailijoille
+  },
+  playerGroupTitle: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#888",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 8,
+    marginBottom: 2,
+    paddingHorizontal: 4,
   },
   modalReserveIcon: {
     backgroundColor: "#fff8f0",
