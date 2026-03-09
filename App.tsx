@@ -8,6 +8,21 @@ import { AppProvider } from "./src/contexts/AppContext";
 import AppNavigator from "./src/navigation/AppNavigator";
 import { NotificationHandler } from "./src/components/NotificationHandler";
 
+// Inject CSS for Expo web – makes html/body/#root fill the viewport so
+// react-native-web ScrollView actually scrolls instead of growing forever.
+if (Platform.OS === "web" && typeof document !== "undefined") {
+  const style = document.createElement("style");
+  style.textContent = `
+    html, body, #root {
+      height: 100% !important;
+      overflow: hidden !important;
+      margin: 0;
+      padding: 0;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 export default function App() {
   return (
     <SafeAreaProvider
