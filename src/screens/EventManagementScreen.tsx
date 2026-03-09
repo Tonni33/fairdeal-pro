@@ -1415,7 +1415,7 @@ const EventManagementScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       {!selectedEvent ? (
-        <ScrollView>
+        <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
           {/* <Text style={styles.title}>Tapahtumahallinta</Text> */}
           <Text style={styles.subtitle}>Valitse tapahtuma muokattavaksi</Text>
 

@@ -74,7 +74,7 @@ const MasterAdminScreen: React.FC = () => {
       Alert.alert(
         "Ei käyttöoikeutta",
         "Tämä sivu on vain Master Admin -käyttäjille",
-        [{ text: "OK", onPress: () => navigation.goBack() }]
+        [{ text: "OK", onPress: () => navigation.goBack() }],
       );
     }
   }, [loading, user, navigation]);
@@ -101,7 +101,7 @@ const MasterAdminScreen: React.FC = () => {
 
     const requestsQuery = query(
       collection(db, "teamCreationRequests"),
-      orderBy("createdAt", "desc")
+      orderBy("createdAt", "desc"),
     );
 
     const unsubscribe = onSnapshot(requestsQuery, (snapshot) => {
@@ -121,7 +121,7 @@ const MasterAdminScreen: React.FC = () => {
 
     const licenseRequestsQuery = query(
       collection(db, "licenseRequests"),
-      orderBy("requestedAt", "desc")
+      orderBy("requestedAt", "desc"),
     );
 
     const unsubscribe = onSnapshot(licenseRequestsQuery, (snapshot) => {
@@ -141,7 +141,7 @@ const MasterAdminScreen: React.FC = () => {
 
     const licensesQuery = query(
       collection(db, "licenses"),
-      orderBy("createdAt", "desc")
+      orderBy("createdAt", "desc"),
     );
 
     const unsubscribe = onSnapshot(licensesQuery, (snapshot) => {
@@ -156,11 +156,11 @@ const MasterAdminScreen: React.FC = () => {
   }, [user]);
 
   const pendingLicenseRequestsCount = licenseRequests.filter(
-    (r) => r.status === "pending"
+    (r) => r.status === "pending",
   ).length;
 
   const availableLicensesCount = licenses.filter(
-    (l) => !l.usedByTeamId && !l.isUsed
+    (l) => !l.usedByTeamId && !l.isUsed,
   ).length;
 
   // Helper functions for team request processing
@@ -244,7 +244,7 @@ const MasterAdminScreen: React.FC = () => {
               setSelectedRequest(null);
             },
           },
-        ]
+        ],
       );
     } catch (error) {
       console.error("Error approving team request:", error);
@@ -272,7 +272,7 @@ const MasterAdminScreen: React.FC = () => {
               setSelectedRequest(null);
             },
           },
-        ]
+        ],
       );
     } catch (error) {
       console.error("Error rejecting team request:", error);
@@ -308,7 +308,7 @@ const MasterAdminScreen: React.FC = () => {
       }
 
       const expiresAt = new Date(
-        now.getTime() + duration * 24 * 60 * 60 * 1000
+        now.getTime() + duration * 24 * 60 * 60 * 1000,
       );
 
       // Generate a unique license code
@@ -431,7 +431,7 @@ const MasterAdminScreen: React.FC = () => {
         `Lisenssipyyntö joukkueelle "${
           request.teamName
         }" hyväksytty!\n\nLisenssi: ${licenseType}\nKesto: ${duration} päivää\nVoimassa: ${expiresAt.toLocaleDateString(
-          "fi-FI"
+          "fi-FI",
         )} asti`,
         [
           {
@@ -440,7 +440,7 @@ const MasterAdminScreen: React.FC = () => {
               setRequestModalVisible(false);
             },
           },
-        ]
+        ],
       );
     } catch (error) {
       console.error("Error approving license request:", error);
@@ -469,7 +469,7 @@ const MasterAdminScreen: React.FC = () => {
               setRequestModalVisible(false);
             },
           },
-        ]
+        ],
       );
     } catch (error) {
       console.error("Error rejecting license request:", error);
@@ -564,7 +564,7 @@ const MasterAdminScreen: React.FC = () => {
         if (licenseRequests.length === 0) {
           Alert.alert(
             "Ei pyyntöjä",
-            "Lisenssipyyntöjä ei ole vielä lähetetty."
+            "Lisenssipyyntöjä ei ole vielä lähetetty.",
           );
           return;
         }
@@ -669,7 +669,10 @@ const MasterAdminScreen: React.FC = () => {
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.scrollContent}
+      >
         <View style={styles.welcomeSection}>
           <Text style={styles.welcomeTitle}>Master Admin -hallinta</Text>
           <Text style={styles.welcomeSubtitle}>
@@ -793,8 +796,8 @@ const MasterAdminScreen: React.FC = () => {
                                 request.status === "pending"
                                   ? "#fff3e0"
                                   : request.status === "approved"
-                                  ? "#e8f5e8"
-                                  : "#ffebee",
+                                    ? "#e8f5e8"
+                                    : "#ffebee",
                             },
                           ]}
                         >
@@ -806,8 +809,8 @@ const MasterAdminScreen: React.FC = () => {
                                   request.status === "pending"
                                     ? "#ff9800"
                                     : request.status === "approved"
-                                    ? "#4caf50"
-                                    : "#f44336",
+                                      ? "#4caf50"
+                                      : "#f44336",
                               },
                             ]}
                           >
@@ -999,7 +1002,7 @@ const MasterAdminScreen: React.FC = () => {
         currentUser={user || undefined}
         currentUserPhone={(() => {
           const currentPlayer = players.find(
-            (p) => p.id === user?.uid || p.email === user?.email
+            (p) => p.id === user?.uid || p.email === user?.email,
           );
           console.log("MasterAdmin - Looking for phone:", {
             userId: user?.uid,
@@ -1045,6 +1048,9 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   loadingContainer: {
     flex: 1,

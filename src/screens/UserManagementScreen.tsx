@@ -71,13 +71,13 @@ const UserManagementScreen: React.FC = () => {
 
     // Käyttäjä näkee vain ne joukkueet joissa on admin-oikeudet
     const player = allPlayers.find(
-      (p) => p.id === user.uid || p.email === user.email
+      (p) => p.id === user.uid || p.email === user.email,
     );
     const playerTeamIds = player?.teamIds || [];
 
     return teams.filter(
       (team) =>
-        team.adminIds?.includes(user.uid) && playerTeamIds.includes(team.id)
+        team.adminIds?.includes(user.uid) && playerTeamIds.includes(team.id),
     );
   }, [user, teams, allPlayers, showAllTeams]);
 
@@ -99,7 +99,7 @@ const UserManagementScreen: React.FC = () => {
       "UserManagement: Data updated - Players:",
       allPlayers.length,
       "Teams:",
-      teams.length
+      teams.length,
     );
   }, [allPlayers, teams]);
 
@@ -142,7 +142,7 @@ const UserManagementScreen: React.FC = () => {
     if (userTeams.length > 0 && !selectedTeam) {
       console.log(
         "UserManagement: Auto-selecting first team:",
-        userTeams[0].id
+        userTeams[0].id,
       );
       setSelectedTeam(userTeams[0].id);
     }
@@ -167,14 +167,14 @@ const UserManagementScreen: React.FC = () => {
   const [editGoalkeeperMultiplier, setEditGoalkeeperMultiplier] = useState(1.0);
   // Mikä roolin taitoja ollaan muokkaamassa ('field' | 'goalkeeper')
   const [editSkillsRole, setEditSkillsRole] = useState<"field" | "goalkeeper">(
-    "field"
+    "field",
   );
   // Legacy - yhteensopivuus
   const [editCategory, setEditCategory] = useState(1);
   const [editMultiplier, setEditMultiplier] = useState(1.0);
   const [editTeamMember, setEditTeamMember] = useState(true); // Vakiokävijä-status
   const [originalTeamMember, setOriginalTeamMember] = useState<boolean | null>(
-    null
+    null,
   ); // Onko arvo ollut Firestoressa (true/false) vai ei asetettu
   // Rooli: "member" | "admin"
   const [editRole, setEditRole] = useState<"member" | "admin">("member");
@@ -229,7 +229,7 @@ const UserManagementScreen: React.FC = () => {
     // Löydä pelaaja - tarkista sekä id, playerId että email
     const player = allPlayers.find(
       (p) =>
-        p.id === playerId || p.playerId === playerId || p.email === playerId
+        p.id === playerId || p.playerId === playerId || p.email === playerId,
     );
 
     if (!player) {
@@ -238,14 +238,14 @@ const UserManagementScreen: React.FC = () => {
     }
 
     console.log(
-      `Found player for ${playerId}: ${player.name} (id: ${player.id}, playerId: ${player.playerId}, email: ${player.email})`
+      `Found player for ${playerId}: ${player.name} (id: ${player.id}, playerId: ${player.playerId}, email: ${player.email})`,
     );
     console.log(`Player teamSkills:`, player.teamSkills);
 
     if (player?.teamSkills?.[teamId]) {
       console.log(
         `Using Firestore skills for ${playerId}-${teamId}:`,
-        player.teamSkills[teamId]
+        player.teamSkills[teamId],
       );
       return player.teamSkills[teamId];
     }
@@ -327,7 +327,7 @@ const UserManagementScreen: React.FC = () => {
             !positions.includes("H") &&
             !positions.includes("P")
             ? "goalkeeper"
-            : "field"
+            : "field",
         );
 
         // Legacy fields for backwards compatibility with old UI code
@@ -337,7 +337,7 @@ const UserManagementScreen: React.FC = () => {
         // Aseta vakiokävijä-status valitulle joukkueelle tuoreesta datasta
         const initialTeamMember = freshPlayer.teamMember?.[selectedTeam];
         setOriginalTeamMember(
-          typeof initialTeamMember === "boolean" ? initialTeamMember : null
+          typeof initialTeamMember === "boolean" ? initialTeamMember : null,
         );
         setEditTeamMember(initialTeamMember === true);
 
@@ -366,7 +366,7 @@ const UserManagementScreen: React.FC = () => {
         setEditFieldMultiplier(firstTeamSkills?.field?.multiplier || 2.0);
         setEditGoalkeeperCategory(firstTeamSkills?.goalkeeper?.category || 2);
         setEditGoalkeeperMultiplier(
-          firstTeamSkills?.goalkeeper?.multiplier || 2.0
+          firstTeamSkills?.goalkeeper?.multiplier || 2.0,
         );
 
         // Kun ei ole joukkuetta valittu, aseta oletukseksi true
@@ -397,7 +397,7 @@ const UserManagementScreen: React.FC = () => {
         setEditGoalkeeperMultiplier(teamSkills?.goalkeeper?.multiplier || 2.0);
         const initialTeamMember = player.teamMember?.[selectedTeam];
         setOriginalTeamMember(
-          typeof initialTeamMember === "boolean" ? initialTeamMember : null
+          typeof initialTeamMember === "boolean" ? initialTeamMember : null,
         );
         setEditTeamMember(initialTeamMember === true);
       } else {
@@ -417,7 +417,7 @@ const UserManagementScreen: React.FC = () => {
         setEditFieldMultiplier(firstTeamSkills?.field?.multiplier || 2.0);
         setEditGoalkeeperCategory(firstTeamSkills?.goalkeeper?.category || 2);
         setEditGoalkeeperMultiplier(
-          firstTeamSkills?.goalkeeper?.multiplier || 2.0
+          firstTeamSkills?.goalkeeper?.multiplier || 2.0,
         );
         setOriginalTeamMember(null);
         setEditTeamMember(false);
@@ -535,15 +535,15 @@ const UserManagementScreen: React.FC = () => {
 
         // Lisätään kaikkiin uusiin valittuihin joukkueisiin
         addedTeams = editSelectedTeams.filter(
-          (teamId) => !originalTeams.includes(teamId)
+          (teamId) => !originalTeams.includes(teamId),
         );
       } else {
         // Kaikkien joukkueiden konteksti: vertaa koko listoja
         removedTeams = originalTeams.filter(
-          (teamId) => !editSelectedTeams.includes(teamId)
+          (teamId) => !editSelectedTeams.includes(teamId),
         );
         addedTeams = editSelectedTeams.filter(
-          (teamId) => !originalTeams.includes(teamId)
+          (teamId) => !originalTeams.includes(teamId),
         );
       }
 
@@ -560,7 +560,7 @@ const UserManagementScreen: React.FC = () => {
 
       // Luo teamSkills data uusille joukkueille - vain relevantit pelipaikan taidot
       const hasFieldPosition = editPositions.some(
-        (p) => p === "H" || p === "P"
+        (p) => p === "H" || p === "P",
       );
       const hasGoalkeeperPosition = editPositions.includes("MV");
 
@@ -571,7 +571,7 @@ const UserManagementScreen: React.FC = () => {
             addedTeamId,
             "(positions:",
             editPositions,
-            ")"
+            ")",
           );
 
           currentTeamSkillsData[addedTeamId] = {
@@ -627,11 +627,11 @@ const UserManagementScreen: React.FC = () => {
           // Poista adminIds:stä jos löytyy
           if (teamData.adminIds?.includes(selectedPlayer.id)) {
             teamUpdates.adminIds = teamData.adminIds.filter(
-              (id) => id !== selectedPlayer.id
+              (id) => id !== selectedPlayer.id,
             );
             console.log(
               "✅ Removing user from team adminIds for removed team:",
-              removedTeamId
+              removedTeamId,
             );
           }
 
@@ -643,7 +643,7 @@ const UserManagementScreen: React.FC = () => {
             await updateDoc(teamRef, teamUpdates);
             console.log(
               "✅ Team document updated for removed team:",
-              removedTeamId
+              removedTeamId,
             );
           }
         }
@@ -733,7 +733,7 @@ const UserManagementScreen: React.FC = () => {
 
           if (skillsChanged) {
             const hasFieldPosition = editPositions.some(
-              (p) => p === "H" || p === "P"
+              (p) => p === "H" || p === "P",
             );
             const hasGoalkeeperPosition = editPositions.includes("MV");
 
@@ -783,7 +783,7 @@ const UserManagementScreen: React.FC = () => {
               teamSkills: updatedTeamSkills[selectedTeam],
               teamMember: updatedTeamMember[selectedTeam],
               allTeamMembers: updatedTeamMember,
-            }
+            },
           );
 
           // Päivitä pelaajan dokumentti teamSkills ja teamMember kentillä
@@ -839,7 +839,7 @@ const UserManagementScreen: React.FC = () => {
         // Poista valittu joukkue jos se poistettiin
         if (removedTeams.includes(selectedTeam)) {
           currentTeamIds = currentTeamIds.filter(
-            (id: string) => id !== selectedTeam
+            (id: string) => id !== selectedTeam,
           );
           console.log("❌ Removing player from selected team:", selectedTeam);
         }
@@ -958,7 +958,7 @@ const UserManagementScreen: React.FC = () => {
           selectedTeamData.adminIds?.includes(selectedPlayer.id)
         ) {
           const updatedAdminIds = selectedTeamData.adminIds.filter(
-            (id) => id !== selectedPlayer.id
+            (id) => id !== selectedPlayer.id,
           );
 
           const teamRef = doc(db, "teams", selectedTeam);
@@ -980,7 +980,7 @@ const UserManagementScreen: React.FC = () => {
 
       // Pakota myös teamPlayers-datan päivitys
       console.log(
-        "🔄 Refreshing data again to ensure teamPlayers are updated..."
+        "🔄 Refreshing data again to ensure teamPlayers are updated...",
       );
       await refreshData();
 
@@ -989,7 +989,7 @@ const UserManagementScreen: React.FC = () => {
 
       console.log(
         `Player ${selectedPlayer.name} teamIds after update:`,
-        editSelectedTeams
+        editSelectedTeams,
       );
 
       // Debug: Tarkista onko teamSkills-data päivittynyt
@@ -1006,7 +1006,7 @@ const UserManagementScreen: React.FC = () => {
         "Onnistui",
         selectedTeam
           ? "Pelaajan tiedot ja joukkuekohtaiset taidot päivitetty"
-          : "Pelaajan tiedot päivitetty"
+          : "Pelaajan tiedot päivitetty",
       );
       closePlayerModal();
     } catch (error) {
@@ -1077,7 +1077,7 @@ const UserManagementScreen: React.FC = () => {
             }
           },
         },
-      ]
+      ],
     );
   };
 
@@ -1118,7 +1118,7 @@ const UserManagementScreen: React.FC = () => {
         console.log("⚠️ Cannot remove from other teams in single-team context");
         Alert.alert(
           "Huomio",
-          "Et voi poistaa pelaajaa muista joukkueista tässä näkymässä. Avaa käyttäjähallinta ilman joukkuevalintaa poistaaksesi pelaajan joukkueista."
+          "Et voi poistaa pelaajaa muista joukkueista tässä näkymässä. Avaa käyttäjähallinta ilman joukkuevalintaa poistaaksesi pelaajan joukkueista.",
         );
         return;
       }
@@ -1149,6 +1149,7 @@ const UserManagementScreen: React.FC = () => {
     <View style={styles.container}>
       <ScrollView
         style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
@@ -1213,7 +1214,7 @@ const UserManagementScreen: React.FC = () => {
                   const isGoalkeeper = player.positions.includes("MV");
                   // Käytä valittua joukkuetta värikoodaukseen
                   const selectedTeamData = teams.find(
-                    (team) => team.id === selectedTeam
+                    (team) => team.id === selectedTeam,
                   );
 
                   // Tarkista onko vakiokävijä (teamMember)
@@ -1234,7 +1235,7 @@ const UserManagementScreen: React.FC = () => {
                   let playerRole = "Jäsen";
                   if (selectedTeam) {
                     const selectedTeamData = teams.find(
-                      (team) => team.id === selectedTeam
+                      (team) => team.id === selectedTeam,
                     );
                     if (selectedTeamData?.adminIds?.includes(player.id)) {
                       playerRole = "Admin";
@@ -1510,7 +1511,7 @@ const UserManagementScreen: React.FC = () => {
                         // Don't allow unselecting if it's the only position
                         if (editPositions.length > 1) {
                           const newPositions = editPositions.filter(
-                            (p) => p !== pos.value
+                            (p) => p !== pos.value,
                           );
                           setEditPositions(newPositions);
                           setEditPosition(arrayToPosition(newPositions));
@@ -1599,7 +1600,7 @@ const UserManagementScreen: React.FC = () => {
                     style={styles.selector}
                     onPress={() =>
                       setEditDropdown(
-                        editDropdown === "category" ? null : "category"
+                        editDropdown === "category" ? null : "category",
                       )
                     }
                   >
@@ -1655,7 +1656,7 @@ const UserManagementScreen: React.FC = () => {
                     style={styles.selector}
                     onPress={() =>
                       setEditDropdown(
-                        editDropdown === "multiplier" ? null : "multiplier"
+                        editDropdown === "multiplier" ? null : "multiplier",
                       )
                     }
                   >
@@ -1687,7 +1688,7 @@ const UserManagementScreen: React.FC = () => {
                               />
                             )}
                           </TouchableOpacity>
-                        )
+                        ),
                       )}
                     </View>
                   )}
@@ -1702,7 +1703,7 @@ const UserManagementScreen: React.FC = () => {
                     style={styles.selector}
                     onPress={() =>
                       setEditDropdown(
-                        editDropdown === "teamMember" ? null : "teamMember"
+                        editDropdown === "teamMember" ? null : "teamMember",
                       )
                     }
                   >
@@ -1710,8 +1711,8 @@ const UserManagementScreen: React.FC = () => {
                       {originalTeamMember === null
                         ? "Ei asetettu"
                         : editTeamMember
-                        ? "Kyllä"
-                        : "Ei"}
+                          ? "Kyllä"
+                          : "Ei"}
                     </Text>
                     <Ionicons name="chevron-down" size={20} color="#666" />
                   </TouchableOpacity>
@@ -1840,6 +1841,9 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   content: {
     padding: 20,

@@ -50,7 +50,7 @@ const AdminMenuScreen: React.FC = () => {
           selectedTeam.adminIds?.includes(user.uid) ||
           selectedTeam.adminId === user.uid;
         console.log(
-          `AdminMenuScreen: Selected team ${selectedTeam.name}, isAdmin: ${isAdminOfSelectedTeam}`
+          `AdminMenuScreen: Selected team ${selectedTeam.name}, isAdmin: ${isAdminOfSelectedTeam}`,
         );
         return isAdminOfSelectedTeam;
       }
@@ -58,10 +58,10 @@ const AdminMenuScreen: React.FC = () => {
 
     // If no team is selected, check if user is admin of ANY team
     const isAdminOfAnyTeam = teams.some(
-      (team) => team.adminIds?.includes(user.uid) || team.adminId === user.uid
+      (team) => team.adminIds?.includes(user.uid) || team.adminId === user.uid,
     );
     console.log(
-      `AdminMenuScreen: No team selected, checking all teams. isAdminOfAnyTeam: ${isAdminOfAnyTeam}`
+      `AdminMenuScreen: No team selected, checking all teams. isAdminOfAnyTeam: ${isAdminOfAnyTeam}`,
     );
     return isAdminOfAnyTeam;
   };
@@ -154,7 +154,10 @@ const AdminMenuScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.scrollContent}
+      >
         <View style={styles.header}>
           <Text style={styles.subtitle}>
             Hallinnoi sovelluksen asetuksia ja sisältöä
@@ -167,7 +170,7 @@ const AdminMenuScreen: React.FC = () => {
               // Filter by master admin status
               if (item.masterAdminOnly && !user?.isMasterAdmin) {
                 console.log(
-                  `AdminMenuScreen: Hiding ${item.title} - requires MasterAdmin`
+                  `AdminMenuScreen: Hiding ${item.title} - requires MasterAdmin`,
                 );
                 return false;
               }
@@ -175,7 +178,7 @@ const AdminMenuScreen: React.FC = () => {
               const userIsAdmin = isUserAdmin();
               if (item.adminOnly && !userIsAdmin) {
                 console.log(
-                  `AdminMenuScreen: Hiding ${item.title} - requires admin, userIsAdmin: ${userIsAdmin}`
+                  `AdminMenuScreen: Hiding ${item.title} - requires admin, userIsAdmin: ${userIsAdmin}`,
                 );
                 return false;
               }
@@ -213,6 +216,9 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   header: {
     padding: 20,
