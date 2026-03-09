@@ -355,14 +355,12 @@ export class TeamBalancer {
           `📊 BALANCE: ${teams[0].name}: ${teams[0].players.length} pelaajaa, kerroin ${teamA_total.toFixed(2)} | ${teams[1].name}: ${teams[1].players.length} pelaajaa, kerroin ${teamB_total.toFixed(2)} | Ero: ${Math.abs(teamA_total - teamB_total).toFixed(2)}`,
         );
       } else {
-        // For other categories, use team average
-        const teamA_avg = this.getTeamAverage(teams[0]);
-        const teamB_avg = this.getTeamAverage(teams[1]);
-
-        const weakerTeam = teamA_avg >= teamB_avg ? teams[0] : teams[1];
-        this.addPlayerToTeam(weakerTeam, remainingPlayer);
+        // For other categories, simulate both placements and pick the one
+        // that results in the smallest difference between team averages
+        const targetTeam = this.pickTeamForOddPlayer(teams, remainingPlayer);
+        this.addPlayerToTeam(targetTeam, remainingPlayer);
         console.log(
-          `Category ${categoryNum}: Remaining player (${remainingPlayer.name}) → ${weakerTeam.name} (weaker team)`,
+          `Category ${categoryNum}: Remaining player (${remainingPlayer.name}) → ${targetTeam.name} (best balance by simulation)`,
         );
         // Log balance
         const teamA_total = teams[0].players.reduce(
@@ -433,6 +431,39 @@ export class TeamBalancer {
       0,
     );
     return totalMultiplier / team.players.length;
+  }
+
+  /**
+   * For an odd/remaining player, simulate placing them on each team and
+   * return the team where placement results in the smallest average difference.
+   */
+  private static pickTeamForOddPlayer(
+    teams: GeneratedTeamData[],
+    player: EnrichedPlayer,
+  ): GeneratedTeamData {
+    const totalA = teams[0].players.reduce((sum, p) => sum + p.multiplier, 0);
+    const totalB = teams[1].players.reduce((sum, p) => sum + p.multiplier, 0);
+    const countA = teams[0].players.length;
+    const countB = teams[1].players.length;
+    const m = player.multiplier;
+
+    // Simulate placing player on team A
+    const avgA_ifA = (totalA + m) / (countA + 1);
+    const avgB_ifA = countB > 0 ? totalB / countB : 0;
+    const diffIfA = Math.abs(avgA_ifA - avgB_ifA);
+
+    // Simulate placing player on team B
+    const avgA_ifB = countA > 0 ? totalA / countA : 0;
+    const avgB_ifB = (totalB + m) / (countB + 1);
+    const diffIfB = Math.abs(avgA_ifB - avgB_ifB);
+
+    console.log(
+      `🎯 Odd player (${player.name}, mult=${m.toFixed(3)}): diff if→A=${diffIfA.toFixed(4)}, diff if→B=${diffIfB.toFixed(4)} → ${
+        diffIfA <= diffIfB ? teams[0].name : teams[1].name
+      }`,
+    );
+
+    return diffIfA <= diffIfB ? teams[0] : teams[1];
   }
 
   /**
@@ -524,10 +555,11 @@ export class TeamBalancer {
           `Goalkeeper pair: Better player (${betterGk.name}) → ${weakerTeam.name} (weaker), Worse player (${worseGk.name}) → ${strongerTeam.name}`,
         );
       } else {
-        // Odd goalkeeper - assign to weaker team
-        this.addGoalkeeperToTeam(weakerTeam, goalkeeper1);
+        // Odd goalkeeper - simulate both placements and pick best balance
+        const targetTeam = this.pickTeamForOddPlayer(teams, goalkeeper1);
+        this.addGoalkeeperToTeam(targetTeam, goalkeeper1);
         console.log(
-          `Goalkeeper single: Remaining player (${goalkeeper1.name}) → ${weakerTeam.name} (weaker)`,
+          `Goalkeeper single: Remaining player (${goalkeeper1.name}) → ${targetTeam.name} (best balance by simulation)`,
         );
       }
 
@@ -1207,12 +1239,13 @@ export class TeamBalancer {
           `Defender pair ${Math.floor(i / 2) + 1}: Better player (${betterDefender.name}${betterPos === "H/P" ? " [H/P]" : ""}) → ${weakerTeam.name} (weaker), Worse player (${worseDefender.name}${worsePos === "H/P" ? " [H/P]" : ""}) → ${strongerTeam.name}`,
         );
       } else {
-        // Odd number - assign last defender to weaker team
-        this.addPlayerToTeam(weakerTeam, defender1);
+        // Odd number - simulate both placements and pick best balance
+        const targetTeam = this.pickTeamForOddPlayer(teams, defender1);
         const defPos = defender1.position === "H/P" ? "H/P" : "P";
         console.log(
-          `Defender single: Remaining player (${defender1.name}${defPos === "H/P" ? " [H/P]" : ""}) → ${weakerTeam.name} (weaker)`,
+          `Defender single: Remaining player (${defender1.name}${defPos === "H/P" ? " [H/P]" : ""}) → ${targetTeam.name} (best balance by simulation)`,
         );
+        this.addPlayerToTeam(targetTeam, defender1);
       }
 
       // Log balance after each pair/single
