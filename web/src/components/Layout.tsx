@@ -176,7 +176,7 @@ export default function Layout() {
   }
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh" }}>
+    <Box sx={{ display: "flex", height: "100vh", overflow: "hidden" }}>
       <AppBar
         position="fixed"
         sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}
@@ -289,7 +289,8 @@ export default function Layout() {
           p: 3,
           mt: 8,
           bgcolor: "#f5f5f5",
-          minHeight: "100vh",
+          overflowY: "auto",
+          height: "calc(100vh - 64px)",
         }}
       >
         <Outlet />
