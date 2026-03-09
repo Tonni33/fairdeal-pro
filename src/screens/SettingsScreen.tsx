@@ -38,6 +38,7 @@ interface EventDefaults {
   defaultTitle: string; // Oletusnimi tapahtumalle
   teamAName?: string; // Custom name for Team A in random team generation
   teamBName?: string; // Custom name for Team B in random team generation
+  showPositionGroups?: boolean; // Show players grouped by position in team results
 }
 
 interface TeamEventDefaults extends EventDefaults {
@@ -80,7 +81,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
   };
 
   const [activeTab, setActiveTab] = useState<"global" | "team">(
-    getInitialTab()
+    getInitialTab(),
   );
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
 
@@ -151,7 +152,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
 
     console.log(
       `SettingsScreen: User is admin of ${userAdminTeams.length} teams:`,
-      userAdminTeams.map((t) => t.name)
+      userAdminTeams.map((t) => t.name),
     );
 
     return userAdminTeams;
@@ -166,11 +167,11 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
   // Auto-select first admin team when adminTeams loads
   useEffect(() => {
     console.log(
-      `SettingsScreen: Auto-select check - adminTeams.length: ${adminTeams.length}, selectedTeamId: ${selectedTeamId}, activeTab: ${activeTab}`
+      `SettingsScreen: Auto-select check - adminTeams.length: ${adminTeams.length}, selectedTeamId: ${selectedTeamId}, activeTab: ${activeTab}`,
     );
     if (adminTeams.length > 0 && !selectedTeamId && activeTab === "team") {
       console.log(
-        `SettingsScreen: Auto-selecting first admin team: ${adminTeams[0].name} (${adminTeams[0].id})`
+        `SettingsScreen: Auto-selecting first admin team: ${adminTeams[0].name} (${adminTeams[0].id})`,
       );
       setSelectedTeamId(adminTeams[0].id);
     }
@@ -179,7 +180,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
   // Reload users and WhatsApp data when selected team changes or teams data updates
   useEffect(() => {
     console.log(
-      `SettingsScreen: selectedTeamId or teams changed, selectedTeamId: ${selectedTeamId}, justSaved: ${justSavedRef.current}`
+      `SettingsScreen: selectedTeamId or teams changed, selectedTeamId: ${selectedTeamId}, justSaved: ${justSavedRef.current}`,
     );
     if (selectedTeamId) {
       loadUsersWithoutPassword();
@@ -194,13 +195,13 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
             whatsappGroupName: teamData?.whatsappGroupName,
             whatsappGroupInviteLink: teamData?.whatsappGroupInviteLink,
             guestRegistrationHours: teamData?.guestRegistrationHours,
-          }
+          },
         );
         setWhatsappGroupName(teamData?.whatsappGroupName || "");
         setWhatsappGroupInviteLink(teamData?.whatsappGroupInviteLink || "");
         setGuestRegistrationHours(teamData?.guestRegistrationHours || 24);
         setGuestRegistrationHoursText(
-          (teamData?.guestRegistrationHours || 24).toString()
+          (teamData?.guestRegistrationHours || 24).toString(),
         );
       } else {
         console.log(`SettingsScreen: Skipping team data reload - just saved`);
@@ -278,7 +279,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
           } else if (!isMasterAdmin()) {
             // Tavallinen admin global-tabissa - näytä vain oman joukkueen käyttäjät
             const userBelongsToAdminTeam = adminTeams.some((team) =>
-              userData.teamIds?.includes(team.id)
+              userData.teamIds?.includes(team.id),
             );
             if (!userBelongsToAdminTeam) {
               continue;
@@ -346,10 +347,10 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
 
   const handleInputChange = (
     field: keyof EventDefaults,
-    value: string | number | boolean
+    value: string | number | boolean,
   ) => {
     console.log(
-      `SettingsScreen: handleInputChange - field: ${field}, value: ${value}, activeTab: ${activeTab}, selectedTeamId: ${selectedTeamId}`
+      `SettingsScreen: handleInputChange - field: ${field}, value: ${value}, activeTab: ${activeTab}, selectedTeamId: ${selectedTeamId}`,
     );
 
     if (activeTab === "global") {
@@ -360,7 +361,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
       }));
     } else if (selectedTeamId) {
       console.log(
-        `SettingsScreen: Updating team settings for team ${selectedTeamId}`
+        `SettingsScreen: Updating team settings for team ${selectedTeamId}`,
       );
       setTeamSettings((prev) => ({
         ...prev,
@@ -371,7 +372,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
       }));
     } else {
       console.log(
-        "SettingsScreen: WARNING - Cannot update settings, no team selected!"
+        "SettingsScreen: WARNING - Cannot update settings, no team selected!",
       );
     }
   };
@@ -379,17 +380,17 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
   const getCurrentSettings = (): EventDefaults => {
     if (activeTab === "global") {
       console.log(
-        "SettingsScreen: getCurrentSettings - returning globalSettings"
+        "SettingsScreen: getCurrentSettings - returning globalSettings",
       );
       return globalSettings;
     } else if (selectedTeamId && teamSettings[selectedTeamId]) {
       console.log(
-        `SettingsScreen: getCurrentSettings - returning team settings for ${selectedTeamId}`
+        `SettingsScreen: getCurrentSettings - returning team settings for ${selectedTeamId}`,
       );
       return teamSettings[selectedTeamId];
     }
     console.log(
-      "SettingsScreen: getCurrentSettings - WARNING: No team selected, returning globalSettings as fallback"
+      "SettingsScreen: getCurrentSettings - WARNING: No team selected, returning globalSettings as fallback",
     );
     return globalSettings;
   };
@@ -432,7 +433,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
       });
 
       console.log(
-        `SettingsScreen: WhatsApp data saved successfully for team ${selectedTeamId}`
+        `SettingsScreen: WhatsApp data saved successfully for team ${selectedTeamId}`,
       );
 
       // Note: Don't refresh data here as it would trigger useEffect and clear fields
@@ -447,15 +448,15 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
   const toggleUserSelection = (userId: string) => {
     setUsersWithoutPassword((prev) =>
       prev.map((user) =>
-        user.id === userId ? { ...user, selected: !user.selected } : user
-      )
+        user.id === userId ? { ...user, selected: !user.selected } : user,
+      ),
     );
   };
 
   const selectAllUsers = () => {
     const hasUnselected = usersWithoutPassword.some((user) => !user.selected);
     setUsersWithoutPassword((prev) =>
-      prev.map((user) => ({ ...user, selected: hasUnselected }))
+      prev.map((user) => ({ ...user, selected: hasUnselected })),
     );
   };
 
@@ -464,7 +465,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
       console.log("Starting password creation process...");
 
       const selectedUsers = usersWithoutPassword.filter(
-        (user) => user.selected
+        (user) => user.selected,
       );
       console.log("Selected users:", selectedUsers.length);
 
@@ -491,7 +492,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
         // Call Cloud Function to create users (this keeps admin logged in)
         const createUserAccounts = httpsCallable(
           functions,
-          "createUserAccounts"
+          "createUserAccounts",
         );
         const result = await createUserAccounts({
           users: selectedUsers,
@@ -536,7 +537,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
           "Virhe",
           `Salasanojen luominen epäonnistui: ${
             error.message || "Tuntematon virhe"
-          }`
+          }`,
         );
       } finally {
         setCreatingPasswords(false);
@@ -545,7 +546,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
       console.error("Critical error in password creation:", error);
       Alert.alert(
         "Virhe",
-        `Kriittinen virhe: ${error.message || "Tuntematon virhe"}`
+        `Kriittinen virhe: ${error.message || "Tuntematon virhe"}`,
       );
     }
   };
@@ -868,6 +869,36 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
           </View>
         </View>
 
+        {/* Position groups display setting - only for team-specific settings */}
+        {activeTab === "team" && selectedTeamId && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Joukkuejaon näyttöasetukset</Text>
+            <Text style={styles.sectionDescription}>
+              Määritä miten joukkuejako näytetään pelaajille
+              Joukkueet-välilehdellä
+            </Text>
+            <View style={styles.switchItem}>
+              <View style={styles.switchLabelContainer}>
+                <Text style={styles.settingLabel}>
+                  Ryhmittele pelaajat pelipaikkojen mukaan
+                </Text>
+                <Text style={styles.settingDescription}>
+                  Näyttää pelaajat ryhmiteltyinä hyökkääjiin, puolustajiin ja
+                  maalivahtehin
+                </Text>
+              </View>
+              <Switch
+                value={getCurrentSettings().showPositionGroups ?? false}
+                onValueChange={(value) =>
+                  handleInputChange("showPositionGroups", value)
+                }
+                trackColor={{ false: "#ddd", true: "#1976d2" }}
+                thumbColor="#fff"
+              />
+            </View>
+          </View>
+        )}
+
         {/* User Management Section - vain joukkuekohtaisissa asetuksissa */}
         {activeTab === "team" && usersWithoutPassword.length > 0 && (
           <View style={styles.section}>
@@ -928,12 +959,12 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ route }) => {
               ]}
               onPress={() => {
                 const selectedCount = usersWithoutPassword.filter(
-                  (u) => u.selected
+                  (u) => u.selected,
                 ).length;
                 if (selectedCount === 0) {
                   Alert.alert(
                     "Huomio",
-                    "Valitse ensin vähintään yksi käyttäjä salasanan luontia varten."
+                    "Valitse ensin vähintään yksi käyttäjä salasanan luontia varten.",
                   );
                   return;
                 }
