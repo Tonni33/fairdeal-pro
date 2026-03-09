@@ -19,12 +19,6 @@ if (Platform.OS === "web" && typeof document !== "undefined") {
       margin: 0;
       padding: 0;
     }
-    /* Ensure React Navigation stack card containers propagate height */
-    #root > div,
-    #root > div > div,
-    #root > div > div > div {
-      height: 100%;
-    }
   `;
   document.head.appendChild(style);
 }
@@ -32,7 +26,11 @@ if (Platform.OS === "web" && typeof document !== "undefined") {
 export default function App() {
   return (
     <SafeAreaProvider
-      style={Platform.OS === "web" ? ({ height: "100%" } as any) : undefined}
+      style={
+        Platform.OS === "web"
+          ? ({ height: "100vh", overflow: "hidden" } as any)
+          : undefined
+      }
     >
       <PaperProvider>
         <AuthProvider>
@@ -63,7 +61,9 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    ...(Platform.OS === "web" ? { height: "100%" } : {}),
+    ...(Platform.OS === "web"
+      ? { height: "100vh" as any, overflow: "hidden" as any }
+      : {}),
   },
   androidContainer: {
     flex: 1,
