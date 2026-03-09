@@ -132,6 +132,7 @@ export default function EventsPage() {
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [tabValue, setTabValue] = useState(0);
+  const [showPositionGroups, setShowPositionGroups] = useState(false);
 
   // Edit form
   const [editForm, setEditForm] = useState({
@@ -163,6 +164,28 @@ export default function EventsPage() {
       JSON.stringify(visibleColumns),
     );
   }, [visibleColumns]);
+
+  // Load showPositionGroups setting when selectedEvent changes
+  useEffect(() => {
+    const loadTeamSettings = async () => {
+      if (!selectedEvent?.teamId) {
+        setShowPositionGroups(false);
+        return;
+      }
+      try {
+        const settingsRef = doc(db, "settings", `team-${selectedEvent.teamId}`);
+        const settingsDoc = await getDoc(settingsRef);
+        if (settingsDoc.exists()) {
+          setShowPositionGroups(settingsDoc.data().showPositionGroups === true);
+        } else {
+          setShowPositionGroups(false);
+        }
+      } catch {
+        setShowPositionGroups(false);
+      }
+    };
+    loadTeamSettings();
+  }, [selectedEvent?.teamId]);
 
   useEffect(() => {
     localStorage.setItem("eventsPage-columnOrder", JSON.stringify(columnOrder));
@@ -1419,42 +1442,173 @@ export default function EventsPage() {
                   </Button>
                 </Box>
                 <Box sx={{ display: "flex", gap: 2 }}>
-                  {selectedEvent.generatedTeams.teams.map((team, idx) => (
-                    <Box key={idx} sx={{ flex: 1 }}>
-                      <Paper sx={{ p: 2, bgcolor: team.color + "22" }}>
-                        <Typography
-                          variant="h6"
-                          sx={{ mb: 2, color: team.color }}
-                        >
-                          {team.name}
-                        </Typography>
-                        <Typography variant="body2" sx={{ mb: 1 }}>
-                          Pisteet: {team.totalPoints}
-                        </Typography>
-                        <List dense>
-                          {team.players.map((player) => {
-                            const playerUser = users.find(
-                              (u) => u.id === player.id,
-                            );
-                            // Check if player is a goalkeeper from their positions
-                            const isGoalkeeper =
-                              playerUser?.positions?.includes("MV");
+                  {selectedEvent.generatedTeams.teams.map((team, idx) => {
+                    // Helper: determine display group for a player
+                    const getGroup = (player: {
+                      id: string;
+                      assignedRole?: string;
+                    }): "attacker" | "defender" | "goalkeeper" => {
+                      const playerRole =
+                        selectedEvent?.playerRoles?.[player.id];
+                      if (playerRole === "MV") return "goalkeeper";
+                      if (playerRole === "H") return "attacker";
+                      if (playerRole === "P") return "defender";
+                      if (player.assignedRole === "defender") return "defender";
+                      if (player.assignedRole === "attacker") return "attacker";
+                      const u = users.find((u) => u.id === player.id);
+                      if (!u) return "attacker";
+                      const hasField = u.positions?.some((p: string) =>
+                        ["H", "P", "H/P"].includes(p),
+                      );
+                      if (u.positions?.includes("MV") && !hasField)
+                        return "goalkeeper";
+                      if (
+                        u.positions?.includes("P") &&
+                        !u.positions?.includes("H")
+                      )
+                        return "defender";
+                      return "attacker";
+                    };
 
-                            return (
-                              <ListItem key={player.id}>
-                                <ListItemText
-                                  primary={playerUser?.name || player.id}
-                                  secondary={
-                                    isGoalkeeper ? "Maalivahti" : undefined
-                                  }
-                                />
-                              </ListItem>
-                            );
-                          })}
-                        </List>
-                      </Paper>
-                    </Box>
-                  ))}
+                    return (
+                      <Box key={idx} sx={{ flex: 1 }}>
+                        <Paper sx={{ p: 2, bgcolor: team.color + "22" }}>
+                          <Typography
+                            variant="h6"
+                            sx={{ mb: 2, color: team.color }}
+                          >
+                            {team.name}
+                          </Typography>
+                          <Typography variant="body2" sx={{ mb: 1 }}>
+                            Pisteet: {team.totalPoints}
+                          </Typography>
+
+                          {!showPositionGroups ? (
+                            // Original flat list
+                            <List dense>
+                              {team.players.map((player) => {
+                                const playerUser = users.find(
+                                  (u) => u.id === player.id,
+                                );
+                                const isGoalkeeper =
+                                  playerUser?.positions?.includes("MV");
+                                return (
+                                  <ListItem key={player.id}>
+                                    <ListItemText
+                                      primary={playerUser?.name || player.id}
+                                      secondary={
+                                        isGoalkeeper ? "Maalivahti" : undefined
+                                      }
+                                    />
+                                  </ListItem>
+                                );
+                              })}
+                            </List>
+                          ) : (
+                            // Grouped list: attackers → defenders → goalkeepers
+                            (() => {
+                              const attackers = team.players.filter(
+                                (p) => getGroup(p) === "attacker",
+                              );
+                              const defenders = team.players.filter(
+                                (p) => getGroup(p) === "defender",
+                              );
+                              const goalkeepers = team.players.filter(
+                                (p) => getGroup(p) === "goalkeeper",
+                              );
+
+                              const renderGroup = (
+                                label: string,
+                                players: typeof team.players,
+                                borderColor: string,
+                                bgColor: string,
+                                textColor: string,
+                              ) =>
+                                players.length > 0 ? (
+                                  <Box key={label} sx={{ mb: 1 }}>
+                                    <Box
+                                      sx={{
+                                        px: 1,
+                                        py: 0.5,
+                                        bgcolor: borderColor,
+                                        borderRadius: 1,
+                                        mb: 0.5,
+                                      }}
+                                    >
+                                      <Typography
+                                        variant="caption"
+                                        sx={{ color: "#fff", fontWeight: 700 }}
+                                      >
+                                        {label} ({players.length})
+                                      </Typography>
+                                    </Box>
+                                    <List dense disablePadding>
+                                      {players.map((player) => {
+                                        const playerUser = users.find(
+                                          (u) => u.id === player.id,
+                                        );
+                                        return (
+                                          <ListItem
+                                            key={player.id}
+                                            sx={{
+                                              borderLeft: `4px solid ${borderColor}`,
+                                              bgcolor: bgColor,
+                                              mb: 0.25,
+                                              borderRadius: "0 4px 4px 0",
+                                            }}
+                                          >
+                                            <ListItemText
+                                              primary={
+                                                <Typography
+                                                  variant="body2"
+                                                  sx={{
+                                                    color: textColor,
+                                                    fontWeight: 600,
+                                                  }}
+                                                >
+                                                  {playerUser?.name ||
+                                                    player.id}
+                                                </Typography>
+                                              }
+                                            />
+                                          </ListItem>
+                                        );
+                                      })}
+                                    </List>
+                                  </Box>
+                                ) : null;
+
+                              return (
+                                <Box>
+                                  {renderGroup(
+                                    "🏒 Hyökkääjät",
+                                    attackers,
+                                    "#1976d2",
+                                    "#e3f2fd",
+                                    "#1565c0",
+                                  )}
+                                  {renderGroup(
+                                    "🛡️ Puolustajat",
+                                    defenders,
+                                    "#4caf50",
+                                    "#e8f5e9",
+                                    "#2e7d32",
+                                  )}
+                                  {renderGroup(
+                                    "🥅 Maalivahdit",
+                                    goalkeepers,
+                                    "#ff9800",
+                                    "#fff8e1",
+                                    "#e65100",
+                                  )}
+                                </Box>
+                              );
+                            })()
+                          )}
+                        </Paper>
+                      </Box>
+                    );
+                  })}
                 </Box>
               </Box>
             ) : (

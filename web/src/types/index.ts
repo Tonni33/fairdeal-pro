@@ -110,7 +110,7 @@ export interface GeneratedTeam {
   playerIds: string[];
   players: Array<{
     id: string;
-    assignedRole?: "H" | "P" | "MV";
+    assignedRole?: "defender" | "attacker";
   }>;
   shuffledPlayerIds?: string[];
   totalPoints: number;

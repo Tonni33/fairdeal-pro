@@ -1,5 +1,27 @@
 # What's New - FairDealPro
 
+## Version 1.0.14
+
+### Suomi (Finnish) - For App Store
+
+Selkeämmät pelaajalistat tapahtumissa:
+
+• Pelaajat järjestetty aakkosjärjestykseen sukunimen mukaan
+• Vakiokävijät näytetään ennen vierailijoita
+• Maalivahdit listataan viimeisenä
+• Värikoodaus: sininen = vakiokävijä, oranssi = vierailija
+
+### English - For App Store
+
+Clearer player lists in events:
+
+• Players sorted alphabetically by last name
+• Regular members shown before guests
+• Goalkeepers listed last
+• Color coding: blue = regular member, orange = guest
+
+---
+
 ## Suomi (Finnish)
 
 ### Parannukset joukkueenjakoon

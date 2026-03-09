@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -35,6 +35,7 @@ const TeamsScreen: React.FC = () => {
   const [isTeamModalVisible, setIsTeamModalVisible] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [showPositionGroups, setShowPositionGroups] = useState(false);
 
   const navigation = useNavigation<TeamsScreenNavigationProp>();
   const { user } = useAuth();
@@ -47,6 +48,65 @@ const TeamsScreen: React.FC = () => {
     selectedTeamId,
     setSelectedTeamId,
   } = useApp();
+
+  // Fetch team settings (showPositionGroups) when selectedEvent changes
+  useEffect(() => {
+    const loadTeamSettings = async () => {
+      if (!selectedEvent?.teamId) {
+        setShowPositionGroups(false);
+        return;
+      }
+      try {
+        const settingsRef = doc(db, "settings", `team-${selectedEvent.teamId}`);
+        const settingsDoc = await getDoc(settingsRef);
+        if (settingsDoc.exists()) {
+          const data = settingsDoc.data();
+          setShowPositionGroups(data.showPositionGroups === true);
+        } else {
+          setShowPositionGroups(false);
+        }
+      } catch (error) {
+        console.error("Error loading team settings:", error);
+        setShowPositionGroups(false);
+      }
+    };
+    loadTeamSettings();
+  }, [selectedEvent?.teamId]);
+
+  // Helper: determine display group (attacker / defender / goalkeeper) for a player
+  const getPlayerDisplayGroup = (
+    playerId: string,
+    team: any,
+  ): "attacker" | "defender" | "goalkeeper" => {
+    // 1. Check event-specific role
+    const playerRole = selectedEvent?.playerRoles?.[playerId];
+    if (playerRole === "MV") return "goalkeeper";
+    if (playerRole === "H") return "attacker";
+    if (playerRole === "P") return "defender";
+
+    // 2. If H/P (or no explicit role), check assignedRole saved in team data
+    const teamPlayerEntry = (team.players || []).find(
+      (p: any) => (typeof p === "string" ? p : p.id) === playerId,
+    );
+    const assignedRole =
+      typeof teamPlayerEntry === "object"
+        ? (teamPlayerEntry as any)?.assignedRole
+        : undefined;
+    if (assignedRole === "defender") return "defender";
+    if (assignedRole === "attacker") return "attacker";
+
+    // 3. Fallback to player's default positions
+    const player = getPlayerById(playerId);
+    if (!player) return "attacker";
+    const hasFieldPositions = player.positions.some((pos) =>
+      ["H", "P", "H/P"].includes(pos),
+    );
+    if (player.positions.includes("MV") && !hasFieldPositions)
+      return "goalkeeper";
+    if (player.positions.includes("P") && !player.positions.includes("H"))
+      return "defender";
+    return "attacker";
+  };
 
   // Helper functions for player data
   const getPlayerById = (playerId: string) => {
@@ -93,7 +153,7 @@ const TeamsScreen: React.FC = () => {
       ? new Set(team.shuffledPlayerIds)
       : new Set();
     const allPlayersIncluded = playerIds.every((id: string) =>
-      savedShuffleIds.has(id)
+      savedShuffleIds.has(id),
     );
 
     // If saved shuffle exists and contains all players, use it
@@ -109,7 +169,7 @@ const TeamsScreen: React.FC = () => {
     // Log if shuffle needs regeneration
     if (hasSavedShuffle && !allPlayersIncluded) {
       const missingIds = playerIds.filter(
-        (id: string) => !savedShuffleIds.has(id)
+        (id: string) => !savedShuffleIds.has(id),
       );
       console.warn("⚠️ Regenerating shuffle - missing players:", {
         missingCount: missingIds.length,
@@ -174,7 +234,7 @@ const TeamsScreen: React.FC = () => {
       fieldPlayers: fieldPlayers.length,
       goalkeepers: goalkeepers.length,
       allIdsIncluded: playerIds.every((id: string) =>
-        shuffledResult.includes(id)
+        shuffledResult.includes(id),
       ),
     });
 
@@ -196,8 +256,9 @@ const TeamsScreen: React.FC = () => {
         const eventData = eventDoc.data();
         if (eventData.generatedTeams && eventData.generatedTeams.teams) {
           // Find and update the specific team
-          const updatedTeams = eventData.generatedTeams.teams.map((team: any) =>
-            team.name === updatedTeam.name ? updatedTeam : team
+          const updatedTeams = eventData.generatedTeams.teams.map(
+            (team: any) =>
+              team.name === updatedTeam.name ? updatedTeam : team,
           );
 
           await updateDoc(eventRef, {
@@ -234,7 +295,7 @@ const TeamsScreen: React.FC = () => {
                   // Create new shuffle
                   getShuffledPlayersForDisplay(team, selectedEvent);
                   return team;
-                }
+                },
               );
 
               // Update the local state
@@ -261,7 +322,7 @@ const TeamsScreen: React.FC = () => {
             }
           },
         },
-      ]
+      ],
     );
   };
 
@@ -283,7 +344,7 @@ const TeamsScreen: React.FC = () => {
 
         const shuffledPlayers = getShuffledPlayersForDisplay(
           team,
-          selectedEvent
+          selectedEvent,
         );
 
         shuffledPlayers.forEach((playerId: string) => {
@@ -334,7 +395,7 @@ const TeamsScreen: React.FC = () => {
 
         const shuffledPlayers = getShuffledPlayersForDisplay(
           team,
-          selectedEvent
+          selectedEvent,
         );
 
         shuffledPlayers.forEach((playerId: string) => {
@@ -379,7 +440,7 @@ const TeamsScreen: React.FC = () => {
           if (!canOpen) {
             Alert.alert(
               "WhatsApp ei ole asennettu",
-              "Asenna WhatsApp-sovellus lähettääksesi viestejä ryhmään."
+              "Asenna WhatsApp-sovellus lähettääksesi viestejä ryhmään.",
             );
             return;
           }
@@ -398,18 +459,18 @@ const TeamsScreen: React.FC = () => {
                   // Open the WhatsApp group
                   if (selectedTeamData.whatsappGroupInviteLink) {
                     Linking.openURL(
-                      selectedTeamData.whatsappGroupInviteLink
+                      selectedTeamData.whatsappGroupInviteLink,
                     ).catch((err) => {
                       console.error("Error opening WhatsApp group:", err);
                       Alert.alert(
                         "Virhe",
-                        "WhatsApp-ryhmän avaaminen ei onnistunut. Tarkista kutsulinkin oikeellisuus."
+                        "WhatsApp-ryhmän avaaminen ei onnistunut. Tarkista kutsulinkin oikeellisuus.",
                       );
                     });
                   }
                 },
               },
-            ]
+            ],
           );
           return;
         }
@@ -425,7 +486,7 @@ const TeamsScreen: React.FC = () => {
           } else {
             Alert.alert(
               "WhatsApp ei ole asennettu",
-              "Asenna WhatsApp-sovellus lähettääksesi viestejä ryhmään."
+              "Asenna WhatsApp-sovellus lähettääksesi viestejä ryhmään.",
             );
           }
         })
@@ -442,7 +503,7 @@ const TeamsScreen: React.FC = () => {
   // Filter user teams
   const userTeams = useMemo(
     () => getUserTeams(user, teams, players),
-    [user, teams, players]
+    [user, teams, players],
   );
 
   // Filter events with generated teams
@@ -452,14 +513,14 @@ const TeamsScreen: React.FC = () => {
     // Jos käyttäjä on valinnut tietyn joukkueen, näytä sen tapahtumat
     if (selectedTeamId) {
       filteredEvents = events.filter(
-        (event) => event.teamId === selectedTeamId
+        (event) => event.teamId === selectedTeamId,
       );
     } else {
       // Jos joukkuetta ei ole valittu, näytä vain niiden joukkueiden tapahtumat joissa käyttäjä on jäsenenä
       if (userTeams.length > 0) {
         const userTeamIds = userTeams.map((team) => team.id);
         filteredEvents = events.filter(
-          (event) => event.teamId && userTeamIds.includes(event.teamId)
+          (event) => event.teamId && userTeamIds.includes(event.teamId),
         );
       } else {
         // Jos käyttäjä ei kuulu mihinkään joukkueeseen, älä näytä tapahtumia
@@ -484,7 +545,7 @@ const TeamsScreen: React.FC = () => {
               generatedAt: e.generatedTeams.generatedAt,
             }
           : null,
-      }))
+      })),
     );
 
     // Only show events that have generated teams
@@ -511,7 +572,7 @@ const TeamsScreen: React.FC = () => {
 
     // Sort by date (newest first)
     return filteredEvents.sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
     );
   }, [events, selectedTeamId, userTeams]);
 
@@ -554,7 +615,7 @@ const TeamsScreen: React.FC = () => {
     } else {
       Alert.alert(
         "Tulossa pian",
-        `${screen} -toiminto toteutetaan seuraavaksi`
+        `${screen} -toiminto toteutetaan seuraavaksi`,
       );
     }
   };
@@ -716,54 +777,139 @@ const TeamsScreen: React.FC = () => {
                     </View>
 
                     <View style={styles.playersList}>
-                      {getShuffledPlayersForDisplay(team, selectedEvent).map(
-                        (playerId: string, playerIndex: number) => {
+                      {(() => {
+                        const shuffledIds = getShuffledPlayersForDisplay(
+                          team,
+                          selectedEvent,
+                        );
+
+                        if (!showPositionGroups) {
+                          // Original flat display
+                          return shuffledIds.map(
+                            (playerId: string, playerIndex: number) => {
+                              const player = getPlayerById(playerId);
+                              if (!player) return null;
+                              const playerRole =
+                                selectedEvent.playerRoles?.[playerId];
+                              const isGoalkeeper = playerRole
+                                ? playerRole === "MV"
+                                : player.positions.includes("MV");
+                              return (
+                                <View
+                                  key={`team-${index}-player-${playerId}`}
+                                  style={[
+                                    styles.playerItem,
+                                    isGoalkeeper && {
+                                      borderLeftWidth: 4,
+                                      borderLeftColor: "#ff9800",
+                                      backgroundColor: "#fff8e1",
+                                    },
+                                  ]}
+                                >
+                                  <View
+                                    style={[
+                                      styles.playerIcon,
+                                      isGoalkeeper && {
+                                        backgroundColor: "#ff9800",
+                                      },
+                                    ]}
+                                  >
+                                    <Text
+                                      style={[
+                                        styles.playerNumber,
+                                        isGoalkeeper && { color: "#fff" },
+                                      ]}
+                                    >
+                                      {playerIndex + 1}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.playerInfo}>
+                                    <Text
+                                      style={[
+                                        styles.playerName,
+                                        isGoalkeeper && {
+                                          color: "#ff9800",
+                                          fontWeight: "600",
+                                        },
+                                      ]}
+                                    >
+                                      {player.name}
+                                      {isGoalkeeper && " 🥅"}
+                                    </Text>
+                                  </View>
+                                </View>
+                              );
+                            },
+                          );
+                        }
+
+                        // Grouped display: attackers → defenders → goalkeepers
+                        const attackers: string[] = [];
+                        const defenders: string[] = [];
+                        const goalkeepers: string[] = [];
+                        shuffledIds.forEach((id: string) => {
+                          const group = getPlayerDisplayGroup(id, team);
+                          if (group === "goalkeeper") goalkeepers.push(id);
+                          else if (group === "defender") defenders.push(id);
+                          else attackers.push(id);
+                        });
+
+                        const renderGroupItem = (
+                          playerId: string,
+                          groupIndex: number,
+                          group: "attacker" | "defender" | "goalkeeper",
+                        ) => {
                           const player = getPlayerById(playerId);
                           if (!player) return null;
-
-                          // Check event-specific role first, then fall back to positions
-                          const playerRole =
-                            selectedEvent.playerRoles?.[playerId];
-                          const isGoalkeeper = playerRole
-                            ? playerRole === "MV"
-                            : player.positions.includes("MV");
+                          const isGoalkeeper = group === "goalkeeper";
+                          const isDefender = group === "defender";
+                          const bgColor = isGoalkeeper
+                            ? "#fff8e1"
+                            : isDefender
+                              ? "#e8f5e9"
+                              : "#e3f2fd";
+                          const borderColor = isGoalkeeper
+                            ? "#ff9800"
+                            : isDefender
+                              ? "#4caf50"
+                              : "#1976d2";
+                          const textColor = isGoalkeeper
+                            ? "#ff9800"
+                            : isDefender
+                              ? "#2e7d32"
+                              : "#1565c0";
                           return (
                             <View
                               key={`team-${index}-player-${playerId}`}
                               style={[
                                 styles.playerItem,
-                                isGoalkeeper && {
+                                {
                                   borderLeftWidth: 4,
-                                  borderLeftColor: "#ff9800",
-                                  backgroundColor: "#fff8e1",
+                                  borderLeftColor: borderColor,
+                                  backgroundColor: bgColor,
                                 },
                               ]}
                             >
                               <View
                                 style={[
                                   styles.playerIcon,
-                                  isGoalkeeper && {
-                                    backgroundColor: "#ff9800",
-                                  },
+                                  { backgroundColor: borderColor },
                                 ]}
                               >
                                 <Text
                                   style={[
                                     styles.playerNumber,
-                                    isGoalkeeper && { color: "#fff" },
+                                    { color: "#fff" },
                                   ]}
                                 >
-                                  {playerIndex + 1}
+                                  {groupIndex + 1}
                                 </Text>
                               </View>
                               <View style={styles.playerInfo}>
                                 <Text
                                   style={[
                                     styles.playerName,
-                                    isGoalkeeper && {
-                                      color: "#ff9800",
-                                      fontWeight: "600",
-                                    },
+                                    { color: textColor, fontWeight: "600" },
                                   ]}
                                 >
                                   {player.name}
@@ -772,8 +918,64 @@ const TeamsScreen: React.FC = () => {
                               </View>
                             </View>
                           );
-                        }
-                      )}
+                        };
+
+                        const renderSectionHeader = (
+                          label: string,
+                          color: string,
+                          count: number,
+                        ) =>
+                          count > 0 ? (
+                            <View
+                              key={`header-${label}`}
+                              style={{
+                                paddingVertical: 4,
+                                paddingHorizontal: 8,
+                                backgroundColor: color,
+                                borderRadius: 6,
+                                marginTop: 8,
+                                marginBottom: 4,
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  fontWeight: "700",
+                                  fontSize: 12,
+                                  color: "#fff",
+                                }}
+                              >
+                                {label} ({count})
+                              </Text>
+                            </View>
+                          ) : null;
+
+                        return [
+                          renderSectionHeader(
+                            "🏒 Hyökkääjät",
+                            "#1976d2",
+                            attackers.length,
+                          ),
+                          ...attackers.map((id, i) =>
+                            renderGroupItem(id, i, "attacker"),
+                          ),
+                          renderSectionHeader(
+                            "🛡️ Puolustajat",
+                            "#4caf50",
+                            defenders.length,
+                          ),
+                          ...defenders.map((id, i) =>
+                            renderGroupItem(id, i, "defender"),
+                          ),
+                          renderSectionHeader(
+                            "🥅 Maalivahdit",
+                            "#ff9800",
+                            goalkeepers.length,
+                          ),
+                          ...goalkeepers.map((id, i) =>
+                            renderGroupItem(id, i, "goalkeeper"),
+                          ),
+                        ];
+                      })()}
                     </View>
                   </View>
                 ))}

@@ -1674,8 +1674,10 @@ const EventManagementScreen: React.FC = () => {
                         ));
                     if (aIsGK && !bIsGK) return 1;
                     if (!aIsGK && bIsGK) return -1;
-                    const aIsMember = teamId && a?.teamMember?.[teamId] === true;
-                    const bIsMember = teamId && b?.teamMember?.[teamId] === true;
+                    const aIsMember =
+                      teamId && a?.teamMember?.[teamId] === true;
+                    const bIsMember =
+                      teamId && b?.teamMember?.[teamId] === true;
                     if (aIsMember && !bIsMember) return -1;
                     if (!aIsMember && bIsMember) return 1;
                     const aLast = (a?.name || "").split(" ").pop() || "";
@@ -1683,70 +1685,74 @@ const EventManagementScreen: React.FC = () => {
                     return aLast.localeCompare(bLast, "fi");
                   })
                   .map((pid: string) => {
-                  const player = players.find((p) => p.id === pid);
-                  // Check playerRole from event first, then fall back to player's positions
-                  const playerRole = selectedEvent?.playerRoles?.[pid];
-                  const isGoalkeeper =
-                    playerRole === "MV" ||
-                    (!playerRole && player?.positions.includes("MV"));
-                  // Check teamMember status
-                  const teamId = selectedEvent?.teamId || "";
-                  const isTeamMember =
-                    teamId && player?.teamMember?.[teamId] === true;
-                  return (
-                    <View
-                      key={pid}
-                      style={[
-                        styles.playerCard,
-                        isGoalkeeper && styles.goalkeeperCard,
-                        !isGoalkeeper && {
-                          borderLeftWidth: 4,
-                          borderLeftColor: isTeamMember ? "#1976d2" : "#ff9800",
-                          backgroundColor: isTeamMember ? "#e3f2fd" : "#fff3e0",
-                        },
-                      ]}
-                    >
-                      <View style={styles.playerInfo}>
-                        <Ionicons
-                          name="person"
-                          size={20}
-                          color={getPlayerIconColor(
-                            player,
-                            selectedEvent.teamId,
-                            isTeamMember,
-                          )}
-                        />
-                        <View style={styles.playerDetails}>
-                          <Text
-                            style={[
-                              styles.playerName,
-                              isGoalkeeper && styles.goalkeeperName,
-                              !isGoalkeeper &&
-                                !isTeamMember && {
-                                  color: "#ff9800",
-                                  fontWeight: "500",
-                                },
-                            ]}
-                          >
-                            {player ? player.name : pid}
-                            {isGoalkeeper && " 🥅"}
-                          </Text>
-                        </View>
-                      </View>
-                      <TouchableOpacity
-                        style={styles.removeButton}
-                        onPress={() => handleRemovePlayerFromEvent(pid)}
-                        disabled={removingPlayerId === pid}
+                    const player = players.find((p) => p.id === pid);
+                    // Check playerRole from event first, then fall back to player's positions
+                    const playerRole = selectedEvent?.playerRoles?.[pid];
+                    const isGoalkeeper =
+                      playerRole === "MV" ||
+                      (!playerRole && player?.positions.includes("MV"));
+                    // Check teamMember status
+                    const teamId = selectedEvent?.teamId || "";
+                    const isTeamMember =
+                      teamId && player?.teamMember?.[teamId] === true;
+                    return (
+                      <View
+                        key={pid}
+                        style={[
+                          styles.playerCard,
+                          isGoalkeeper && styles.goalkeeperCard,
+                          !isGoalkeeper && {
+                            borderLeftWidth: 4,
+                            borderLeftColor: isTeamMember
+                              ? "#1976d2"
+                              : "#ff9800",
+                            backgroundColor: isTeamMember
+                              ? "#e3f2fd"
+                              : "#fff3e0",
+                          },
+                        ]}
                       >
-                        {removingPlayerId === pid ? (
-                          <ActivityIndicator size="small" color="#dc3545" />
-                        ) : (
-                          <Ionicons name="close" size={18} color="#dc3545" />
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  );
-                })
+                        <View style={styles.playerInfo}>
+                          <Ionicons
+                            name="person"
+                            size={20}
+                            color={getPlayerIconColor(
+                              player,
+                              selectedEvent.teamId,
+                              isTeamMember,
+                            )}
+                          />
+                          <View style={styles.playerDetails}>
+                            <Text
+                              style={[
+                                styles.playerName,
+                                isGoalkeeper && styles.goalkeeperName,
+                                !isGoalkeeper &&
+                                  !isTeamMember && {
+                                    color: "#ff9800",
+                                    fontWeight: "500",
+                                  },
+                              ]}
+                            >
+                              {player ? player.name : pid}
+                              {isGoalkeeper && " 🥅"}
+                            </Text>
+                          </View>
+                        </View>
+                        <TouchableOpacity
+                          style={styles.removeButton}
+                          onPress={() => handleRemovePlayerFromEvent(pid)}
+                          disabled={removingPlayerId === pid}
+                        >
+                          {removingPlayerId === pid ? (
+                            <ActivityIndicator size="small" color="#dc3545" />
+                          ) : (
+                            <Ionicons name="close" size={18} color="#dc3545" />
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })
               )}
 
               {/* Reserve Players Section */}
@@ -1783,8 +1789,10 @@ const EventManagementScreen: React.FC = () => {
                           ));
                       if (aIsGK && !bIsGK) return 1;
                       if (!aIsGK && bIsGK) return -1;
-                      const aIsMember = teamId && a?.teamMember?.[teamId] === true;
-                      const bIsMember = teamId && b?.teamMember?.[teamId] === true;
+                      const aIsMember =
+                        teamId && a?.teamMember?.[teamId] === true;
+                      const bIsMember =
+                        teamId && b?.teamMember?.[teamId] === true;
                       if (aIsMember && !bIsMember) return -1;
                       if (!aIsMember && bIsMember) return 1;
                       const aLast = (a?.name || "").split(" ").pop() || "";
@@ -1792,70 +1800,81 @@ const EventManagementScreen: React.FC = () => {
                       return aLast.localeCompare(bLast, "fi");
                     })
                     .map((pid: string) => {
-                    const player = players.find((p) => p.id === pid);
-                    if (!player) return null;
-                    const playerRole = selectedEvent?.playerRoles?.[player.id];
-                    const isGoalkeeper =
-                      playerRole === "MV" ||
-                      (!playerRole && player?.positions.includes("MV"));
-                    // Check teamMember status
-                    const teamId = selectedEvent?.teamId || "";
-                    const isTeamMember =
-                      teamId && player?.teamMember?.[teamId] === true;
-                    return (
-                      <View
-                        key={player.id}
-                        style={[
-                          styles.playerCard,
-                          !isGoalkeeper && {
-                            borderLeftWidth: 4,
-                            borderLeftColor: isTeamMember ? "#1976d2" : "#ff9800",
-                            backgroundColor: isTeamMember ? "#e3f2fd" : "#fff3e0",
-                          },
-                          isGoalkeeper && styles.goalkeeperCard,
-                        ]}
-                      >
-                        <View style={styles.playerInfo}>
-                          <Ionicons
-                            name="person"
-                            size={20}
-                            color={getPlayerIconColor(
-                              player,
-                              selectedEvent.teamId,
-                              isTeamMember,
-                            )}
-                          />
-                          <View style={styles.playerDetails}>
-                            <Text
-                              style={[
-                                styles.playerName,
-                                isGoalkeeper && styles.goalkeeperName,
-                                !isGoalkeeper &&
-                                  !isTeamMember && {
-                                    color: "#ff9800",
-                                    fontWeight: "500",
-                                  },
-                              ]}
-                            >
-                              {player.name}
-                              {isGoalkeeper && " 🥅"}
-                            </Text>
-                          </View>
-                        </View>
-                        <TouchableOpacity
-                          style={styles.removeButton}
-                          onPress={() => handleRemovePlayerFromEvent(player.id)}
-                          disabled={removingPlayerId === player.id}
+                      const player = players.find((p) => p.id === pid);
+                      if (!player) return null;
+                      const playerRole =
+                        selectedEvent?.playerRoles?.[player.id];
+                      const isGoalkeeper =
+                        playerRole === "MV" ||
+                        (!playerRole && player?.positions.includes("MV"));
+                      // Check teamMember status
+                      const teamId = selectedEvent?.teamId || "";
+                      const isTeamMember =
+                        teamId && player?.teamMember?.[teamId] === true;
+                      return (
+                        <View
+                          key={player.id}
+                          style={[
+                            styles.playerCard,
+                            !isGoalkeeper && {
+                              borderLeftWidth: 4,
+                              borderLeftColor: isTeamMember
+                                ? "#1976d2"
+                                : "#ff9800",
+                              backgroundColor: isTeamMember
+                                ? "#e3f2fd"
+                                : "#fff3e0",
+                            },
+                            isGoalkeeper && styles.goalkeeperCard,
+                          ]}
                         >
-                          {removingPlayerId === player.id ? (
-                            <ActivityIndicator size="small" color="#dc3545" />
-                          ) : (
-                            <Ionicons name="close" size={18} color="#dc3545" />
-                          )}
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  })}
+                          <View style={styles.playerInfo}>
+                            <Ionicons
+                              name="person"
+                              size={20}
+                              color={getPlayerIconColor(
+                                player,
+                                selectedEvent.teamId,
+                                isTeamMember,
+                              )}
+                            />
+                            <View style={styles.playerDetails}>
+                              <Text
+                                style={[
+                                  styles.playerName,
+                                  isGoalkeeper && styles.goalkeeperName,
+                                  !isGoalkeeper &&
+                                    !isTeamMember && {
+                                      color: "#ff9800",
+                                      fontWeight: "500",
+                                    },
+                                ]}
+                              >
+                                {player.name}
+                                {isGoalkeeper && " 🥅"}
+                              </Text>
+                            </View>
+                          </View>
+                          <TouchableOpacity
+                            style={styles.removeButton}
+                            onPress={() =>
+                              handleRemovePlayerFromEvent(player.id)
+                            }
+                            disabled={removingPlayerId === player.id}
+                          >
+                            {removingPlayerId === player.id ? (
+                              <ActivityIndicator size="small" color="#dc3545" />
+                            ) : (
+                              <Ionicons
+                                name="close"
+                                size={18}
+                                color="#dc3545"
+                              />
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })}
                 </View>
               )}
             </ScrollView>

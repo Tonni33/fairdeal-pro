@@ -2,7 +2,7 @@
   "expo": {
     "name": "FairDealPro",
     "slug": "fairdeal-pro",
-    "version": "1.0.13",
+    "version": "1.0.14",
     "orientation": "portrait",
     "icon": "./assets/fairdealLogo.png",
     "userInterfaceStyle": "light",
@@ -32,7 +32,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.fairdeal.pro",
-      "buildNumber": "42",
+      "buildNumber": "43",
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses camera to take photos for player profiles",
         "NSPhotoLibraryUsageDescription": "This app accesses photo library to select photos for player profiles",
@@ -78,7 +78,7 @@
         }
       ],
       "softwareKeyboardLayoutMode": "pan",
-      "versionCode": 14
+      "versionCode": 15
     },
     "web": {
       "favicon": "./assets/favicon.png"

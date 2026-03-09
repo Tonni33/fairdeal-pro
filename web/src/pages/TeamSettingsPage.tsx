@@ -49,6 +49,7 @@ interface TeamSettings {
   teamSize: number;
   guestRegistrationHours: number;
   teamAdminIds: string[];
+  showPositionGroups?: boolean;
   updatedAt?: string;
   updatedBy?: string;
 }
@@ -78,6 +79,7 @@ export default function TeamSettingsPage() {
     teamAName: "Joukkue Valkoinen",
     teamBName: "Joukkue Musta",
     guestRegistrationHours: 24,
+    showPositionGroups: false,
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -223,6 +225,7 @@ export default function TeamSettingsPage() {
       teamAName: setting.teamAName ?? "",
       teamBName: setting.teamBName ?? "",
       guestRegistrationHours: setting.guestRegistrationHours ?? 24,
+      showPositionGroups: setting.showPositionGroups ?? false,
     });
     setEditOpen(true);
   };
@@ -246,6 +249,7 @@ export default function TeamSettingsPage() {
         notificationEnabled: editForm.notificationEnabled ?? true,
         teamAName: editForm.teamAName ?? "",
         teamBName: editForm.teamBName ?? "",
+        showPositionGroups: editForm.showPositionGroups ?? false,
         updatedAt: new Date(),
       });
 
@@ -806,6 +810,25 @@ export default function TeamSettingsPage() {
                 />
               }
               label="Ilmoitukset käytössä"
+            />
+
+            <Typography variant="h6" sx={{ mt: 2 }}>
+              Arvonnan näyttöasetukset
+            </Typography>
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={editForm.showPositionGroups}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      showPositionGroups: e.target.checked,
+                    })
+                  }
+                />
+              }
+              label="Näytä pelaajat pelipaikkojen mukaan ryhmiteltynä (hyökkääjät, puolustajat, maalivahdit)"
             />
           </Stack>
         </DialogContent>
