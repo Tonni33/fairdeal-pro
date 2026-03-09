@@ -10,7 +10,9 @@ import { NotificationHandler } from "./src/components/NotificationHandler";
 
 export default function App() {
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider
+      style={Platform.OS === "web" ? ({ height: "100%" } as any) : undefined}
+    >
       <PaperProvider>
         <AuthProvider>
           <AppProvider>
@@ -40,6 +42,7 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    ...(Platform.OS === "web" ? { height: "100%" } : {}),
   },
   androidContainer: {
     flex: 1,

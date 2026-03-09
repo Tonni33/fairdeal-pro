@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="fi">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no"
+    />
+    <title>FairDealPro</title>
+    <style>
+      /*
+       * Fix scrolling for Expo web / react-native-web.
+       * Without this, flex:1 on the root View grows unbounded and
+       * ScrollView children never activate their own scroll mechanism.
+       */
+      html,
+      body,
+      #root {
+        height: 100%;
+        overflow: hidden;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #fff;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
