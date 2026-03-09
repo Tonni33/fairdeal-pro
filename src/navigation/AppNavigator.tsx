@@ -104,7 +104,9 @@ const AppNavigator = () => {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator
+        screenOptions={{ headerShown: false, cardStyle: { flex: 1 } }}
+      >
         {user ? (
           <>
             <Stack.Screen name="Main" component={TabNavigator} />

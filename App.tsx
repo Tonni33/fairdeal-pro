@@ -19,6 +19,12 @@ if (Platform.OS === "web" && typeof document !== "undefined") {
       margin: 0;
       padding: 0;
     }
+    /* Ensure React Navigation stack card containers propagate height */
+    #root > div,
+    #root > div > div,
+    #root > div > div > div {
+      height: 100%;
+    }
   `;
   document.head.appendChild(style);
 }
