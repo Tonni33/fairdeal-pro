@@ -78,7 +78,7 @@
         }
       ],
       "softwareKeyboardLayoutMode": "pan",
-      "versionCode": 18
+      "versionCode": 19
     },
     "web": {
       "favicon": "./assets/favicon.png",
