@@ -50,6 +50,34 @@ target 'FairDealPro' do
       :ccache_enabled => podfile_properties['apple.ccacheEnabled'] == 'true',
     )
 
+    # Xcode 26 (Apple Clang 21) tiukensi consteval-sääntöjä, eikä React Nativen
+    # mukana tuleva fmt 11.0.2 käänny enää: "call to consteval function
+    # fmt::basic_format_string<...> is not a constant expression".
+    # fmt tarkistaa muotoilumerkkijonot ajonaikaisesti kun FMT_USE_CONSTEVAL on 0.
+    # Makro ei ole #ifndef-suojattu, joten sitä ei voi ohittaa -D-lipulla, vaan
+    # otsikko on korjattava pod installin jälkeen.
+    # Poistettavissa kun React Native päivittää fmt:n versioon, joka kääntyy
+    # Apple Clang 21:llä. Ks. facebook/react-native#55601, fmtlib/fmt#4740.
+    fmt_base_h = File.join(installer.sandbox.root, 'fmt', 'include', 'fmt', 'base.h')
+    if File.exist?(fmt_base_h)
+      fmt_contents = File.read(fmt_base_h)
+      apple_guard = "#if defined(__apple_build_version__)\n#  define FMT_USE_CONSTEVAL 0\n#elif "
+      if fmt_contents.include?(apple_guard)
+        Pod::UI.puts 'fmt: consteval-korjaus oli jo paikallaan'
+      elsif fmt_contents.include?('#if !defined(__cpp_lib_is_constant_evaluated)')
+        File.write(
+          fmt_base_h,
+          fmt_contents.sub(
+            '#if !defined(__cpp_lib_is_constant_evaluated)',
+            "#{apple_guard}!defined(__cpp_lib_is_constant_evaluated)"
+          )
+        )
+        Pod::UI.puts 'fmt: FMT_USE_CONSTEVAL pakotettu nollaksi Applen kaantajalle'
+      else
+        Pod::UI.warn 'fmt: base.h ei vastannut odotettua muotoa, consteval-korjausta EI tehty'
+      end
+    end
+
     # This is necessary for Xcode 14, because it signs resource bundles by default
     # when building for devices.
     installer.target_installation_results.pod_target_installation_results
