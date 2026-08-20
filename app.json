@@ -85,6 +85,7 @@
       "template": "./public/index.html"
     },
     "updates": {
+      "url": "https://u.expo.dev/a6757272-927e-48b5-aca1-bba25a20e5b4",
       "fallbackToCacheTimeout": 0
     },
     "assetBundlePatterns": [
@@ -95,6 +96,9 @@
         "projectId": "a6757272-927e-48b5-aca1-bba25a20e5b4"
       }
     },
-    "owner": "tonni33"
+    "owner": "tonni33",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    }
   }
 }
