@@ -1111,65 +1111,9 @@ const EventManagementScreen: React.FC = () => {
         registeredPlayers: arrayRemove(playerId),
       });
 
-      // Check if there are reserve players to promote
-      const eventDoc = await getDoc(eventRef);
-      const eventData = eventDoc.data();
-      const reservePlayers = eventData?.reservePlayers || [];
-
-      if (reservePlayers.length > 0) {
-        const teamId = selectedEvent.teamId || "";
-        let suitableReserve: string | undefined;
-
-        // Priority queue logic for promotion
-        if (hoursUntilEvent > guestRegistrationHours) {
-          // Before threshold: Skip guests, only promote team members
-          for (const reserveId of reservePlayers) {
-            const reservePlayer = players.find((p) => p.id === reserveId);
-            if (!reservePlayer) continue;
-
-            const isReserveTeamMember =
-              teamId && reservePlayer.teamMember?.[teamId] === true;
-            const positionMatches =
-              reservePlayer.positions.includes("MV") ===
-              isRemovedPlayerGoalkeeper;
-
-            if (isReserveTeamMember && positionMatches) {
-              suitableReserve = reserveId;
-              break;
-            }
-          }
-        } else {
-          // After threshold: Pure FIFO - promote first player with matching position
-          suitableReserve = reservePlayers.find((reserveId: string) => {
-            const reservePlayer = players.find((p) => p.id === reserveId);
-            return (
-              reservePlayer &&
-              reservePlayer.positions.includes("MV") ===
-                isRemovedPlayerGoalkeeper
-            );
-          });
-        }
-
-        if (suitableReserve) {
-          // Promote reserve player
-          await updateDoc(eventRef, {
-            registeredPlayers: arrayUnion(suitableReserve),
-            reservePlayers: arrayRemove(suitableReserve),
-          });
-
-          const promotedPlayer = players.find((p) => p.id === suitableReserve);
-          Alert.alert(
-            "Pelaaja poistettu",
-            `Varamies ${
-              promotedPlayer?.name || "Tuntematon"
-            } siirrettiin automaattisesti mukaan.`,
-          );
-        } else {
-          Alert.alert("Onnistui", "Pelaaja poistettu tapahtumasta");
-        }
-      } else {
-        Alert.alert("Onnistui", "Pelaaja poistettu tapahtumasta");
-      }
+      // Vapautuneen paikan täyttää palvelin (promoteReservesOnEventUpdate),
+      // joka lukee kokoonpanon transaktiossa ja lähettää push-ilmoituksen.
+      Alert.alert("Onnistui", "Pelaaja poistettu tapahtumasta");
 
       // Update selectedEvent state
       const updatedEvent = {

@@ -467,89 +467,12 @@ const HomeScreen: React.FC = () => {
     return () => unsubscribe();
   }, [nextEvent]);
 
-  // Automaattinen varallaolijoiden siirto osallistujiksi kun threshold täyttyy
-  useEffect(() => {
-    const promoteReserves = async () => {
-      if (!nextEvent || !teams || !players) return;
-
-      const team = teams.find((t) => t.id === nextEvent.teamId);
-      if (!team) return;
-
-      const guestRegistrationHours = team.guestRegistrationHours || 24;
-      const now = new Date();
-      const eventDate = new Date(nextEvent.date);
-      const hoursUntilEvent =
-        (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60);
-
-      console.log(
-        `[HomeScreen Promo] 📅 ${nextEvent.title}\n` +
-          `  Threshold: ${guestRegistrationHours}h\n` +
-          `  Aikaa: ${hoursUntilEvent.toFixed(2)}h`,
-      );
-
-      // Tarkista vain jos threshold täyttyy
-      if (hoursUntilEvent <= guestRegistrationHours) {
-        const reserves = nextEvent.reservePlayers || [];
-        const registered = nextEvent.registeredPlayers || [];
-
-        console.log(`[HomeScreen Promo] Varalla: ${reserves.length}`);
-
-        if (reserves.length > 0) {
-          // Tarkista onko tilaa
-          const fieldPlayers = registered.filter((id) => {
-            const p = players.find((pl) => pl.id === id);
-            return p && !p.positions.includes("MV");
-          });
-          const goalkeepers = registered.filter((id) => {
-            const p = players.find((pl) => pl.id === id);
-            return p && p.positions.includes("MV");
-          });
-
-          for (const reserveId of reserves) {
-            const reservePlayer = players.find((p) => p.id === reserveId);
-            if (!reservePlayer) continue;
-
-            // Skip if player is already registered
-            if (registered.includes(reserveId)) {
-              console.log(
-                `[HomeScreen Promo] ⏭️ ${reservePlayer.name} on jo ilmoittautunut, ohitetaan`,
-              );
-              continue;
-            }
-
-            const isGoalkeeper = reservePlayer.positions.includes("MV");
-            const isFull = isGoalkeeper
-              ? nextEvent.maxGoalkeepers &&
-                goalkeepers.length >= nextEvent.maxGoalkeepers
-              : fieldPlayers.length >= nextEvent.maxPlayers;
-
-            if (!isFull) {
-              try {
-                const eventRef = doc(db, "events", nextEvent.id);
-                await updateDoc(eventRef, {
-                  registeredPlayers: arrayUnion(reserveId),
-                  reservePlayers: arrayRemove(reserveId),
-                });
-                console.log(
-                  `[HomeScreen Promo] ✅ Siirretty ${reservePlayer.name}`,
-                );
-                // Push notification is sent automatically by Cloud Function
-
-                // Update local tracking to prevent processing same player twice
-                registered.push(reserveId);
-                if (isGoalkeeper) goalkeepers.push(reserveId);
-                else fieldPlayers.push(reserveId);
-              } catch (err) {
-                console.error("[HomeScreen Promo] ❌ Virhe:", err);
-              }
-            }
-          }
-        }
-      }
-    };
-
-    promoteReserves();
-  }, [nextEvent, teams, players]);
+  // Varalta-nosto tehdään palvelimella: functions/index.js ->
+  // promoteReservesOnEventUpdate (tapahtuman muuttuessa) ja
+  // promoteReservesScheduled (tunnin välein). Clientin oma nostosilmukka
+  // poistettiin, koska se laski pelaajan roolin väärin (tapahtumakohtainen
+  // playerRoles ohitettiin) ja jokainen laite ajoi sitä rinnakkain ilman
+  // transaktiota, jolloin kokoonpanon rajat ylittyivät.
 
   const handleRegistration = async () => {
     if (!nextEvent || !currentPlayer || !user) return;
@@ -629,72 +552,10 @@ const HomeScreen: React.FC = () => {
           registeredPlayers: arrayRemove(playerIdToUse),
         });
 
-        // Check if there are reserve players to promote
-        const eventDoc = await getDoc(eventRef);
-        const eventData = eventDoc.data();
-        const reservePlayerIds = eventData?.reservePlayers || [];
-
-        if (reservePlayerIds.length > 0) {
-          // Find a suitable reserve player to promote
-          const isGoalkeeper = currentPlayer.positions.includes("MV");
-
-          let suitableReserve: string | undefined;
-
-          // Priority queue logic for promotion
-          if (hoursUntilEvent > guestRegistrationHours) {
-            // Before threshold: Skip guests, only promote team members
-            for (const reserveId of reservePlayerIds) {
-              const reservePlayer = players.find((p) => p.id === reserveId);
-              if (!reservePlayer) continue;
-
-              const isReserveTeamMember =
-                teamId && reservePlayer.teamMember?.[teamId] === true;
-              const positionMatches =
-                reservePlayer.positions.includes("MV") === isGoalkeeper;
-
-              if (isReserveTeamMember && positionMatches) {
-                suitableReserve = reserveId;
-                break;
-              }
-            }
-          } else {
-            // After threshold: Pure FIFO - promote first player with matching position
-            suitableReserve = reservePlayerIds.find((reserveId: string) => {
-              const reservePlayer = players.find((p) => p.id === reserveId);
-              return (
-                reservePlayer &&
-                reservePlayer.positions.includes("MV") === isGoalkeeper
-              );
-            });
-          }
-
-          if (suitableReserve) {
-            // Promote reserve player
-            await updateDoc(eventRef, {
-              registeredPlayers: arrayUnion(suitableReserve),
-              reservePlayers: arrayRemove(suitableReserve),
-            });
-
-            const promotedPlayer = players.find(
-              (p) => p.id === suitableReserve,
-            );
-
-            // NOTE: Local notification cannot be sent to other users
-            // The promoted player will receive notification when they open the app
-            // and the promoteReserves useEffect runs on their device
-
-            Alert.alert(
-              "Ilmoittautuminen peruttu",
-              `Paikkasi otettiin varalla ilmoittautuneelta pelaajalta: ${
-                promotedPlayer?.name || "Tuntematon"
-              }`,
-            );
-          } else {
-            Alert.alert("Onnistui", "Ilmoittautuminen peruttu");
-          }
-        } else {
-          Alert.alert("Onnistui", "Ilmoittautuminen peruttu");
-        }
+        // Vapautuneen paikan täyttää palvelin (promoteReservesOnEventUpdate),
+        // joka lukee kokoonpanon transaktiossa ja lähettää push-ilmoituksen
+        // nostetulle pelaajalle.
+        Alert.alert("Onnistui", "Ilmoittautuminen peruttu");
 
         setIsRegistered(false);
       } else if (isReserve) {
@@ -734,7 +595,15 @@ const HomeScreen: React.FC = () => {
           eventWithRoles,
         );
 
-        const isGoalkeeper = currentPlayer.positions.includes("MV");
+        // Sama luokittelu kuin getFieldPlayers/getGoalkeepers: pelaaja on
+        // maalivahti vain jos hänellä ei ole lainkaan kenttäpelipaikkaa.
+        // Muuten MV+kenttä -pelaajaa verrattiin MV-paikkoihin mutta laskettiin
+        // kenttäpelaajaksi, jolloin kokoonpanoon mahtui yksi liikaa.
+        const isGoalkeeper =
+          currentPlayer.positions.includes("MV") &&
+          !currentPlayer.positions.some((pos: string) =>
+            ["H", "P", "H/P"].includes(pos),
+          );
         const isEventFull = isGoalkeeper
           ? nextEvent.maxGoalkeepers &&
             currentGoalkeepers.length >= nextEvent.maxGoalkeepers
@@ -1091,6 +960,60 @@ const HomeScreen: React.FC = () => {
     try {
       const eventRef = doc(db, "events", pendingRegistrationEventId);
       const playerIdToUse = currentPlayer.id;
+
+      // Paikkatilanne tarkistetaan uudelleen vasta tässä: valittu rooli
+      // ratkaisee kumpaa rajaa vasten verrataan, ja se on tiedossa vasta nyt.
+      // Vuoro on myös voinut täyttyä sillä aikaa kun rooli valittiin.
+      const eventDoc = await getDoc(eventRef);
+      const eventData = eventDoc.data();
+      const currentRegistered = eventData?.registeredPlayers || [];
+      const eventWithRoles = {
+        playerRoles: eventData?.playerRoles,
+      } as unknown as Event;
+
+      const isFull =
+        role === "MV"
+          ? typeof eventData?.maxGoalkeepers === "number" &&
+            getGoalkeepers(currentRegistered, eventWithRoles).length >=
+              eventData.maxGoalkeepers
+          : typeof eventData?.maxPlayers === "number" &&
+            getFieldPlayers(currentRegistered, eventWithRoles).length >=
+              eventData.maxPlayers;
+
+      if (isFull) {
+        setRegistrationLoading(false);
+        Alert.alert(
+          "Tapahtuma on täynnä",
+          `${
+            role === "MV" ? "Maalivahdin paikat" : "Kenttäpelaajan paikat"
+          } ehtivät täyttyä. Haluatko ilmoittautua varalle?`,
+          [
+            {
+              text: "Ei",
+              style: "cancel",
+              onPress: () => setPendingRegistrationEventId(null),
+            },
+            {
+              text: "Kyllä, varalle",
+              onPress: async () => {
+                try {
+                  await updateDoc(eventRef, {
+                    reservePlayers: arrayUnion(playerIdToUse),
+                    [`playerRoles.${playerIdToUse}`]: role,
+                  });
+                  setIsReserve(true);
+                  setPendingRegistrationEventId(null);
+                  Alert.alert("Onnistui", "Ilmoittautunut varalle");
+                } catch (error) {
+                  console.error("Error registering as reserve:", error);
+                  Alert.alert("Virhe", "Varalle ilmoittautuminen epäonnistui");
+                }
+              },
+            },
+          ],
+        );
+        return;
+      }
 
       // Register player and save their selected role
       await updateDoc(eventRef, {
