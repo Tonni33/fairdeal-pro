@@ -78,7 +78,7 @@
         }
       ],
       "softwareKeyboardLayoutMode": "pan",
-      "versionCode": 17
+      "versionCode": 18
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -97,8 +97,6 @@
       }
     },
     "owner": "tonni33",
-    "runtimeVersion": {
-      "policy": "fingerprint"
-    }
+    "runtimeVersion": "1.0.16"
   }
 }
