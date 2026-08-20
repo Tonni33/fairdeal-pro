@@ -951,3 +951,268 @@ exports.sendEventReminders = onSchedule(
     }
   }
 );
+
+// ============================================
+// AUTOMAATTINEN VARALTA-NOSTO (palvelinpuolella)
+// ============================================
+//
+// Aiemmin varalta-nosto tehtiin jokaisen käyttäjän laitteella (HomeScreen,
+// EventsScreen, web EventsPage). Siitä seurasi kaksi ongelmaa:
+//   1) laskentatavat erosivat toisistaan (HomeScreen ei huomioinut
+//      tapahtumakohtaista playerRoles-valintaa, jolloin MV+kenttä -pelaaja
+//      laskettiin maalivahdiksi ja kenttäpaikkoja näytti olevan yksi liikaa),
+//   2) sama nosto ajettiin rinnakkain monella laitteella ilman transaktiota.
+//
+// Nyt nosto tehdään yhdessä paikassa transaktion sisällä, jossa kokoonpano
+// luetaan uudelleen juuri ennen kirjoitusta.
+
+const DEFAULT_GUEST_REGISTRATION_HOURS = 24;
+const FIELD_POSITIONS = ["H", "P", "H/P"];
+
+/**
+ * Pelaajan rooli tapahtumassa: tapahtumakohtainen valinta (playerRoles) menee
+ * aina käyttäjän oletuspositioiden edelle. Sama logiikka kuin EventsScreenin
+ * getFieldPlayers/getGoalkeepers-funktioissa.
+ */
+const isFieldPlayerInEvent = (userData, role) => {
+  if (role) {
+    return FIELD_POSITIONS.includes(role);
+  }
+  const positions = userData?.positions || [];
+  return positions.some((pos) => FIELD_POSITIONS.includes(pos));
+};
+
+const isGoalkeeperInEvent = (userData, role) => {
+  if (role) {
+    return role === "MV";
+  }
+  const positions = userData?.positions || [];
+  // Maalivahti vain jos pelaajalla ei ole lainkaan kenttäpelipaikkaa
+  return (
+    positions.includes("MV") &&
+    !positions.some((pos) => FIELD_POSITIONS.includes(pos))
+  );
+};
+
+/**
+ * Nostaa varalla olevat kokoonpanoon jos tilaa on. Koko päättely tehdään
+ * transaktiossa, joten rinnakkaiset kutsut eivät voi ylittää rajoja.
+ *
+ * @param {string} eventId
+ * @returns {Promise<string[]|null>} nostettujen pelaajien id:t, tai null
+ */
+const promoteReservesForEvent = async (eventId) => {
+  const db = admin.firestore();
+  const eventRef = db.collection("events").doc(eventId);
+
+  return db.runTransaction(async (t) => {
+    const eventSnap = await t.get(eventRef);
+    if (!eventSnap.exists) {
+      return null;
+    }
+
+    const eventData = eventSnap.data();
+    const reserves = eventData.reservePlayers || [];
+    if (reserves.length === 0) {
+      return null;
+    }
+
+    // Mennyt tapahtuma jätetään rauhaan
+    const eventDate = eventData.date?.toDate
+      ? eventData.date.toDate()
+      : new Date(eventData.date);
+    if (isNaN(eventDate.getTime())) {
+      console.log(`[Promo] Event ${eventId}: invalid date, skipping`);
+      return null;
+    }
+    const hoursUntilEvent = (eventDate.getTime() - Date.now()) / (1000 * 60 * 60);
+    if (hoursUntilEvent < 0) {
+      return null;
+    }
+
+    // Ennen thresholdia vakiokävijöillä on etuoikeus eikä varalta nosteta
+    let guestRegistrationHours = DEFAULT_GUEST_REGISTRATION_HOURS;
+    if (eventData.teamId) {
+      const teamSnap = await t.get(
+        db.collection("teams").doc(eventData.teamId)
+      );
+      if (teamSnap.exists) {
+        guestRegistrationHours =
+          teamSnap.data().guestRegistrationHours ||
+          DEFAULT_GUEST_REGISTRATION_HOURS;
+      }
+    }
+    if (hoursUntilEvent > guestRegistrationHours) {
+      return null;
+    }
+
+    const registered = eventData.registeredPlayers || [];
+    const playerRoles = eventData.playerRoles || {};
+    const maxPlayers =
+      typeof eventData.maxPlayers === "number" ? eventData.maxPlayers : Infinity;
+    const maxGoalkeepers =
+      typeof eventData.maxGoalkeepers === "number"
+        ? eventData.maxGoalkeepers
+        : Infinity;
+
+    // Käyttäjätiedot yhdellä lukukierroksella (transaktion luvut ennen kirjoituksia)
+    const allIds = [...new Set([...registered, ...reserves])];
+    const userSnaps = allIds.length
+      ? await t.getAll(...allIds.map((id) => db.collection("users").doc(id)))
+      : [];
+    const usersById = {};
+    userSnaps.forEach((snap) => {
+      if (snap.exists) {
+        usersById[snap.id] = snap.data();
+      }
+    });
+
+    // Nykyinen kokoonpano. Tuntematon id lasketaan kenttäpelaajaksi, jotta
+    // puuttuva käyttäjädokumentti ei vahingossa avaa ylimääräistä paikkaa.
+    let fieldCount = 0;
+    let goalkeeperCount = 0;
+    for (const id of registered) {
+      const userData = usersById[id];
+      if (userData && isGoalkeeperInEvent(userData, playerRoles[id])) {
+        goalkeeperCount += 1;
+      } else {
+        fieldCount += 1;
+      }
+    }
+
+    const promoted = [];
+    const remainingReserves = [];
+
+    for (const id of reserves) {
+      // Jo kokoonpanossa oleva siivotaan pois varalistalta
+      if (registered.includes(id) || promoted.includes(id)) {
+        continue;
+      }
+
+      const userData = usersById[id];
+      if (!userData) {
+        console.log(`[Promo] Event ${eventId}: no user doc for ${id}, skipping`);
+        remainingReserves.push(id);
+        continue;
+      }
+
+      const isGoalkeeper = isGoalkeeperInEvent(userData, playerRoles[id]);
+      const isFull = isGoalkeeper
+        ? goalkeeperCount >= maxGoalkeepers
+        : fieldCount >= maxPlayers;
+
+      if (isFull) {
+        remainingReserves.push(id);
+        continue;
+      }
+
+      promoted.push(id);
+      if (isGoalkeeper) {
+        goalkeeperCount += 1;
+      } else {
+        fieldCount += 1;
+      }
+    }
+
+    const reservesChanged = remainingReserves.length !== reserves.length;
+    if (promoted.length === 0 && !reservesChanged) {
+      return null;
+    }
+
+    t.update(eventRef, {
+      registeredPlayers: [...registered, ...promoted],
+      reservePlayers: remainingReserves,
+    });
+
+    console.log(
+      `[Promo] Event ${eventId}: promoted ${promoted.length} (${promoted.join(
+        ", "
+      )}), kenttä ${fieldCount}/${maxPlayers}, MV ${goalkeeperCount}/${maxGoalkeepers}`
+    );
+
+    return promoted;
+  });
+};
+
+/**
+ * Ajetaan aina kun tapahtuman ilmoittautuneet tai varalla olevat muuttuvat:
+ * joku ilmoittautuu varalle, joku peruu paikkansa, admin muokkaa listoja.
+ *
+ * Ei jää silmukkaan: oma kirjoitus laukaisee funktion uudelleen, mutta
+ * seuraavalla kierroksella tilaa ei enää ole eikä kirjoitusta tapahdu.
+ */
+exports.promoteReservesOnEventUpdate = onDocumentUpdated(
+  "events/{eventId}",
+  async (event) => {
+    const beforeData = event.data.before.data();
+    const afterData = event.data.after.data();
+    const eventId = event.params.eventId;
+
+    const beforeReserve = (beforeData?.reservePlayers || []).join(",");
+    const afterReserve = (afterData?.reservePlayers || []).join(",");
+    const beforeRegistered = (beforeData?.registeredPlayers || []).join(",");
+    const afterRegistered = (afterData?.registeredPlayers || []).join(",");
+
+    if (
+      beforeReserve === afterReserve &&
+      beforeRegistered === afterRegistered
+    ) {
+      return null; // Muutos ei koskenut kokoonpanoa
+    }
+
+    if ((afterData?.reservePlayers || []).length === 0) {
+      return null;
+    }
+
+    try {
+      const promoted = await promoteReservesForEvent(eventId);
+      return promoted ? { promoted: promoted.length } : null;
+    } catch (err) {
+      console.error(`[Promo] Event ${eventId}: promotion failed:`, err);
+      throw err;
+    }
+  }
+);
+
+/**
+ * Varmistus kerran tunnissa: nostaa varalla olevat myös silloin kun kukaan ei
+ * kirjoita tapahtumaan mitään (esim. threshold ylittyy yöllä).
+ */
+exports.promoteReservesScheduled = onSchedule(
+  {
+    schedule: "5 * * * *", // 5 min yli tasatunnin, ei samaan aikaan muistutusten kanssa
+    timeZone: "Europe/Helsinki",
+    retryCount: 3,
+  },
+  async () => {
+    const now = new Date();
+    const horizon = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+    const eventsSnapshot = await admin
+      .firestore()
+      .collection("events")
+      .where("date", ">=", now)
+      .where("date", "<=", horizon)
+      .get();
+
+    let totalPromoted = 0;
+
+    for (const eventDoc of eventsSnapshot.docs) {
+      const reserves = eventDoc.data().reservePlayers || [];
+      if (reserves.length === 0) {
+        continue;
+      }
+      try {
+        const promoted = await promoteReservesForEvent(eventDoc.id);
+        if (promoted) {
+          totalPromoted += promoted.length;
+        }
+      } catch (err) {
+        console.error(`[Promo] Event ${eventDoc.id}: promotion failed:`, err);
+      }
+    }
+
+    console.log(`[Promo] Scheduled run promoted ${totalPromoted} players`);
+    return { promoted: totalPromoted };
+  }
+);

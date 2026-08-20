@@ -1,12 +1,78 @@
 // Firebase Security Rules for Firestore
 // Käytä näitä sääntöjä Firebase Console -> Firestore Database -> Rules
+//
+// HUOM: kaikki kokoelmat luetellaan erikseen, koska Firestoren säännöt ovat
+// OR-tyyppisiä: aiempi catch-all `match /{document=**}` olisi ohittanut
+// events-kokoelman rajoitukset kokonaan.
 
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow all authenticated users to read and write all documents
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function numOr(data, key, fallback) {
+      return data.get(key, fallback) is number ? data.get(key, fallback) : fallback;
+    }
+
+    // Kokoonpanon koko. Jos kenttä puuttuu tai on väärää tyyppiä -> 0.
+    function rosterSize(data) {
+      return data.get('registeredPlayers', []) is list
+        ? data.get('registeredPlayers', []).size()
+        : 0;
+    }
+
+    // Paikkojen kokonaismäärä (kenttäpelaajat + maalivahdit).
+    // Jos rajoja ei ole asetettu, ei rajoiteta (fail-open, ettei vanha data lukkiudu).
+    function rosterCapacity(data) {
+      return numOr(data, 'maxPlayers', 9999) + numOr(data, 'maxGoalkeepers', 0);
+    }
+
+    // Kirjoitus sallitaan jos kokoonpano mahtuu rajoihin TAI jos kokoonpano ei
+    // kasva. Jälkimmäinen sallii korjaukset ja poistot tapahtumissa, joissa raja
+    // on jo ylittynyt, sekä kaikki muut kentät koskevat päivitykset.
+    function eventRosterOk() {
+      return rosterSize(request.resource.data) <= rosterCapacity(request.resource.data)
+        || (resource != null
+            && rosterSize(request.resource.data) <= rosterSize(resource.data));
+    }
+
+    match /events/{eventId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && rosterSize(request.resource.data) <= rosterCapacity(request.resource.data);
+      allow update: if signedIn() && eventRosterOk();
+      allow delete: if signedIn();
+    }
+
+    match /users/{userId} {
+      allow read, write: if signedIn();
+    }
+    match /teams/{teamId} {
+      allow read, write: if signedIn();
+    }
+    match /teamPlayers/{docId} {
+      allow read, write: if signedIn();
+    }
+    match /teamCreationRequests/{docId} {
+      allow read, write: if signedIn();
+    }
+    match /players/{playerId} {
+      allow read, write: if signedIn();
+    }
+    match /licenses/{licenseId} {
+      allow read, write: if signedIn();
+    }
+    match /licenseRequests/{requestId} {
+      allow read, write: if signedIn();
+    }
+    match /messages/{messageId} {
+      allow read, write: if signedIn();
+    }
+    match /settings/{settingId} {
+      allow read, write: if signedIn();
     }
   }
 }
