@@ -24,10 +24,11 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
 
-    /* Path aliases */
-    "baseUrl": ".",
+    /* Path aliases. Ei baseUrl:ia: se on vanhentunut ja lakkaa toimimasta
+       TypeScript 7:ssä. TS 5:stä lähtien paths ratkaistaan suhteessa tähän
+       tiedostoon, joten polut alla toimivat sellaisenaan. */
     "paths": {
-      "@/*": ["src/*"],
+      "@/*": ["./src/*"],
       "@shared/*": ["../src/*"]
     }
   },
