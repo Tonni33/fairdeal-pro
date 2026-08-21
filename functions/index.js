@@ -1030,7 +1030,9 @@ const promoteReservesForEvent = async (eventId) => {
       return null;
     }
 
-    // Ennen thresholdia vakiokävijöillä on etuoikeus eikä varalta nosteta
+    // Ennen thresholdia kokoonpanoon pääsevät vain vakiokävijät. Ulkopuoliset
+    // odottavat jonossa vaikka tilaa olisi. Thresholdin jälkeen kaikki ovat
+    // samanarvoisia ja vuoro täytetään jonon järjestyksessä.
     let guestRegistrationHours = DEFAULT_GUEST_REGISTRATION_HOURS;
     if (eventData.teamId) {
       const teamSnap = await t.get(
@@ -1042,9 +1044,8 @@ const promoteReservesForEvent = async (eventId) => {
           DEFAULT_GUEST_REGISTRATION_HOURS;
       }
     }
-    if (hoursUntilEvent > guestRegistrationHours) {
-      return null;
-    }
+    const beforeThreshold = hoursUntilEvent > guestRegistrationHours;
+    const teamId = eventData.teamId;
 
     const registered = eventData.registeredPlayers || [];
     const playerRoles = eventData.playerRoles || {};
@@ -1096,6 +1097,15 @@ const promoteReservesForEvent = async (eventId) => {
         continue;
       }
 
+      // Ennen thresholdia ulkopuolinen ei pääse kokoonpanoon vaikka tilaa
+      // olisi: hän odottaa jonossa. Vakiokävijä nostetaan normaalisti.
+      const isTeamMember =
+        !!teamId && userData.teamMember?.[teamId] === true;
+      if (beforeThreshold && !isTeamMember) {
+        remainingReserves.push(id);
+        continue;
+      }
+
       const isGoalkeeper = isGoalkeeperInEvent(userData, playerRoles[id]);
       const isFull = isGoalkeeper
         ? goalkeeperCount >= maxGoalkeepers
@@ -1114,14 +1124,30 @@ const promoteReservesForEvent = async (eventId) => {
       }
     }
 
-    const reservesChanged = remainingReserves.length !== reserves.length;
+    // Ennen thresholdia vakiokävijät menevät jonossa ulkopuolisten edelle.
+    // Järjestys pidetään yllä täällä eikä clientissä, jotta sama sääntö pätee
+    // kaikkiin sovellusversioihin ja myös adminin lisäyksiin. Thresholdin
+    // jälkeen kaikki ovat samanarvoisia eikä jonoa järjestetä uudelleen.
+    const orderedReserves = beforeThreshold
+      ? [
+          ...remainingReserves.filter(
+            (id) => usersById[id] && usersById[id].teamMember?.[teamId] === true
+          ),
+          ...remainingReserves.filter(
+            (id) => !usersById[id] || usersById[id].teamMember?.[teamId] !== true
+          ),
+        ]
+      : remainingReserves;
+
+    const reservesChanged =
+      orderedReserves.join(",") !== reserves.join(",");
     if (promoted.length === 0 && !reservesChanged) {
       return null;
     }
 
     t.update(eventRef, {
       registeredPlayers: [...registered, ...promoted],
-      reservePlayers: remainingReserves,
+      reservePlayers: orderedReserves,
     });
 
     console.log(
