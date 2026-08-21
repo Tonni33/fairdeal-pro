@@ -1191,7 +1191,10 @@ const HomeScreen: React.FC = () => {
           eventId: nextEvent.id,
           message: editMessageText.trim(),
           createdAt: new Date(),
-          createdBy: user?.displayName || user?.email || "Tuntematon",
+          // Ei sähköpostia varasuunnitelmaksi: kirjoittajan nimi näkyy kaikille
+          // tapahtuman jäsenille, eikä osoitetta ole tarkoitus näyttää heille.
+          createdBy:
+            user?.name?.trim() || user?.displayName?.trim() || "Tuntematon",
           isDeleted: false,
         });
 
