@@ -706,7 +706,8 @@ const TeamGenerationScreen: React.FC = () => {
           color: team.color,
         })),
         generatedAt: new Date(),
-        generatedBy: user?.email || "",
+        // Ei sähköpostia: tämä näytetään joukkuejaon yhteydessä muille
+        generatedBy: user?.name?.trim() || user?.displayName?.trim() || "",
         balanceScore: scoreToSave, // Use the passed score instead of state
         distributionMethod: distributionMethod, // Save the distribution method used
       };

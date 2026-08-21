@@ -907,6 +907,10 @@ const EventsScreen: React.FC = () => {
     } catch (error) {
       console.error("Error updating registration:", error);
       Alert.alert("Virhe", "Ilmoittautumisen tallennus epäonnistui");
+    } finally {
+      // Täynnä-haara näyttää dialogin eikä nollannut lataustilaa, joten nappi
+      // jäi pyörimään dialogin sulkemisen jälkeen. Nollaus kuuluu tänne, jotta
+      // se kattaa kaikki haarat.
       setRegistrationLoading(false);
     }
   };

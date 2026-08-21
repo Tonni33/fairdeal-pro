@@ -955,7 +955,8 @@ export default function TeamBalancerTestPage() {
           color: index === 0 ? "#1976d2" : "#d32f2f",
         })),
         generatedAt: new Date(),
-        generatedBy: user?.email || "",
+        // Ei sähköpostia: tämä näytetään joukkuejaon yhteydessä muille
+        generatedBy: user?.displayName?.trim() || "",
         balanceScore: generatedTeams.balanceScore,
         distributionMethod: distributionMethod,
       };

@@ -159,20 +159,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
               const pos = data.position.trim().toUpperCase();
               normalizedPosition = validPositions.includes(pos) ? pos : "H";
             }
-            // Debug phone processing for specific problematic users
-            if (
-              data.email === "enckell69@gmail.com" ||
-              data.email === "hannu@gmail.com"
-            ) {
-              console.log(`DEBUG PHONE for ${data.email}:`, {
-                rawPhone: data.phone,
-                phoneType: typeof data.phone,
-                phoneLength: data.phone?.length,
-                phoneValue: JSON.stringify(data.phone),
-                afterOrLogic: data.phone || undefined,
-              });
-            }
-
             playersData.push({
               id: doc.id,
               name:
