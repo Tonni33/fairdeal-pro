@@ -8,16 +8,6 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "description": "Team management and balancing app for sports events. Create balanced teams, manage players, and organize sports events with ease.",
-    "keywords": [
-      "sports",
-      "team",
-      "management",
-      "balance",
-      "events",
-      "football",
-      "soccer"
-    ],
-    "privacy": "public",
     "platforms": [
       "ios",
       "android",
