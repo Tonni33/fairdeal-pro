@@ -8,6 +8,7 @@ import { AppProvider } from "./src/contexts/AppContext";
 import AppNavigator from "./src/navigation/AppNavigator";
 import { NotificationHandler } from "./src/components/NotificationHandler";
 import { UpdateBanner } from "./src/components/UpdateBanner";
+import { AppLock } from "./src/components/AppLock";
 
 // Inject CSS for Expo web – makes html/body/#root fill the viewport so
 // react-native-web ScrollView actually scrolls instead of growing forever.
@@ -44,13 +45,17 @@ export default function App() {
                 >
                   <StatusBar style="auto" />
                   <UpdateBanner />
-                  <AppNavigator />
+                  <AppLock>
+                    <AppNavigator />
+                  </AppLock>
                 </SafeAreaView>
               ) : (
                 <View style={styles.container}>
                   <StatusBar style="auto" />
                   <UpdateBanner />
-                  <AppNavigator />
+                  <AppLock>
+                    <AppNavigator />
+                  </AppLock>
                 </View>
               )}
             </NotificationHandler>

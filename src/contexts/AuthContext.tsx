@@ -22,7 +22,7 @@ import {
   where,
 } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { auth, db } from "../services/firebase";
+import { auth, authPersistenceEnabled, db } from "../services/firebase";
 import { AuthContextType, User } from "../types";
 import { SecureStorage } from "../utils/secureStorage";
 import ChangePasswordModal from "../components/ChangePasswordModal";
@@ -56,6 +56,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (firebaseUser) {
         console.log("Firebase user:", firebaseUser.email, firebaseUser.uid);
+
+        // Appi tallensi aiemmin salasanan selkokielisenä laitteelle, jotta
+        // sormenjälkikirjautuminen pystyi tekemään uuden sisäänkirjautumisen.
+        // Istunto säilyy nyt itse, joten kopiota ei tarvita – poistetaan se
+        // laitteilta. Vain jos persistenssi on varmasti päällä, ettei kukaan
+        // jää ilman kirjautumiskeinoa.
+        if (authPersistenceEnabled) {
+          SecureStorage.clearCredentials().catch((error) =>
+            console.log("[Auth] Tunnusten siivous epäonnistui:", error),
+          );
+        }
 
         try {
           // First, try to get user data by UID

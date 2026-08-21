@@ -35,9 +35,14 @@ export const functions = getFunctions(app);
 // useammin, koska järjestelmä sulkee taustalla olevia appeja herkemmin.
 //
 // AsyncStorage on jo appin natiiviriippuvuus, joten tämä on pelkkä JS-muutos.
+// Kertoo säilyykö kirjautuminen levyllä. Tallennettuja tunnuksia siivotaan
+// vasta kun tämä on tosi, jottei kukaan jää ilman kirjautumiskeinoa.
+export let authPersistenceEnabled = false;
+
 const createAuth = (): Auth => {
   if (Platform.OS === "web") {
     // Webissä firebase/auth käyttää selaimen omaa persistenssiä
+    authPersistenceEnabled = true;
     return getAuth(app);
   }
   try {
@@ -45,9 +50,11 @@ const createAuth = (): Auth => {
     const { getReactNativePersistence } = require("firebase/auth") as {
       getReactNativePersistence: (storage: unknown) => any;
     };
-    return initializeAuth(app, {
+    const instance = initializeAuth(app, {
       persistence: getReactNativePersistence(AsyncStorage),
     });
+    authPersistenceEnabled = true;
+    return instance;
   } catch (error) {
     // Auth on jo alustettu (esim. Fast Refresh) tai persistenssiä ei saatu
     console.warn("Firebase Auth persistence setup failed:", error);
