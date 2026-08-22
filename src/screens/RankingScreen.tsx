@@ -16,6 +16,135 @@ import { useAuth } from "../contexts/AuthContext";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
 
+type PlayerRowProps = {
+  item: Player & { displayRole: string };
+  selectedTeamId: string;
+  onSave: (
+    player: Player & { displayRole?: string },
+    category: number,
+    multiplier: number
+  ) => void;
+};
+
+/**
+ * Yksi pelaajarivi muokattavine arvoineen.
+ *
+ * Komponentti oli aiemmin määritelty RankingScreenin sisällä, jolloin jokainen
+ * näkymän uudelleenrenderöinti loi uuden komponenttityypin ja React purki rivin
+ * kokonaan: kesken kirjoitetut arvot katosivat ja näppäimistö tipahti. Koska
+ * käyttäjälista kuunnellaan reaaliaikaisesti, renderöintejä tulee minkä tahansa
+ * käyttäjän kirjoituksesta – myös toisen laitteen versioraportoinnista.
+ */
+const PlayerRow = React.memo<PlayerRowProps>(
+  ({ item, selectedTeamId, onSave }) => {
+    const isGoalkeeper = item.displayRole === "goalkeeper";
+
+    const teamSkill = selectedTeamId ? item.teamSkills?.[selectedTeamId] : null;
+    const skills = isGoalkeeper ? teamSkill?.goalkeeper : teamSkill?.field;
+    const category = skills?.category || 1;
+    const multiplier = skills?.multiplier || 1.0;
+
+    const [isLocked, setIsLocked] = useState(true);
+    const [editingCategory, setEditingCategory] = useState(category.toString());
+    const [editingMultiplier, setEditingMultiplier] = useState(
+      multiplier.toFixed(1)
+    );
+
+    // Tallennetut arvot otetaan käyttöön vain kun rivi ei ole muokattavana,
+    // jotta toisaalta tullut päivitys ei ylikirjoita kesken kirjoitettua arvoa
+    React.useEffect(() => {
+      if (isLocked) {
+        setEditingCategory(category.toString());
+      }
+    }, [category, isLocked]);
+
+    React.useEffect(() => {
+      if (isLocked) {
+        setEditingMultiplier(multiplier.toFixed(1));
+      }
+    }, [multiplier, isLocked]);
+
+    const handleSaveAndLock = () => {
+      const catValue = parseInt(editingCategory);
+      // Replace comma with dot for Finnish keyboard
+      const multValue = parseFloat(editingMultiplier.replace(",", "."));
+
+      let hasError = false;
+
+      if (isNaN(catValue) || catValue < 1 || catValue > 5) {
+        setEditingCategory(category.toString());
+        Alert.alert("Virhe", "Kategoria pitää olla välillä 1-5");
+        hasError = true;
+      }
+
+      if (isNaN(multValue) || multValue < 1.1 || multValue > 3.9) {
+        setEditingMultiplier(multiplier.toFixed(1));
+        Alert.alert("Virhe", "Kerroin pitää olla välillä 1.1-3.9");
+        hasError = true;
+      }
+
+      if (!hasError) {
+        onSave(item, catValue, multValue);
+        setEditingMultiplier(multValue.toFixed(1));
+        setIsLocked(true);
+      }
+    };
+
+    return (
+      <View style={[styles.playerRow, !isLocked && styles.playerRowUnlocked]}>
+        <TouchableOpacity
+          style={styles.playerMainInfo}
+          onPress={() => {
+            if (isLocked) {
+              setIsLocked(false);
+            } else {
+              handleSaveAndLock();
+            }
+          }}
+          activeOpacity={0.7}
+        >
+          <Text
+            style={[
+              styles.playerName,
+              isGoalkeeper && { color: "#4caf50", fontWeight: "600" },
+            ]}
+          >
+            {item.name || item.email || "Tuntematon"}
+            {isGoalkeeper && " 🥅"}
+          </Text>
+        </TouchableOpacity>
+        <View style={styles.playerStats}>
+          <View style={styles.statBox}>
+            <Text style={styles.statLabel}>Kategoria</Text>
+            <TextInput
+              style={[styles.statInput, isLocked && styles.statInputLocked]}
+              value={editingCategory}
+              onChangeText={setEditingCategory}
+              editable={!isLocked}
+              keyboardType="number-pad"
+              maxLength={1}
+            />
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statLabel}>Kerroin</Text>
+            <TextInput
+              style={[styles.statInput, isLocked && styles.statInputLocked]}
+              value={editingMultiplier}
+              onChangeText={(text) =>
+                setEditingMultiplier(text.replace(",", "."))
+              }
+              editable={!isLocked}
+              keyboardType="decimal-pad"
+              maxLength={3}
+            />
+          </View>
+        </View>
+      </View>
+    );
+  }
+);
+PlayerRow.displayName = "PlayerRow";
+
 const RankingScreen: React.FC = () => {
   const { players, teams } = useApp();
   const { user } = useAuth();
@@ -141,119 +270,18 @@ const RankingScreen: React.FC = () => {
     }
   };
 
-  const PlayerRow: React.FC<{ item: Player & { displayRole: string } }> = ({
-    item,
-  }) => {
-    const isGoalkeeper = item.displayRole === "goalkeeper";
-
-    // Get team-specific values based on display role
-    const teamSkill = selectedTeamId ? item.teamSkills?.[selectedTeamId] : null;
-    const skills = isGoalkeeper ? teamSkill?.goalkeeper : teamSkill?.field;
-    const category = skills?.category || 1;
-    const multiplier = skills?.multiplier || 1.0;
-
-    // Local state for editing
-    const [isLocked, setIsLocked] = useState(true);
-    const [editingCategory, setEditingCategory] = useState(category.toString());
-    const [editingMultiplier, setEditingMultiplier] = useState(
-      multiplier.toFixed(1)
-    );
-
-    // Update local state when props change
-    React.useEffect(() => {
-      setEditingCategory(category.toString());
-    }, [category]);
-
-    React.useEffect(() => {
-      setEditingMultiplier(multiplier.toFixed(1));
-    }, [multiplier]);
-
-    const handleSaveAndLock = () => {
-      // Validate and save both fields
-      const catValue = parseInt(editingCategory);
-      // Replace comma with dot for Finnish keyboard
-      const multValue = parseFloat(editingMultiplier.replace(",", "."));
-
-      let hasError = false;
-
-      if (isNaN(catValue) || catValue < 1 || catValue > 5) {
-        setEditingCategory(category.toString());
-        Alert.alert("Virhe", "Kategoria pitää olla välillä 1-5");
-        hasError = true;
-      }
-
-      if (isNaN(multValue) || multValue < 1.1 || multValue > 3.9) {
-        setEditingMultiplier(multiplier.toFixed(1));
-        Alert.alert("Virhe", "Kerroin pitää olla välillä 1.1-3.9");
-        hasError = true;
-      }
-
-      if (!hasError) {
-        handleUpdatePlayer(item, catValue, multValue);
-        setEditingMultiplier(multValue.toFixed(1));
-        setIsLocked(true);
-      }
-    };
-
-    return (
-      <View style={[styles.playerRow, !isLocked && styles.playerRowUnlocked]}>
-        <TouchableOpacity
-          style={styles.playerMainInfo}
-          onPress={() => {
-            if (isLocked) {
-              setIsLocked(false);
-            } else {
-              handleSaveAndLock();
-            }
-          }}
-          activeOpacity={0.7}
-        >
-          <Text
-            style={[
-              styles.playerName,
-              isGoalkeeper && { color: "#4caf50", fontWeight: "600" },
-            ]}
-          >
-            {item.name || item.email || "Tuntematon"}
-            {isGoalkeeper && " 🥅"}
-          </Text>
-        </TouchableOpacity>
-        <View style={styles.playerStats}>
-          <View style={styles.statBox}>
-            <Text style={styles.statLabel}>Kategoria</Text>
-            <TextInput
-              style={[styles.statInput, isLocked && styles.statInputLocked]}
-              value={editingCategory}
-              onChangeText={setEditingCategory}
-              editable={!isLocked}
-              keyboardType="number-pad"
-              maxLength={1}
-            />
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statLabel}>Kerroin</Text>
-            <TextInput
-              style={[styles.statInput, isLocked && styles.statInputLocked]}
-              value={editingMultiplier}
-              onChangeText={(text) =>
-                setEditingMultiplier(text.replace(",", "."))
-              }
-              editable={!isLocked}
-              keyboardType="decimal-pad"
-              maxLength={3}
-            />
-          </View>
-        </View>
-      </View>
-    );
-  };
-
   const renderPlayerItem = ({
     item,
   }: {
     item: Player & { displayRole: string };
   }) => {
-    return <PlayerRow item={item} />;
+    return (
+      <PlayerRow
+        item={item}
+        selectedTeamId={selectedTeamId}
+        onSave={handleUpdatePlayer}
+      />
+    );
   };
 
   const renderSectionHeader = (title: string, count: number) => (
