@@ -1594,60 +1594,6 @@ const HomeScreen: React.FC = () => {
                 </View>
               )}
 
-            {/* Absent players list */}
-            {nextEvent.absentPlayers && nextEvent.absentPlayers.length > 0 && (
-              <View style={styles.absentPlayersSection}>
-                <View style={styles.absentPlayersHeader}>
-                  <Ionicons name="close-circle" size={18} color="#f44336" />
-                  <Text style={styles.absentPlayersTitle}>
-                    Poissaolijat ({absentPlayers.length})
-                  </Text>
-                </View>
-                <View style={styles.absentPlayersList}>
-                  {absentPlayers.map((player, index) => {
-                    const reason = nextEvent.absentReasons?.[player.id];
-                    return (
-                      <View
-                        key={player.id}
-                        style={styles.absentPlayersListItem}
-                      >
-                        <View style={styles.absentPlayerNumber}>
-                          <Text style={styles.absentPlayerNumberText}>
-                            {index + 1}
-                          </Text>
-                        </View>
-                        <Text style={styles.absentPlayersListName}>
-                          {player.name}
-                        </Text>
-                        {reason ? (
-                          <TouchableOpacity
-                            onPress={() => {
-                              if (Platform.OS === "web") {
-                                window.alert(
-                                  `${player.name} - poissaolon syy\n\n${reason}`,
-                                );
-                              } else {
-                                Alert.alert(
-                                  `${player.name} - poissaolon syy`,
-                                  reason,
-                                );
-                              }
-                            }}
-                            style={styles.absentReasonIcon}
-                          >
-                            <Ionicons
-                              name="chatbubble-ellipses"
-                              size={18}
-                              color="#f44336"
-                            />
-                          </TouchableOpacity>
-                        ) : null}
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
 
             {/* Generated teams banner */}
             {nextEvent.generatedTeams &&
@@ -1731,6 +1677,31 @@ const HomeScreen: React.FC = () => {
                   </View>
                 </TouchableOpacity>
               )}
+
+            {/* Absent players banner */}
+            {nextEvent.absentPlayers && nextEvent.absentPlayers.length > 0 && (
+              <TouchableOpacity
+                style={[styles.participantsBanner, styles.absentBanner]}
+                onPress={() => setIsPlayersModalVisible(true)}
+              >
+                <View style={styles.participantsBannerContent}>
+                  <View style={styles.participantsBannerLeft}>
+                    <Ionicons name="close-circle" size={24} color="#f44336" />
+                    <View style={styles.participantsBannerText}>
+                      <Text style={styles.participantsBannerTitle}>
+                        Poissaolijat
+                      </Text>
+                      <Text style={styles.participantsBannerSubtitle}>
+                        <Text style={{ color: "#f44336", fontWeight: "500" }}>
+                          {absentPlayers.length} ilmoittanut esteestä
+                        </Text>
+                      </Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#666" />
+                </View>
+              </TouchableOpacity>
+            )}
 
             {/* Separate message card */}
             <View style={styles.eventCard}>
@@ -2191,15 +2162,24 @@ const HomeScreen: React.FC = () => {
                             >
                               {player.name}
                             </Text>
-                            {player.email && (
-                              <Text
-                                style={[
-                                  styles.modalPlayerEmail,
-                                  styles.modalAbsentEmail,
-                                ]}
-                              >
-                                {player.email}
+                            {nextEvent.absentReasons?.[player.id] ? (
+                              // Syy oli aiemmin näkyvissä etusivun listassa.
+                              // Se näytetään tässä sähköpostin sijaan, jotta
+                              // tieto ei katoa bannerin myötä.
+                              <Text style={styles.modalAbsentReason}>
+                                {nextEvent.absentReasons[player.id]}
                               </Text>
+                            ) : (
+                              player.email && (
+                                <Text
+                                  style={[
+                                    styles.modalPlayerEmail,
+                                    styles.modalAbsentEmail,
+                                  ]}
+                                >
+                                  {player.email}
+                                </Text>
+                              )
                             )}
                           </View>
                         </View>
@@ -2829,6 +2809,15 @@ const styles = StyleSheet.create({
   },
   reservePlayerEmail: {
     color: "#f57c00",
+  },
+  absentBanner: {
+    borderColor: "#ffcdd2",
+  },
+  modalAbsentReason: {
+    fontSize: 13,
+    color: "#c62828",
+    fontStyle: "italic",
+    marginTop: 2,
   },
   participantsBanner: {
     backgroundColor: "#ffffff",
