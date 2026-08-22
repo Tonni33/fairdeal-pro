@@ -18,6 +18,7 @@ import {
 import {
   doc,
   getDoc,
+  getDocFromServer,
   setDoc,
   deleteDoc,
   updateDoc,
@@ -84,8 +85,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
 
         try {
-          // First, try to get user data by UID
-          let userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
+          // First, try to get user data by UID.
+          //
+          // Luku pakotetaan palvelimelta. Kirjautuminen säilyy nyt levyllä,
+          // joten tämä ajetaan heti käynnistyksessä ennen kuin yhteys on
+          // pystyssä: välimuistista saatu "ei löydy" johti aiemmin siihen,
+          // että alla oleva haara loi dokumentin uudelleen ja pyyhki oikean
+          // profiilin päältä.
+          let userDoc;
+          try {
+            userDoc = await getDocFromServer(doc(db, "users", firebaseUser.uid));
+          } catch (readError) {
+            console.log(
+              "[Auth] Käyttäjädokumenttia ei saatu palvelimelta, ei kirjoiteta mitään:",
+              readError
+            );
+            if (isComponentMounted) {
+              setLoading(false);
+              setInitializing(false);
+            }
+            return;
+          }
 
           // If not found by UID, search by email (for admin-created users)
           if (!userDoc.exists() && firebaseUser.email) {
@@ -151,8 +171,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 }
               }
 
-              // Delete old document
-              await deleteDoc(doc(db, "users", oldUserId));
+              // Delete old document. Jos vanha id on sama kuin Auth-UID,
+              // poisto tuhoaisi juuri kirjoitetun dokumentin.
+              if (oldUserId !== firebaseUser.uid) {
+                await deleteDoc(doc(db, "users", oldUserId));
+              }
               console.log(
                 `Migrated user from ${oldUserId} to ${firebaseUser.uid}`
               );
@@ -266,10 +289,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             };
 
             if (isComponentMounted) {
-              await setDoc(doc(db, "users", firebaseUser.uid), {
-                ...newUser,
-                createdAt: new Date(),
-              });
+              // merge: true – jos dokumentti sittenkin on olemassa, sen
+              // kenttiä ei pyyhitä pois
+              await setDoc(
+                doc(db, "users", firebaseUser.uid),
+                {
+                  ...newUser,
+                  createdAt: new Date(),
+                },
+                { merge: true }
+              );
 
               setUser(newUser);
             }
