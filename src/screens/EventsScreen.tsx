@@ -1313,7 +1313,14 @@ const EventsScreen: React.FC = () => {
 
       {/* Calendar view */}
       {viewMode === "calendar" ? (
-        <View style={styles.calendarContainer}>
+        // Koko näkymä vierii yhtenä: kalenteri vie kiinteän korkeutensa, ja
+        // sen alle jäävä tapahtumakortti jäi ennen puoliksi ruudun alle –
+        // pienemmillä näytöillä lähes kokonaan.
+        <ScrollView
+          style={styles.calendarContainer}
+          contentContainerStyle={styles.calendarContent}
+          showsVerticalScrollIndicator={false}
+        >
           <Calendar
             markingType="multi-dot"
             markedDates={markedDates}
@@ -1376,11 +1383,11 @@ const EventsScreen: React.FC = () => {
 
           {/* Events for selected date - without date banner */}
           {selectedDate && eventsForSelectedDate.length > 0 && (
-            <ScrollView style={styles.selectedDateEvents}>
+            <View style={styles.selectedDateEvents}>
               {eventsForSelectedDate.map((event) => (
                 <View key={event.id}>{renderEventItem({ item: event })}</View>
               ))}
-            </ScrollView>
+            </View>
           )}
 
           {selectedDate && eventsForSelectedDate.length === 0 && (
@@ -1391,7 +1398,7 @@ const EventsScreen: React.FC = () => {
               </Text>
             </View>
           )}
-        </View>
+        </ScrollView>
       ) : (
         /* Tapahtumien lista */
         <FlatList
@@ -2590,6 +2597,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fff",
   },
+  calendarContent: {
+    paddingBottom: 24,
+  },
   calendar: {
     borderRadius: 12,
     marginHorizontal: 12,
@@ -2623,12 +2633,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   selectedDateEvents: {
-    flex: 1,
     padding: 12,
     paddingTop: 16,
   },
   noEventsContainer: {
-    flex: 1,
+    // Ei flex:1 – vieritettävän sisällön sisällä se kutistuisi nollaan
     justifyContent: "center",
     alignItems: "center",
     padding: 40,
