@@ -47,8 +47,29 @@ service cloud.firestore {
       allow delete: if signedIn();
     }
 
+    // Kirjautumispolku korvasi kerran käyttäjädokumentin minimitietueella,
+    // kun dokumentin luku palautti tyhjän ennen kuin verkko oli pystyssä.
+    // Client on korjattu, mutta tämä suojaa myös niitä laitteita, joilla on
+    // vielä vanha nippu: profiilikenttää ei voi pyyhkiä pois kirjoittamalla
+    // dokumentin ilman sitä.
+    function keepsField(name) {
+      return !(name in resource.data) || (name in request.resource.data);
+    }
+
+    function keepsProfile() {
+      return keepsField('positions')
+        && keepsField('teamIds')
+        && keepsField('teamMember')
+        && keepsField('teamSkills')
+        && keepsField('isAdmin')
+        && keepsField('isMasterAdmin');
+    }
+
     match /users/{userId} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update: if signedIn() && keepsProfile();
+      allow delete: if signedIn();
     }
     match /teams/{teamId} {
       allow read, write: if signedIn();
