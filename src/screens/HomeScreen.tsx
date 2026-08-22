@@ -36,6 +36,7 @@ import { Event, Player, Team, Message, RootStackParamList } from "../types";
 import { useAuth } from "../contexts/AuthContext";
 import { useApp, getUserTeams } from "../contexts/AppContext";
 import AdminMenuButton from "../components/AdminMenuButton";
+import { UpdateStatusButton } from "../components/UpdateStatusButton";
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -1207,6 +1208,7 @@ const HomeScreen: React.FC = () => {
                 <Text style={styles.logoText}>FairDeal Pro</Text>
               )}
             </View>
+            <UpdateStatusButton />
             <AdminMenuButton onNavigate={handleAdminNavigation} />
           </View>
         </View>
@@ -1233,6 +1235,7 @@ const HomeScreen: React.FC = () => {
               <Text style={styles.logoText}>FairDeal Pro</Text>
             )}
           </View>
+          <UpdateStatusButton />
           <AdminMenuButton onNavigate={handleAdminNavigation} />
         </View>
       </View>
