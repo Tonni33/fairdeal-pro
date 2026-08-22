@@ -33,7 +33,13 @@ import {
 } from "@mui/icons-material";
 import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  getDocs,
+} from "firebase/firestore";
 import { db } from "../services/firebase";
 
 const drawerWidth = 240;
@@ -43,6 +49,13 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  // Uusimmat versiot, jotka käyttäjien laitteet ovat raportoineet. Tämä ei
+  // ole EAS:n totuus vaan havainto: uusin julkaisu näkyy tässä vasta kun
+  // ensimmäinen laite on ottanut sen käyttöön.
+  const [latestSeen, setLatestSeen] = useState<{
+    appVersion?: string;
+    jsAt?: Date;
+  }>({});
   const [hasPendingRequests, setHasPendingRequests] = useState(false);
 
   // Listen to pending license requests
@@ -145,6 +158,46 @@ export default function Layout() {
   ];
 
   // Admin check - only admins can access the web admin panel
+  useEffect(() => {
+    if (!userData?.isAdmin) return;
+    const loadLatestVersions = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, "users"));
+        let appVersion: string | undefined;
+        let newestJs = 0;
+        snapshot.forEach((docSnap) => {
+          const info = (
+            docSnap.data() as {
+              appInfo?: {
+                runtimeVersion?: string;
+                updateCreatedAt?: { toDate?: () => Date };
+              };
+            }
+          ).appInfo;
+          if (!info) return;
+          if (
+            info.runtimeVersion &&
+            (!appVersion ||
+              info.runtimeVersion.localeCompare(appVersion, undefined, {
+                numeric: true,
+              }) > 0)
+          ) {
+            appVersion = info.runtimeVersion;
+          }
+          const time = info.updateCreatedAt?.toDate?.()?.getTime() ?? 0;
+          if (time > newestJs) newestJs = time;
+        });
+        setLatestSeen({
+          appVersion,
+          jsAt: newestJs ? new Date(newestJs) : undefined,
+        });
+      } catch (error) {
+        console.log("Versiotietojen luku epäonnistui:", error);
+      }
+    };
+    loadLatestVersions();
+  }, [userData?.isAdmin]);
+
   if (!userData?.isAdmin) {
     return (
       <Box
@@ -186,6 +239,26 @@ export default function Layout() {
             FairDealPro - Admin
           </Typography>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            {(latestSeen.appVersion || latestSeen.jsAt) && (
+              <Typography
+                variant="body2"
+                title="Uusin versio, jonka jokin käyttäjän laite on raportoinut"
+                sx={{ opacity: 0.85, display: { xs: "none", md: "block" } }}
+              >
+                {latestSeen.appVersion
+                  ? `Sovellus ${latestSeen.appVersion}`
+                  : ""}
+                {latestSeen.jsAt
+                  ? ` · JS ${latestSeen.jsAt.toLocaleDateString("fi-FI", {
+                      day: "numeric",
+                      month: "numeric",
+                    })} klo ${latestSeen.jsAt.toLocaleTimeString("fi-FI", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}`
+                  : ""}
+              </Typography>
+            )}
             <Typography variant="body2">{userData?.email}</Typography>
             <IconButton
               size="large"

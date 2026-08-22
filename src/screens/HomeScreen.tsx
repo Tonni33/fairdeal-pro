@@ -1661,13 +1661,6 @@ const HomeScreen: React.FC = () => {
                               / {nextEvent.maxGoalkeepers} MV
                             </Text>
                           )}
-                          {nextEvent.reservePlayers &&
-                            nextEvent.reservePlayers.length > 0 && (
-                              <Text style={styles.reserveCount}>
-                                {" • "}
-                                {nextEvent.reservePlayers.length} varalla
-                              </Text>
-                            )}
                         </Text>
                       </View>
                     </View>

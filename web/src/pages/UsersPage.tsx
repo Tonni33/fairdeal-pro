@@ -452,7 +452,12 @@ export default function UsersPage() {
     });
   };
 
-  // Uusin havaittu versio: sitä vasten vanhemmat korostetaan
+  // Uusimmat havaitut versiot: niitä vasten vanhemmat korostetaan
+  const latestUpdateTime = allUsers
+    .map((u) => toDate(u.appInfo?.updateCreatedAt)?.getTime())
+    .filter((t): t is number => !!t)
+    .reduce((max, t) => (t > max ? t : max), 0);
+
   const latestVersion = allUsers
     .map((u) => u.appInfo?.runtimeVersion)
     .filter((v): v is string => !!v)
@@ -631,19 +636,25 @@ export default function UsersPage() {
           );
         }
         if (info.isEmbedded) {
+          // Kaupan nippu on aina vanhempi kuin julkaistu JS-päivitys
           return (
             <Chip
               size="small"
               label="kaupan versio"
-              color="default"
+              color="warning"
               variant="outlined"
             />
           );
         }
+        const updateTime = toDate(info.updateCreatedAt)?.getTime() ?? 0;
+        const isLatest = !!latestUpdateTime && updateTime === latestUpdateTime;
         return (
-          <Typography variant="body2">
-            {formatDateTime(info.updateCreatedAt)}
-          </Typography>
+          <Chip
+            size="small"
+            label={formatDateTime(info.updateCreatedAt)}
+            color={isLatest ? "success" : "warning"}
+            variant={isLatest ? "outlined" : "filled"}
+          />
         );
       },
     },
