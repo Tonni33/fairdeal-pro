@@ -63,7 +63,7 @@ export default function UsersPage() {
   ];
   // Viimeisin julkaisu (scripts/publishUpdate.js kirjaa sen). Jos dokumenttia
   // ei ole, verrataan uusimpaan laitteiden raportoimaan päivitykseen.
-  const [publishedAt, setPublishedAt] = useState<Date | null>(null);
+  const [latestJsVersion, setLatestJsVersion] = useState<number | null>(null);
 
   const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
     const saved = localStorage.getItem("usersPage-visibleColumns");
@@ -144,12 +144,10 @@ export default function UsersPage() {
     try {
       const releaseSnap = await getDoc(doc(db, "settings", "app"));
       if (releaseSnap.exists()) {
-        const published = (
-          releaseSnap.data() as {
-            latestUpdatePublishedAt?: { toDate?: () => Date };
-          }
-        ).latestUpdatePublishedAt?.toDate?.();
-        setPublishedAt(published ?? null);
+        const { latestJsVersion: published } = releaseSnap.data() as {
+          latestJsVersion?: number;
+        };
+        setLatestJsVersion(typeof published === "number" ? published : null);
       }
 
       const usersSnapshot = await getDocs(collection(db, "users"));
@@ -467,17 +465,6 @@ export default function UsersPage() {
   };
 
   // Uusimmat havaitut versiot: niitä vasten vanhemmat korostetaan
-  const observedNewestUpdate = allUsers
-    .map((u) => toDate(u.appInfo?.updateCreatedAt)?.getTime())
-    .filter((t): t is number => !!t)
-    .reduce((max, t) => (t > max ? t : max), 0);
-
-  // Julkaisuaika kirjataan sekunteja itse julkaisun jälkeen, joten laitteen
-  // ilmoittama hetki on hieman aiempi. Kahden minuutin liukuma riittää.
-  const latestUpdateTime = publishedAt
-    ? publishedAt.getTime() - 2 * 60 * 1000
-    : observedNewestUpdate;
-
   const latestVersion = allUsers
     .map((u) => u.appInfo?.runtimeVersion)
     .filter((v): v is string => !!v)
@@ -640,38 +627,26 @@ export default function UsersPage() {
     },
     {
       field: "jsUpdate",
-      headerName: "JS-päivitys",
-      width: 170,
-      valueGetter: (_value, row) =>
-        row.appInfo?.isEmbedded
-          ? "kaupan versio"
-          : formatDateTime(row.appInfo?.updateCreatedAt),
+      headerName: "JS-versio",
+      width: 140,
+      valueGetter: (_value, row) => row.appInfo?.jsVersion ?? -1,
       renderCell: (params) => {
-        const info = params.row.appInfo;
-        if (!info) {
+        const version = params.row.appInfo?.jsVersion;
+        if (typeof version !== "number") {
+          // Laite ei ole vielä ottanut käyttöön päivitystä, joka raportoi
+          // numeron
           return (
             <Typography variant="body2" color="text.secondary">
-              –
+              ei tietoa
             </Typography>
           );
         }
-        if (info.isEmbedded) {
-          // Kaupan nippu on aina vanhempi kuin julkaistu JS-päivitys
-          return (
-            <Chip
-              size="small"
-              label="kaupan versio"
-              color="warning"
-              variant="outlined"
-            />
-          );
-        }
-        const updateTime = toDate(info.updateCreatedAt)?.getTime() ?? 0;
-        const isLatest = !!latestUpdateTime && updateTime >= latestUpdateTime;
+        const isLatest =
+          latestJsVersion === null || version >= latestJsVersion;
         return (
           <Chip
             size="small"
-            label={formatDateTime(info.updateCreatedAt)}
+            label={`JS ${version}`}
             color={isLatest ? "success" : "warning"}
             variant={isLatest ? "outlined" : "filled"}
           />

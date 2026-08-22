@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 import * as Updates from "expo-updates";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
+import { JS_VERSION } from "../constants/jsVersion";
 
 /**
  * Kirjaa käyttäjän dokumenttiin, mitä versiota hänen laitteellaan ajetaan.
@@ -21,6 +22,9 @@ export const reportAppVersion = async (userId: string): Promise<void> => {
     await updateDoc(doc(db, "users", userId), {
       appInfo: {
         runtimeVersion: Updates.runtimeVersion ?? null,
+        // Nipun mukana kulkeva numero: kertoo tarkalleen minkä JS-version
+        // laite ajaa, ilman aikaleimoihin perustuvaa päättelyä
+        jsVersion: JS_VERSION,
         updateId: Updates.updateId ?? null,
         updateCreatedAt: Updates.createdAt ?? null,
         isEmbedded: Updates.isEmbeddedLaunch ?? null,

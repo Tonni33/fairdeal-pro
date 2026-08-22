@@ -12,7 +12,29 @@
  * Kirjoittaa dokumenttiin settings/app.
  */
 const { execFileSync } = require("child_process");
+const fs = require("fs");
+const path = require("path");
 const admin = require("firebase-admin");
+
+const JS_VERSION_FILE = path.join(__dirname, "..", "src", "constants", "jsVersion.ts");
+
+const readJsVersion = () => {
+  const match = fs
+    .readFileSync(JS_VERSION_FILE, "utf8")
+    .match(/export const JS_VERSION = (\d+);/);
+  if (!match) {
+    throw new Error("JS_VERSION-vakiota ei löytynyt tiedostosta " + JS_VERSION_FILE);
+  }
+  return Number(match[1]);
+};
+
+const writeJsVersion = (value) => {
+  const contents = fs.readFileSync(JS_VERSION_FILE, "utf8");
+  fs.writeFileSync(
+    JS_VERSION_FILE,
+    contents.replace(/export const JS_VERSION = \d+;/, `export const JS_VERSION = ${value};`)
+  );
+};
 
 const BRANCH = "production";
 const args = process.argv.slice(2);
@@ -32,8 +54,13 @@ const eas = (easArgs) =>
     stdio: ["inherit", "pipe", "inherit"],
   });
 
+let jsVersion = readJsVersion();
+
 if (!recordOnly) {
-  console.log(`\n▶ Julkaistaan päivitys haaraan ${BRANCH}...\n`);
+  // Numero kasvatetaan ENNEN julkaisua, jotta se päätyy julkaistavaan nippuun
+  jsVersion += 1;
+  writeJsVersion(jsVersion);
+  console.log(`\n▶ Julkaistaan JS-versio ${jsVersion} haaraan ${BRANCH}...\n`);
   const output = eas([
     "update",
     "--branch",
@@ -63,10 +90,12 @@ if (!latest) {
   process.exit(1);
 }
 
-// eas update:list liittää viestiin "(x minutes ago by kuka)" – siivotaan pois
+// eas update:list liittää viestiin "(just now by kuka)" tai "(3 minutes ago
+// by kuka)" ja ympäröi sen lainausmerkeillä – siivotaan molemmat pois
 const cleanMessage = String(latest.message || "")
-  .replace(/\s*\((?:[^()]*ago[^()]*)\)\s*$/, "")
-  .replace(/^"|"$/g, "");
+  .replace(/\s*\([^()]*\bby\s+[^()]*\)\s*$/, "")
+  .replace(/^"(.*)"$/s, "$1")
+  .trim();
 
 admin.initializeApp({
   credential: admin.credential.cert(
@@ -82,6 +111,7 @@ admin.initializeApp({
     .set(
       {
         latestRuntimeVersion: latest.runtimeVersion || null,
+        latestJsVersion: jsVersion,
         latestUpdateGroup: latest.group || null,
         latestUpdateMessage: cleanMessage || null,
         latestUpdatePlatforms: latest.platforms || null,
@@ -94,9 +124,13 @@ admin.initializeApp({
     );
 
   console.log("\n✓ Kirjattu Firestoreen (settings/app)");
+  console.log(`  JS-versio:      ${jsVersion}`);
   console.log(`  runtimeVersion: ${latest.runtimeVersion}`);
   console.log(`  update group:   ${latest.group}`);
   console.log(`  viesti:         ${cleanMessage}`);
+  if (!recordOnly) {
+    console.log("\n  Muista committoida src/constants/jsVersion.ts");
+  }
   process.exit(0);
 })().catch((error) => {
   console.error("Kirjaus epäonnistui:", error);

@@ -41,6 +41,7 @@ export interface User {
   // Laitteen raportoima versiotieto (natiiviappi kirjaa tämän kirjautuessa)
   appInfo?: {
     runtimeVersion?: string | null;
+    jsVersion?: number | null;
     updateId?: string | null;
     updateCreatedAt?: unknown;
     isEmbedded?: boolean | null;

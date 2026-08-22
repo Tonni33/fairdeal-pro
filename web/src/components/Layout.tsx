@@ -55,7 +55,7 @@ export default function Layout() {
   // siitä, mitä laitteet ovat ehtineet ottaa käyttöön.
   const [latestRelease, setLatestRelease] = useState<{
     appVersion?: string;
-    jsAt?: Date;
+    jsVersion?: number;
     message?: string;
   }>({});
   const [hasPendingRequests, setHasPendingRequests] = useState(false);
@@ -169,11 +169,11 @@ export default function Layout() {
         const data = snapshot.data() as {
           latestRuntimeVersion?: string;
           latestUpdateMessage?: string;
-          latestUpdatePublishedAt?: { toDate?: () => Date };
+          latestJsVersion?: number;
         };
         setLatestRelease({
           appVersion: data.latestRuntimeVersion,
-          jsAt: data.latestUpdatePublishedAt?.toDate?.(),
+          jsVersion: data.latestJsVersion,
           message: data.latestUpdateMessage,
         });
       } catch (error) {
@@ -224,7 +224,7 @@ export default function Layout() {
             FairDealPro - Admin
           </Typography>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            {(latestRelease.appVersion || latestRelease.jsAt) && (
+            {(latestRelease.appVersion || latestRelease.jsVersion) && (
               <Typography
                 variant="body2"
                 title={
@@ -237,15 +237,7 @@ export default function Layout() {
                 {latestRelease.appVersion
                   ? `Sovellus ${latestRelease.appVersion}`
                   : ""}
-                {latestRelease.jsAt
-                  ? ` · JS ${latestRelease.jsAt.toLocaleDateString("fi-FI", {
-                      day: "numeric",
-                      month: "numeric",
-                    })} klo ${latestRelease.jsAt.toLocaleTimeString("fi-FI", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}`
-                  : ""}
+                {latestRelease.jsVersion ? ` · JS ${latestRelease.jsVersion}` : ""}
               </Typography>
             )}
             <Typography variant="body2">{userData?.email}</Typography>
