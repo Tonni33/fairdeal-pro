@@ -7,7 +7,6 @@ import { AuthProvider } from "./src/contexts/AuthContext";
 import { AppProvider } from "./src/contexts/AppContext";
 import AppNavigator from "./src/navigation/AppNavigator";
 import { NotificationHandler } from "./src/components/NotificationHandler";
-import { UpdateBanner } from "./src/components/UpdateBanner";
 import { AppLock } from "./src/components/AppLock";
 
 // Inject CSS for Expo web – makes html/body/#root fill the viewport so
@@ -44,7 +43,6 @@ export default function App() {
                   edges={["top", "bottom"]}
                 >
                   <StatusBar style="auto" />
-                  <UpdateBanner />
                   <AppLock>
                     <AppNavigator />
                   </AppLock>
@@ -52,7 +50,6 @@ export default function App() {
               ) : (
                 <View style={styles.container}>
                   <StatusBar style="auto" />
-                  <UpdateBanner />
                   <AppLock>
                     <AppNavigator />
                   </AppLock>

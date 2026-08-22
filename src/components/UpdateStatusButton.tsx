@@ -1,8 +1,9 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
+  AppStateStatus,
   StyleSheet,
-  Text,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -10,15 +11,17 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Updates from "expo-updates";
 
 /**
- * Päivitystilan merkki otsikkorivillä logon vieressä.
+ * Päivitystilan nappi otsikkorivillä, samankokoinen kuin admin-valikon nappi.
+ * Ei-admineilla AdminMenuButton palauttaa nullin, jolloin tämä jää rivin
+ * oikeaan reunaan sen paikalle.
  *
- *  - päivitys odottaa käyttöönottoa -> "Päivitä"-painike
- *  - tarkistus tai lataus kesken     -> hyrrä
- *  - kaikki ajan tasalla             -> vihreä synkronointimerkki, jota
- *                                       painamalla voi tarkistaa itse
+ *  - vihreä    -> kaikki ajan tasalla, painallus tarkistaa päivitykset
+ *  - oranssi   -> päivitys ladattu ja odottaa, painallus ottaa sen käyttöön
+ *  - hyrrä     -> tarkistus, lataus tai uudelleenkäynnistys kesken
  *
- * Sama tila kuin UpdateBannerissa (Updates.useUpdates jakaa tilan), joten
- * palkki ja tämä merkki eivät voi olla eri mieltä.
+ * Tämä on ainoa päivityshallinta appissa: erillinen yläpalkki poistettiin,
+ * koska se tarjosi saman toiminnon toiseen kertaan. Siksi myös taustalla
+ * tehtävä tarkistus asuu täällä.
  */
 export const UpdateStatusButton: React.FC = () => {
   // Moduulivakio: dev-clientissä ja webissä päivityksiä ei ole, eikä hookkia
@@ -32,7 +35,40 @@ export const UpdateStatusButton: React.FC = () => {
 const UpdateStatusButtonEnabled: React.FC = () => {
   const { isUpdatePending, isChecking, isDownloading } = Updates.useUpdates();
   const [isReloading, setIsReloading] = useState(false);
-  const [showUpToDate, setShowUpToDate] = useState(false);
+  const checkInFlight = useRef(false);
+
+  const checkForUpdate = useCallback(async () => {
+    if (checkInFlight.current) {
+      return;
+    }
+    checkInFlight.current = true;
+    try {
+      const result = await Updates.checkForUpdateAsync();
+      if (result.isAvailable) {
+        await Updates.fetchUpdateAsync();
+      }
+    } catch (error) {
+      // Verkkokatko tai palvelin ei tavoitettavissa. Ei käyttäjän ongelma,
+      // eikä siitä ilmoiteta – tarkistus uusitaan seuraavalla kerralla.
+      console.log("[UpdateStatus] Päivitystarkistus epäonnistui:", error);
+    } finally {
+      checkInFlight.current = false;
+    }
+  }, []);
+
+  // Natiivipuoli tarkistaa päivitykset kylmäkäynnistyksessä, mutta appi jää
+  // usein taustalle päiviksi. Siksi tarkistus myös aina taustalta palatessa.
+  useEffect(() => {
+    const subscription = AppState.addEventListener(
+      "change",
+      (state: AppStateStatus) => {
+        if (state === "active") {
+          checkForUpdate();
+        }
+      },
+    );
+    return () => subscription.remove();
+  }, [checkForUpdate]);
 
   const applyUpdate = useCallback(async () => {
     setIsReloading(true);
@@ -44,24 +80,9 @@ const UpdateStatusButtonEnabled: React.FC = () => {
     }
   }, []);
 
-  const checkNow = useCallback(async () => {
-    try {
-      const result = await Updates.checkForUpdateAsync();
-      if (result.isAvailable) {
-        await Updates.fetchUpdateAsync();
-      } else {
-        // Lyhyt kuittaus, jotta painallus tuntuu tekevän jotain
-        setShowUpToDate(true);
-        setTimeout(() => setShowUpToDate(false), 2000);
-      }
-    } catch (error) {
-      console.log("[UpdateStatus] Tarkistus epäonnistui:", error);
-    }
-  }, []);
-
   if (isReloading || isChecking || isDownloading) {
     return (
-      <View style={styles.iconButton}>
+      <View style={[styles.button, styles.buttonNeutral]}>
         <ActivityIndicator size="small" color="#1976d2" />
       </View>
     );
@@ -70,56 +91,41 @@ const UpdateStatusButtonEnabled: React.FC = () => {
   if (isUpdatePending) {
     return (
       <TouchableOpacity
-        style={styles.updateButton}
+        style={[styles.button, styles.buttonPending]}
         onPress={applyUpdate}
         accessibilityLabel="Ota uusi versio käyttöön"
       >
-        <Ionicons name="arrow-down-circle" size={16} color="#fff" />
-        <Text style={styles.updateButtonText}>Päivitä</Text>
+        <Ionicons name="sync-circle" size={24} color="#ff9800" />
       </TouchableOpacity>
     );
   }
 
   return (
     <TouchableOpacity
-      style={styles.iconButton}
-      onPress={checkNow}
+      style={[styles.button, styles.buttonUpToDate]}
+      onPress={checkForUpdate}
       accessibilityLabel="Tarkista päivitykset"
     >
-      {/* Synkronointikuvake eikä valintamerkki: jälkimmäinen menee
-          helposti sekaisin ilmoittautumisen kanssa */}
       <Ionicons name="sync-circle" size={24} color="#4caf50" />
-      {showUpToDate && <Text style={styles.upToDateText}>Ajan tasalla</Text>}
     </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
-  iconButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+  // Sama muoto ja koko kuin AdminMenuButtonilla
+  button: {
+    padding: 8,
+    borderRadius: 20,
+    marginRight: 8,
   },
-  upToDateText: {
-    fontSize: 12,
-    color: "#4caf50",
-    fontWeight: "500",
+  buttonUpToDate: {
+    backgroundColor: "rgba(76, 175, 80, 0.12)",
   },
-  updateButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#1976d2",
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 16,
+  buttonPending: {
+    backgroundColor: "rgba(255, 152, 0, 0.18)",
   },
-  updateButtonText: {
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: "700",
+  buttonNeutral: {
+    backgroundColor: "rgba(25, 118, 210, 0.1)",
   },
 });
 
