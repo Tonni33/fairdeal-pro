@@ -3,12 +3,14 @@ import {
   ActivityIndicator,
   AppState,
   AppStateStatus,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Updates from "expo-updates";
 
 /**
@@ -36,6 +38,10 @@ export const UpdateBanner: React.FC = () => {
 
 const UpdateBannerEnabled: React.FC = () => {
   const { isUpdatePending } = Updates.useUpdates();
+  const insets = useSafeAreaInsets();
+  // Androidilla App.tsx rajaa turva-alueen SafeAreaView'lla, iOS:llä ei –
+  // ilman tätä palkki piirtyisi kellonajan ja akkukuvakkeen alle.
+  const topInset = Platform.OS === "ios" ? insets.top : 0;
   const [isReloading, setIsReloading] = useState(false);
   const isChecking = useRef(false);
 
@@ -85,7 +91,7 @@ const UpdateBannerEnabled: React.FC = () => {
   }
 
   return (
-    <View style={styles.banner}>
+    <View style={[styles.banner, { paddingTop: 8 + topInset }]}>
       <Ionicons name="arrow-down-circle" size={20} color="#fff" />
       <Text style={styles.text}>Uusi versio ladattu</Text>
       <TouchableOpacity
