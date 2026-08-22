@@ -38,7 +38,8 @@ import {
   query,
   where,
   onSnapshot,
-  getDocs,
+  doc,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "../services/firebase";
 
@@ -49,12 +50,13 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  // Uusimmat versiot, jotka käyttäjien laitteet ovat raportoineet. Tämä ei
-  // ole EAS:n totuus vaan havainto: uusin julkaisu näkyy tässä vasta kun
-  // ensimmäinen laite on ottanut sen käyttöön.
-  const [latestSeen, setLatestSeen] = useState<{
+  // Viimeisin julkaisu kirjataan settings/app-dokumenttiin julkaisuskriptistä
+  // (scripts/publishUpdate.js), joten tämä on julkaisun totuus eikä havainto
+  // siitä, mitä laitteet ovat ehtineet ottaa käyttöön.
+  const [latestRelease, setLatestRelease] = useState<{
     appVersion?: string;
     jsAt?: Date;
+    message?: string;
   }>({});
   const [hasPendingRequests, setHasPendingRequests] = useState(false);
 
@@ -160,42 +162,25 @@ export default function Layout() {
   // Admin check - only admins can access the web admin panel
   useEffect(() => {
     if (!userData?.isAdmin) return;
-    const loadLatestVersions = async () => {
+    const loadLatestRelease = async () => {
       try {
-        const snapshot = await getDocs(collection(db, "users"));
-        let appVersion: string | undefined;
-        let newestJs = 0;
-        snapshot.forEach((docSnap) => {
-          const info = (
-            docSnap.data() as {
-              appInfo?: {
-                runtimeVersion?: string;
-                updateCreatedAt?: { toDate?: () => Date };
-              };
-            }
-          ).appInfo;
-          if (!info) return;
-          if (
-            info.runtimeVersion &&
-            (!appVersion ||
-              info.runtimeVersion.localeCompare(appVersion, undefined, {
-                numeric: true,
-              }) > 0)
-          ) {
-            appVersion = info.runtimeVersion;
-          }
-          const time = info.updateCreatedAt?.toDate?.()?.getTime() ?? 0;
-          if (time > newestJs) newestJs = time;
-        });
-        setLatestSeen({
-          appVersion,
-          jsAt: newestJs ? new Date(newestJs) : undefined,
+        const snapshot = await getDoc(doc(db, "settings", "app"));
+        if (!snapshot.exists()) return;
+        const data = snapshot.data() as {
+          latestRuntimeVersion?: string;
+          latestUpdateMessage?: string;
+          latestUpdatePublishedAt?: { toDate?: () => Date };
+        };
+        setLatestRelease({
+          appVersion: data.latestRuntimeVersion,
+          jsAt: data.latestUpdatePublishedAt?.toDate?.(),
+          message: data.latestUpdateMessage,
         });
       } catch (error) {
-        console.log("Versiotietojen luku epäonnistui:", error);
+        console.log("Julkaisutiedon luku epäonnistui:", error);
       }
     };
-    loadLatestVersions();
+    loadLatestRelease();
   }, [userData?.isAdmin]);
 
   if (!userData?.isAdmin) {
@@ -239,20 +224,24 @@ export default function Layout() {
             FairDealPro - Admin
           </Typography>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            {(latestSeen.appVersion || latestSeen.jsAt) && (
+            {(latestRelease.appVersion || latestRelease.jsAt) && (
               <Typography
                 variant="body2"
-                title="Uusin versio, jonka jokin käyttäjän laite on raportoinut"
+                title={
+                  latestRelease.message
+                    ? `Viimeisin julkaisu: ${latestRelease.message}`
+                    : "Viimeisin julkaistu versio"
+                }
                 sx={{ opacity: 0.85, display: { xs: "none", md: "block" } }}
               >
-                {latestSeen.appVersion
-                  ? `Sovellus ${latestSeen.appVersion}`
+                {latestRelease.appVersion
+                  ? `Sovellus ${latestRelease.appVersion}`
                   : ""}
-                {latestSeen.jsAt
-                  ? ` · JS ${latestSeen.jsAt.toLocaleDateString("fi-FI", {
+                {latestRelease.jsAt
+                  ? ` · JS ${latestRelease.jsAt.toLocaleDateString("fi-FI", {
                       day: "numeric",
                       month: "numeric",
-                    })} klo ${latestSeen.jsAt.toLocaleTimeString("fi-FI", {
+                    })} klo ${latestRelease.jsAt.toLocaleTimeString("fi-FI", {
                       hour: "2-digit",
                       minute: "2-digit",
                     })}`

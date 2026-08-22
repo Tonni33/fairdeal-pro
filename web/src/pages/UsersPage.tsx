@@ -61,6 +61,10 @@ export default function UsersPage() {
     "lastSeen",
     "actions",
   ];
+  // Viimeisin julkaisu (scripts/publishUpdate.js kirjaa sen). Jos dokumenttia
+  // ei ole, verrataan uusimpaan laitteiden raportoimaan päivitykseen.
+  const [publishedAt, setPublishedAt] = useState<Date | null>(null);
+
   const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
     const saved = localStorage.getItem("usersPage-visibleColumns");
     // Uudet sarakkeet näytetään myös jos selaimeen on tallennettu vanha valinta
@@ -138,6 +142,16 @@ export default function UsersPage() {
   const loadUsers = async () => {
     setLoading(true);
     try {
+      const releaseSnap = await getDoc(doc(db, "settings", "app"));
+      if (releaseSnap.exists()) {
+        const published = (
+          releaseSnap.data() as {
+            latestUpdatePublishedAt?: { toDate?: () => Date };
+          }
+        ).latestUpdatePublishedAt?.toDate?.();
+        setPublishedAt(published ?? null);
+      }
+
       const usersSnapshot = await getDocs(collection(db, "users"));
       const usersData = usersSnapshot.docs.map((doc) => ({
         id: doc.id,
@@ -453,10 +467,16 @@ export default function UsersPage() {
   };
 
   // Uusimmat havaitut versiot: niitä vasten vanhemmat korostetaan
-  const latestUpdateTime = allUsers
+  const observedNewestUpdate = allUsers
     .map((u) => toDate(u.appInfo?.updateCreatedAt)?.getTime())
     .filter((t): t is number => !!t)
     .reduce((max, t) => (t > max ? t : max), 0);
+
+  // Julkaisuaika kirjataan sekunteja itse julkaisun jälkeen, joten laitteen
+  // ilmoittama hetki on hieman aiempi. Kahden minuutin liukuma riittää.
+  const latestUpdateTime = publishedAt
+    ? publishedAt.getTime() - 2 * 60 * 1000
+    : observedNewestUpdate;
 
   const latestVersion = allUsers
     .map((u) => u.appInfo?.runtimeVersion)
@@ -647,7 +667,7 @@ export default function UsersPage() {
           );
         }
         const updateTime = toDate(info.updateCreatedAt)?.getTime() ?? 0;
-        const isLatest = !!latestUpdateTime && updateTime === latestUpdateTime;
+        const isLatest = !!latestUpdateTime && updateTime >= latestUpdateTime;
         return (
           <Chip
             size="small"
