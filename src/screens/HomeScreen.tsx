@@ -54,6 +54,10 @@ const HomeScreen: React.FC = () => {
   const [absentPlayers, setAbsentPlayers] = useState<Player[]>([]);
   const [isTeamModalVisible, setIsTeamModalVisible] = useState(false);
   const [isPlayersModalVisible, setIsPlayersModalVisible] = useState(false);
+  // Kumman bannerin kautta modaali avattiin: sama modaali, eri sisältö
+  const [playersModalMode, setPlayersModalMode] = useState<
+    "participants" | "absent"
+  >("participants");
   const [isMessageModalVisible, setIsMessageModalVisible] = useState(false);
   const [isEditingMessage, setIsEditingMessage] = useState(false);
   const [editMessageText, setEditMessageText] = useState("");
@@ -1570,25 +1574,13 @@ const HomeScreen: React.FC = () => {
                           </View>
                         );
                       };
+                      // Vakiokävijät ovat jonossa ensin, mutta ryhmäotsikoita
+                      // ei näytetä: jono on yksi numeroitu lista, eikä ketään
+                      // leimata listassa ulkopuoliseksi.
                       return (
                         <>
-                          {members.length > 0 && (
-                            <>
-                              {guests.length > 0 && (
-                                <Text style={styles.playerGroupTitle}>
-                                  Vakiokävijät ({members.length})
-                                </Text>
-                              )}
-                              {members.map((p, i) => renderItem(p, i))}
-                            </>
-                          )}
-                          {guests.length > 0 && (
-                            <>
-                              <Text style={styles.playerGroupTitle}>
-                                Ulkopuoliset ({guests.length})
-                              </Text>
-                              {guests.map((p, i) => renderItem(p, i))}
-                            </>
+                          {[...members, ...guests].map((p, i) =>
+                            renderItem(p, i),
                           )}
                         </>
                       );
@@ -1633,7 +1625,10 @@ const HomeScreen: React.FC = () => {
               nextEvent.registeredPlayers.length > 0 && (
                 <TouchableOpacity
                   style={styles.participantsBanner}
-                  onPress={() => setIsPlayersModalVisible(true)}
+                  onPress={() => {
+                    setPlayersModalMode("participants");
+                    setIsPlayersModalVisible(true);
+                  }}
                 >
                   <View style={styles.participantsBannerContent}>
                     <View style={styles.participantsBannerLeft}>
@@ -1685,7 +1680,10 @@ const HomeScreen: React.FC = () => {
             {nextEvent.absentPlayers && nextEvent.absentPlayers.length > 0 && (
               <TouchableOpacity
                 style={[styles.participantsBanner, styles.absentBanner]}
-                onPress={() => setIsPlayersModalVisible(true)}
+                onPress={() => {
+                  setPlayersModalMode("absent");
+                  setIsPlayersModalVisible(true);
+                }}
               >
                 <View style={styles.participantsBannerContent}>
                   <View style={styles.participantsBannerLeft}>
@@ -1957,7 +1955,9 @@ const HomeScreen: React.FC = () => {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, styles.playersModalContent]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Osallistujat</Text>
+              <Text style={styles.modalTitle}>
+                {playersModalMode === "absent" ? "Poissaolijat" : "Osallistujat"}
+              </Text>
               <TouchableOpacity
                 style={styles.closeButton}
                 onPress={() => setIsPlayersModalVisible(false)}
@@ -1967,7 +1967,8 @@ const HomeScreen: React.FC = () => {
             </View>
 
             <ScrollView style={styles.playersModalScroll}>
-              {nextEvent &&
+              {playersModalMode === "participants" &&
+                nextEvent &&
                 nextEvent.registeredPlayers &&
                 nextEvent.registeredPlayers.length > 0 && (
                   <View style={styles.modalPlayersSection}>
@@ -2042,87 +2043,9 @@ const HomeScreen: React.FC = () => {
                   </View>
                 )}
 
-              {nextEvent &&
-                nextEvent.reservePlayers &&
-                nextEvent.reservePlayers.length > 0 && (
-                  <View style={styles.modalPlayersSection}>
-                    <Text
-                      style={[
-                        styles.modalSectionTitle,
-                        styles.modalReserveTitle,
-                      ]}
-                    >
-                      Varalla ({reservePlayers.length})
-                    </Text>
 
-                    <View style={styles.modalPlayersList}>
-                      {(() => {
-                        const teamId = nextEvent?.teamId || "";
-                        const thresholdMet = isGuestThresholdMet(nextEvent);
-                        const orderedPlayers = thresholdMet
-                          ? reservePlayers
-                          : sortMembersFirst(reservePlayers, teamId).sorted;
-                        return orderedPlayers.map((player, index) => {
-                          const isGoalkeeper = player?.positions.includes("MV");
-                          const isGuest =
-                            !teamId || player?.teamMember?.[teamId] !== true;
-                          return (
-                            <View
-                              key={player.id}
-                              style={[
-                                styles.modalPlayerItem,
-                                styles.modalReserveItem,
-                                isGoalkeeper && styles.modalGoalkeeperItem,
-                              ]}
-                            >
-                              <View
-                                style={[
-                                  styles.modalPlayerIcon,
-                                  isGuest
-                                    ? styles.modalGuestReserveIcon
-                                    : styles.modalReserveIcon,
-                                  isGoalkeeper && styles.modalGoalkeeperIcon,
-                                ]}
-                              >
-                                <Ionicons
-                                  name="time-outline"
-                                  size={16}
-                                  color={isGoalkeeper ? "#fff" : "#ff9800"}
-                                />
-                              </View>
-                              <View style={styles.modalPlayerInfo}>
-                                <Text
-                                  style={[
-                                    styles.modalPlayerName,
-                                    styles.modalReserveName,
-                                    isGoalkeeper && styles.modalGoalkeeperName,
-                                  ]}
-                                >
-                                  {player.name ||
-                                    player.email ||
-                                    `ID: ${player.id}`}
-                                  {isGoalkeeper && " 🥅"}
-                                </Text>
-                                {player.email && (
-                                  <Text
-                                    style={[
-                                      styles.modalPlayerEmail,
-                                      styles.modalReserveEmail,
-                                    ]}
-                                  >
-                                    {player.email}
-                                  </Text>
-                                )}
-                              </View>
-                            </View>
-                          );
-                        });
-                      })()}
-                    </View>
-                  </View>
-                )}
-
-              {nextEvent &&
+              {playersModalMode === "absent" &&
+                nextEvent &&
                 nextEvent.absentPlayers &&
                 nextEvent.absentPlayers.length > 0 && (
                   <View style={styles.modalPlayersSection}>

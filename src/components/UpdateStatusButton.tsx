@@ -14,8 +14,8 @@ import * as Updates from "expo-updates";
  *
  *  - päivitys odottaa käyttöönottoa -> "Päivitä"-painike
  *  - tarkistus tai lataus kesken     -> hyrrä
- *  - kaikki ajan tasalla             -> vihreä valintamerkki, jota painamalla
- *                                       voi tarkistaa päivitykset itse
+ *  - kaikki ajan tasalla             -> vihreä synkronointimerkki, jota
+ *                                       painamalla voi tarkistaa itse
  *
  * Sama tila kuin UpdateBannerissa (Updates.useUpdates jakaa tilan), joten
  * palkki ja tämä merkki eivät voi olla eri mieltä.
@@ -86,7 +86,9 @@ const UpdateStatusButtonEnabled: React.FC = () => {
       onPress={checkNow}
       accessibilityLabel="Tarkista päivitykset"
     >
-      <Ionicons name="checkmark-circle" size={24} color="#4caf50" />
+      {/* Synkronointikuvake eikä valintamerkki: jälkimmäinen menee
+          helposti sekaisin ilmoittautumisen kanssa */}
+      <Ionicons name="sync-circle" size={24} color="#4caf50" />
       {showUpToDate && <Text style={styles.upToDateText}>Ajan tasalla</Text>}
     </TouchableOpacity>
   );
