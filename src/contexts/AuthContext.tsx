@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -25,6 +31,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { auth, authPersistenceEnabled, db } from "../services/firebase";
 import { AuthContextType, User } from "../types";
 import { SecureStorage } from "../utils/secureStorage";
+import { reportAppVersion } from "../utils/reportAppVersion";
 import ChangePasswordModal from "../components/ChangePasswordModal";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -39,6 +46,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [initializing, setInitializing] = useState(true);
   const [needsPasswordChange, setNeedsPasswordChange] = useState(false);
   const [tempPassword, setTempPassword] = useState<string>("");
+  const versionReportedFor = useRef<string | null>(null);
 
   useEffect(() => {
     let isComponentMounted = true;
@@ -66,6 +74,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           SecureStorage.clearCredentials().catch((error) =>
             console.log("[Auth] Tunnusten siivous epäonnistui:", error),
           );
+        }
+
+        // Versiotieto kirjataan kerran käynnistystä kohti, ei jokaisella
+        // tokenin uusinnalla
+        if (versionReportedFor.current !== firebaseUser.uid) {
+          versionReportedFor.current = firebaseUser.uid;
+          reportAppVersion(firebaseUser.uid);
         }
 
         try {

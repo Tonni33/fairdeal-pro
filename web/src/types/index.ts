@@ -38,6 +38,17 @@ export interface User {
   teamMember?: {
     [teamId: string]: boolean;
   };
+  // Laitteen raportoima versiotieto (natiiviappi kirjaa tämän kirjautuessa)
+  appInfo?: {
+    runtimeVersion?: string | null;
+    updateId?: string | null;
+    updateCreatedAt?: unknown;
+    isEmbedded?: boolean | null;
+    channel?: string | null;
+    platform?: string;
+    osVersion?: string;
+    reportedAt?: unknown;
+  };
 }
 
 // Team types

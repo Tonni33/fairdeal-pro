@@ -57,11 +57,15 @@ export default function UsersPage() {
     "teamMember",
     "isAdmin",
     "createdAt",
+    "appVersion",
+    "lastSeen",
     "actions",
   ];
   const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
     const saved = localStorage.getItem("usersPage-visibleColumns");
-    return saved ? JSON.parse(saved) : defaultColumns;
+    // Uudet sarakkeet näytetään myös jos selaimeen on tallennettu vanha valinta
+    const parsed: string[] = saved ? JSON.parse(saved) : defaultColumns;
+    return Array.from(new Set([...parsed, "appVersion", "lastSeen"]));
   });
 
   const [columnOrder, setColumnOrder] = useState<string[]>(() => {
@@ -426,6 +430,37 @@ export default function UsersPage() {
     }
   };
 
+  // Firestore palauttaa Timestampin, mutta kenttä voi olla myös merkkijono
+  const toDate = (value: unknown): Date | null => {
+    if (!value) return null;
+    if (typeof (value as { toDate?: () => Date }).toDate === "function") {
+      return (value as { toDate: () => Date }).toDate();
+    }
+    const parsed = new Date(value as string);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const formatDateTime = (value: unknown): string => {
+    const date = toDate(value);
+    if (!date) return "–";
+    return date.toLocaleString("fi-FI", {
+      day: "numeric",
+      month: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  // Uusin havaittu versio: sitä vasten vanhemmat korostetaan
+  const latestVersion = allUsers
+    .map((u) => u.appInfo?.runtimeVersion)
+    .filter((v): v is string => !!v)
+    .sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
+    )
+    .pop();
+
   const columns: GridColDef<User>[] = [
     {
       field: "name",
@@ -549,6 +584,80 @@ export default function UsersPage() {
       field: "phone",
       headerName: "Puhelinnumero",
       width: 170,
+    },
+    {
+      field: "appVersion",
+      headerName: "Sovellusversio",
+      width: 170,
+      valueGetter: (_value, row) => row.appInfo?.runtimeVersion || "",
+      renderCell: (params) => {
+        const info = params.row.appInfo;
+        if (!info?.runtimeVersion) {
+          return (
+            <Typography variant="body2" color="text.secondary">
+              ei tietoa
+            </Typography>
+          );
+        }
+        const outdated =
+          !!latestVersion && info.runtimeVersion !== latestVersion;
+        return (
+          <Chip
+            size="small"
+            label={`${info.runtimeVersion}${
+              info.platform ? ` · ${info.platform}` : ""
+            }`}
+            color={outdated ? "warning" : "success"}
+            variant={outdated ? "filled" : "outlined"}
+          />
+        );
+      },
+    },
+    {
+      field: "jsUpdate",
+      headerName: "JS-päivitys",
+      width: 170,
+      valueGetter: (_value, row) =>
+        row.appInfo?.isEmbedded
+          ? "kaupan versio"
+          : formatDateTime(row.appInfo?.updateCreatedAt),
+      renderCell: (params) => {
+        const info = params.row.appInfo;
+        if (!info) {
+          return (
+            <Typography variant="body2" color="text.secondary">
+              –
+            </Typography>
+          );
+        }
+        if (info.isEmbedded) {
+          return (
+            <Chip
+              size="small"
+              label="kaupan versio"
+              color="default"
+              variant="outlined"
+            />
+          );
+        }
+        return (
+          <Typography variant="body2">
+            {formatDateTime(info.updateCreatedAt)}
+          </Typography>
+        );
+      },
+    },
+    {
+      field: "lastSeen",
+      headerName: "Viimeksi nähty",
+      width: 170,
+      valueGetter: (_value, row) =>
+        toDate(row.appInfo?.reportedAt)?.getTime() ?? 0,
+      renderCell: (params) => (
+        <Typography variant="body2">
+          {formatDateTime(params.row.appInfo?.reportedAt)}
+        </Typography>
+      ),
     },
     {
       field: "actions",
