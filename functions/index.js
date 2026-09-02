@@ -796,26 +796,25 @@ exports.sendEventReminders = onSchedule(
 
     try {
       // Get all events happening in approximately 24 hours (23-25h window)
-      const eventsSnapshot = await admin
-        .firestore()
-        .collection("events")
-        .where("date", ">=", in23Hours)
-        .where("date", "<=", in25Hours)
-        .get();
+      const allEvents = await admin.firestore().collection("events").get();
+      const eventsInWindow = allEvents.docs.filter((doc) => {
+        const when = eventDate(doc.data());
+        return when && when >= in23Hours && when <= in25Hours;
+      });
 
-      if (eventsSnapshot.empty) {
+      if (eventsInWindow.length === 0) {
         console.log("[Reminder] No events found in the 24h window");
         return null;
       }
 
       console.log(
-        `[Reminder] Found ${eventsSnapshot.size} events to send reminders for`
+        `[Reminder] Found ${eventsInWindow.length} events to send reminders for`
       );
 
       const messages = [];
       const processedPlayers = new Set(); // Avoid duplicate notifications
 
-      for (const eventDoc of eventsSnapshot.docs) {
+      for (const eventDoc of eventsInWindow) {
         const eventData = eventDoc.data();
         const eventId = eventDoc.id;
         const eventTitle = eventData.title || "Tapahtuma";
@@ -965,6 +964,21 @@ exports.sendEventReminders = onSchedule(
 //
 // Nyt nosto tehdään yhdessä paikassa transaktion sisällä, jossa kokoonpano
 // luetaan uudelleen juuri ennen kirjoitusta.
+
+/**
+ * Tapahtuman ajankohta. Kenttä on tietokannassa merkkijonona (osa vanhoista
+ * riveistä lyhyessä paikallisajan muodossa, loput UTC-ISO:na), ei Timestampina.
+ * Siksi aikarajausta EI voi tehdä Firestore-kyselyllä: where("date", ">=", Date)
+ * ei kohtaa merkkijonokenttää lainkaan vaan palauttaa aina tyhjän tuloksen.
+ * Kokoelma on pieni, joten rajaus tehdään täällä samalla tulkinnalla kuin
+ * sovelluksessa.
+ */
+const eventDate = (data) => {
+  const raw = data?.date;
+  if (!raw) return null;
+  const parsed = raw?.toDate ? raw.toDate() : new Date(raw);
+  return isNaN(parsed.getTime()) ? null : parsed;
+};
 
 const DEFAULT_GUEST_REGISTRATION_HOURS = 24;
 const FIELD_POSITIONS = ["H", "P", "H/P"];
@@ -1214,20 +1228,22 @@ exports.promoteReservesScheduled = onSchedule(
     const now = new Date();
     const horizon = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
 
-    const eventsSnapshot = await admin
-      .firestore()
-      .collection("events")
-      .where("date", ">=", now)
-      .where("date", "<=", horizon)
-      .get();
+    const eventsSnapshot = await admin.firestore().collection("events").get();
 
     let totalPromoted = 0;
+    let considered = 0;
 
     for (const eventDoc of eventsSnapshot.docs) {
-      const reserves = eventDoc.data().reservePlayers || [];
+      const data = eventDoc.data();
+      const reserves = data.reservePlayers || [];
       if (reserves.length === 0) {
         continue;
       }
+      const when = eventDate(data);
+      if (!when || when < now || when > horizon) {
+        continue;
+      }
+      considered += 1;
       try {
         const promoted = await promoteReservesForEvent(eventDoc.id);
         if (promoted) {
@@ -1238,7 +1254,9 @@ exports.promoteReservesScheduled = onSchedule(
       }
     }
 
-    console.log(`[Promo] Scheduled run promoted ${totalPromoted} players`);
+    console.log(
+      `[Promo] Scheduled run: ${considered} tapahtumaa jonolla, nostettu ${totalPromoted}`
+    );
     return { promoted: totalPromoted };
   }
 );
