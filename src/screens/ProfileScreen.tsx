@@ -11,6 +11,7 @@ import {
   Switch,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { VersionInfo } from "../components/VersionInfo";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import {
@@ -908,6 +909,8 @@ const ProfileScreen: React.FC = () => {
             />
           </View>
         </View>
+
+        <VersionInfo />
 
         <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
           <Text style={styles.signOutText}>Kirjaudu ulos</Text>
