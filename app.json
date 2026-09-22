@@ -22,7 +22,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.fairdeal.pro",
-      "buildNumber": "47",
+      "buildNumber": "48",
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses camera to take photos for player profiles",
         "NSPhotoLibraryUsageDescription": "This app accesses photo library to select photos for player profiles",
@@ -68,7 +68,7 @@
         }
       ],
       "softwareKeyboardLayoutMode": "pan",
-      "versionCode": 19
+      "versionCode": 20
     },
     "web": {
       "favicon": "./assets/favicon.png",
