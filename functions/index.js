@@ -24,7 +24,7 @@ exports.deleteUser = onCall(async (request) => {
   if (!context) {
     throw new HttpsError(
       "unauthenticated",
-      "Käyttäjän tulee olla kirjautunut."
+      "Käyttäjän tulee olla kirjautunut.",
     );
   }
 
@@ -81,7 +81,7 @@ exports.deleteUser = onCall(async (request) => {
     if (!isMasterAdmin && !isTeamAdmin) {
       throw new HttpsError(
         "permission-denied",
-        "Vain adminit voivat poistaa käyttäjiä."
+        "Vain adminit voivat poistaa käyttäjiä.",
       );
     }
 
@@ -117,7 +117,7 @@ exports.deleteUser = onCall(async (request) => {
       // If user doesn't exist in Auth, that's okay
       if (authError.code === "auth/user-not-found") {
         console.log(
-          `User ${userId} not found in Authentication (already deleted)`
+          `User ${userId} not found in Authentication (already deleted)`,
         );
       } else {
         throw authError;
@@ -141,7 +141,7 @@ exports.deleteUser = onCall(async (request) => {
 
     throw new HttpsError(
       "internal",
-      `Käyttäjän poistaminen epäonnistui: ${error.message}`
+      `Käyttäjän poistaminen epäonnistui: ${error.message}`,
     );
   }
 });
@@ -165,7 +165,7 @@ exports.deleteTeam = onCall(async (request) => {
   if (!context) {
     throw new HttpsError(
       "unauthenticated",
-      "Käyttäjän tulee olla kirjautunut."
+      "Käyttäjän tulee olla kirjautunut.",
     );
   }
 
@@ -197,8 +197,8 @@ exports.deleteTeam = onCall(async (request) => {
 
     const isTeamAdmin = Boolean(
       teamData.adminId === callerId ||
-        (Array.isArray(teamData.adminIds) &&
-          teamData.adminIds.includes(callerId))
+      (Array.isArray(teamData.adminIds) &&
+        teamData.adminIds.includes(callerId)),
     );
 
     console.log("deleteTeam permission check", {
@@ -211,7 +211,7 @@ exports.deleteTeam = onCall(async (request) => {
     if (!isMasterAdmin && !isTeamAdmin) {
       throw new HttpsError(
         "permission-denied",
-        "Vain joukkueen admin tai master admin voi poistaa joukkueen."
+        "Vain joukkueen admin tai master admin voi poistaa joukkueen.",
       );
     }
 
@@ -270,7 +270,7 @@ exports.deleteTeam = onCall(async (request) => {
 
     console.log(
       "License requests to delete for team:",
-      licenseRequestsSnapshot.size
+      licenseRequestsSnapshot.size,
     );
 
     licenseRequestsSnapshot.forEach((reqDoc) => {
@@ -307,7 +307,7 @@ exports.deleteTeam = onCall(async (request) => {
 
     throw new HttpsError(
       "internal",
-      `Joukkueen poistaminen epäonnistui: ${error.message}`
+      `Joukkueen poistaminen epäonnistui: ${error.message}`,
     );
   }
 });
@@ -326,7 +326,7 @@ exports.createUserAccounts = onCall(async (request) => {
   if (!context) {
     throw new HttpsError(
       "unauthenticated",
-      "Käyttäjän tulee olla kirjautunut."
+      "Käyttäjän tulee olla kirjautunut.",
     );
   }
 
@@ -340,7 +340,7 @@ exports.createUserAccounts = onCall(async (request) => {
   if (!commonPassword || commonPassword.length < 6) {
     throw new HttpsError(
       "invalid-argument",
-      "Salasanan tulee olla vähintään 6 merkkiä."
+      "Salasanan tulee olla vähintään 6 merkkiä.",
     );
   }
 
@@ -377,7 +377,7 @@ exports.createUserAccounts = onCall(async (request) => {
     if (!isMasterAdmin && !isTeamAdmin) {
       throw new HttpsError(
         "permission-denied",
-        "Vain adminit voivat luoda käyttäjätilejä."
+        "Vain adminit voivat luoda käyttäjätilejä.",
       );
     }
 
@@ -424,7 +424,7 @@ exports.createUserAccounts = onCall(async (request) => {
           // Update all references in events before deleting old document
           if (user.id !== userRecord.uid) {
             console.log(
-              `Updating event references from ${user.id} to ${userRecord.uid}`
+              `Updating event references from ${user.id} to ${userRecord.uid}`,
             );
 
             // Find all events that reference the old user ID
@@ -544,7 +544,7 @@ exports.createUserAccounts = onCall(async (request) => {
 
     throw new HttpsError(
       "internal",
-      `Käyttäjien luominen epäonnistui: ${error.message}`
+      `Käyttäjien luominen epäonnistui: ${error.message}`,
     );
   }
 });
@@ -624,7 +624,7 @@ exports.onEventUpdated = onDocumentUpdated(
     // Find players who were promoted (were in reserve, now in registered, no longer in reserve)
     const promotedPlayerIds = beforeReserve.filter(
       (playerId) =>
-        afterRegistered.includes(playerId) && !afterReserve.includes(playerId)
+        afterRegistered.includes(playerId) && !afterReserve.includes(playerId),
     );
 
     if (promotedPlayerIds.length === 0) {
@@ -632,7 +632,7 @@ exports.onEventUpdated = onDocumentUpdated(
     }
 
     console.log(
-      `[Push] Event ${eventId}: ${promotedPlayerIds.length} players promoted from reserve`
+      `[Push] Event ${eventId}: ${promotedPlayerIds.length} players promoted from reserve`,
     );
 
     // Get event details for notification
@@ -692,7 +692,7 @@ exports.onEventUpdated = onDocumentUpdated(
         // Check if user has disabled roster promotion notifications
         if (userData.notificationSettings?.rosterPromotions === false) {
           console.log(
-            `[Push] User ${playerId} has disabled roster promotion notifications`
+            `[Push] User ${playerId} has disabled roster promotion notifications`,
           );
           continue;
         }
@@ -705,13 +705,13 @@ exports.onEventUpdated = onDocumentUpdated(
         // Validate Expo push token
         if (!Expo.isExpoPushToken(pushToken)) {
           console.log(
-            `[Push] Invalid push token for user ${playerId}: ${pushToken}`
+            `[Push] Invalid push token for user ${playerId}: ${pushToken}`,
           );
           continue;
         }
 
         console.log(
-          `[Push] Sending notification to ${userData.name || playerId}`
+          `[Push] Sending notification to ${userData.name || playerId}`,
         );
 
         messages.push({
@@ -755,16 +755,16 @@ exports.onEventUpdated = onDocumentUpdated(
       if (ticket.status === "error") {
         console.error(
           `[Push] Notification error for ${messages[index]?.to}:`,
-          ticket.message
+          ticket.message,
         );
       }
     });
 
     console.log(
-      `[Push] Successfully processed ${tickets.length} notifications`
+      `[Push] Successfully processed ${tickets.length} notifications`,
     );
     return { sent: tickets.length };
-  }
+  },
 );
 
 // ============================================
@@ -791,7 +791,7 @@ exports.sendEventReminders = onSchedule(
     const in25Hours = new Date(now.getTime() + 25 * 60 * 60 * 1000);
 
     console.log(
-      `[Reminder] Looking for events between ${in23Hours.toISOString()} and ${in25Hours.toISOString()}`
+      `[Reminder] Looking for events between ${in23Hours.toISOString()} and ${in25Hours.toISOString()}`,
     );
 
     try {
@@ -808,7 +808,7 @@ exports.sendEventReminders = onSchedule(
       }
 
       console.log(
-        `[Reminder] Found ${eventsInWindow.length} events to send reminders for`
+        `[Reminder] Found ${eventsInWindow.length} events to send reminders for`,
       );
 
       const messages = [];
@@ -852,7 +852,7 @@ exports.sendEventReminders = onSchedule(
         });
 
         console.log(
-          `[Reminder] Processing event: ${eventTitle} (${teamName}) - ${registeredPlayers.length} players`
+          `[Reminder] Processing event: ${eventTitle} (${teamName}) - ${registeredPlayers.length} players`,
         );
 
         // Get push tokens for all registered players
@@ -881,7 +881,7 @@ exports.sendEventReminders = onSchedule(
             // Check if user has disabled event reminder notifications
             if (userData.notificationSettings?.eventReminders === false) {
               console.log(
-                `[Reminder] User ${playerId} has disabled event reminders`
+                `[Reminder] User ${playerId} has disabled event reminders`,
               );
               continue;
             }
@@ -905,7 +905,7 @@ exports.sendEventReminders = onSchedule(
           } catch (err) {
             console.error(
               `[Reminder] Error processing player ${playerId}:`,
-              err
+              err,
             );
           }
         }
@@ -917,7 +917,7 @@ exports.sendEventReminders = onSchedule(
       }
 
       console.log(
-        `[Reminder] Sending ${messages.length} reminder notifications`
+        `[Reminder] Sending ${messages.length} reminder notifications`,
       );
 
       // Send notifications in chunks
@@ -941,14 +941,14 @@ exports.sendEventReminders = onSchedule(
       }
 
       console.log(
-        `[Reminder] Successfully sent ${totalSent} reminder notifications`
+        `[Reminder] Successfully sent ${totalSent} reminder notifications`,
       );
       return { sent: totalSent };
     } catch (err) {
       console.error("[Reminder] Error in scheduled function:", err);
       throw err;
     }
-  }
+  },
 );
 
 // ============================================
@@ -976,7 +976,39 @@ exports.sendEventReminders = onSchedule(
 const eventDate = (data) => {
   const raw = data?.date;
   if (!raw) return null;
-  const parsed = raw?.toDate ? raw.toDate() : new Date(raw);
+
+  if (raw?.toDate) {
+    return raw.toDate();
+  }
+
+  // Local ISO strings such as "2026-09-18T16:00" have no timezone. Cloud
+  // Functions runs in UTC, but the app stores and displays these as Helsinki
+  // local time, so resolve the timezone before comparing registration limits.
+  if (
+    typeof raw === "string" &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?$/.test(raw)
+  ) {
+    const localComponentsAsUtc = new Date(`${raw}Z`);
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Helsinki",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(localComponentsAsUtc);
+    const value = (type) => parts.find((part) => part.type === type)?.value;
+    const helsinkiOffset =
+      Date.parse(
+        `${value("year")}-${value("month")}-${value("day")}T${value("hour")}:${value("minute")}:${value("second")}Z`,
+      ) - localComponentsAsUtc.getTime();
+    const parsed = new Date(localComponentsAsUtc.getTime() - helsinkiOffset);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const parsed = new Date(raw);
   return isNaN(parsed.getTime()) ? null : parsed;
 };
 
@@ -1032,14 +1064,12 @@ const promoteReservesForEvent = async (eventId) => {
     }
 
     // Mennyt tapahtuma jätetään rauhaan
-    const eventDate = eventData.date?.toDate
-      ? eventData.date.toDate()
-      : new Date(eventData.date);
-    if (isNaN(eventDate.getTime())) {
+    const eventAt = eventDate(eventData);
+    if (!eventAt) {
       console.log(`[Promo] Event ${eventId}: invalid date, skipping`);
       return null;
     }
-    const hoursUntilEvent = (eventDate.getTime() - Date.now()) / (1000 * 60 * 60);
+    const hoursUntilEvent = (eventAt.getTime() - Date.now()) / (1000 * 60 * 60);
     if (hoursUntilEvent < 0) {
       return null;
     }
@@ -1050,7 +1080,7 @@ const promoteReservesForEvent = async (eventId) => {
     let guestRegistrationHours = DEFAULT_GUEST_REGISTRATION_HOURS;
     if (eventData.teamId) {
       const teamSnap = await t.get(
-        db.collection("teams").doc(eventData.teamId)
+        db.collection("teams").doc(eventData.teamId),
       );
       if (teamSnap.exists) {
         guestRegistrationHours =
@@ -1064,7 +1094,9 @@ const promoteReservesForEvent = async (eventId) => {
     const registered = eventData.registeredPlayers || [];
     const playerRoles = eventData.playerRoles || {};
     const maxPlayers =
-      typeof eventData.maxPlayers === "number" ? eventData.maxPlayers : Infinity;
+      typeof eventData.maxPlayers === "number"
+        ? eventData.maxPlayers
+        : Infinity;
     const maxGoalkeepers =
       typeof eventData.maxGoalkeepers === "number"
         ? eventData.maxGoalkeepers
@@ -1106,15 +1138,16 @@ const promoteReservesForEvent = async (eventId) => {
 
       const userData = usersById[id];
       if (!userData) {
-        console.log(`[Promo] Event ${eventId}: no user doc for ${id}, skipping`);
+        console.log(
+          `[Promo] Event ${eventId}: no user doc for ${id}, skipping`,
+        );
         remainingReserves.push(id);
         continue;
       }
 
       // Ennen thresholdia ulkopuolinen ei pääse kokoonpanoon vaikka tilaa
       // olisi: hän odottaa jonossa. Vakiokävijä nostetaan normaalisti.
-      const isTeamMember =
-        !!teamId && userData.teamMember?.[teamId] === true;
+      const isTeamMember = !!teamId && userData.teamMember?.[teamId] === true;
       if (beforeThreshold && !isTeamMember) {
         remainingReserves.push(id);
         continue;
@@ -1145,16 +1178,17 @@ const promoteReservesForEvent = async (eventId) => {
     const orderedReserves = beforeThreshold
       ? [
           ...remainingReserves.filter(
-            (id) => usersById[id] && usersById[id].teamMember?.[teamId] === true
+            (id) =>
+              usersById[id] && usersById[id].teamMember?.[teamId] === true,
           ),
           ...remainingReserves.filter(
-            (id) => !usersById[id] || usersById[id].teamMember?.[teamId] !== true
+            (id) =>
+              !usersById[id] || usersById[id].teamMember?.[teamId] !== true,
           ),
         ]
       : remainingReserves;
 
-    const reservesChanged =
-      orderedReserves.join(",") !== reserves.join(",");
+    const reservesChanged = orderedReserves.join(",") !== reserves.join(",");
     if (promoted.length === 0 && !reservesChanged) {
       return null;
     }
@@ -1166,8 +1200,8 @@ const promoteReservesForEvent = async (eventId) => {
 
     console.log(
       `[Promo] Event ${eventId}: promoted ${promoted.length} (${promoted.join(
-        ", "
-      )}), kenttä ${fieldCount}/${maxPlayers}, MV ${goalkeeperCount}/${maxGoalkeepers}`
+        ", ",
+      )}), kenttä ${fieldCount}/${maxPlayers}, MV ${goalkeeperCount}/${maxGoalkeepers}`,
     );
 
     return promoted;
@@ -1211,16 +1245,16 @@ exports.promoteReservesOnEventUpdate = onDocumentUpdated(
       console.error(`[Promo] Event ${eventId}: promotion failed:`, err);
       throw err;
     }
-  }
+  },
 );
 
 /**
- * Varmistus kerran tunnissa: nostaa varalla olevat myös silloin kun kukaan ei
+ * Varmistus viiden minuutin välein: nostaa varalla olevat myös silloin kun kukaan ei
  * kirjoita tapahtumaan mitään (esim. threshold ylittyy yöllä).
  */
 exports.promoteReservesScheduled = onSchedule(
   {
-    schedule: "5 * * * *", // 5 min yli tasatunnin, ei samaan aikaan muistutusten kanssa
+    schedule: "*/5 * * * *",
     timeZone: "Europe/Helsinki",
     retryCount: 3,
   },
@@ -1255,8 +1289,8 @@ exports.promoteReservesScheduled = onSchedule(
     }
 
     console.log(
-      `[Promo] Scheduled run: ${considered} tapahtumaa jonolla, nostettu ${totalPromoted}`
+      `[Promo] Scheduled run: ${considered} tapahtumaa jonolla, nostettu ${totalPromoted}`,
     );
     return { promoted: totalPromoted };
-  }
+  },
 );
