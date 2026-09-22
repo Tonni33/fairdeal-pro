@@ -599,7 +599,10 @@ exports.getHCKeLoEmails = onCall(async (request) => {
 // PUSH NOTIFICATIONS FOR ROSTER PROMOTIONS
 // ============================================
 
-const { onDocumentUpdated } = require("firebase-functions/v2/firestore");
+const {
+  onDocumentUpdated,
+  onDocumentWritten,
+} = require("firebase-functions/v2/firestore");
 const { Expo } = require("expo-server-sdk");
 
 // Create a new Expo SDK client
@@ -796,11 +799,13 @@ exports.sendEventReminders = onSchedule(
 
     try {
       // Get all events happening in approximately 24 hours (23-25h window)
-      const allEvents = await admin.firestore().collection("events").get();
-      const eventsInWindow = allEvents.docs.filter((doc) => {
-        const when = eventDate(doc.data());
-        return when && when >= in23Hours && when <= in25Hours;
-      });
+      const windowSnapshot = await admin
+        .firestore()
+        .collection("events")
+        .where("startsAt", ">=", in23Hours)
+        .where("startsAt", "<=", in25Hours)
+        .get();
+      const eventsInWindow = windowSnapshot.docs;
 
       if (eventsInWindow.length === 0) {
         console.log("[Reminder] No events found in the 24h window");
@@ -965,52 +970,8 @@ exports.sendEventReminders = onSchedule(
 // Nyt nosto tehdään yhdessä paikassa transaktion sisällä, jossa kokoonpano
 // luetaan uudelleen juuri ennen kirjoitusta.
 
-/**
- * Tapahtuman ajankohta. Kenttä on tietokannassa merkkijonona (osa vanhoista
- * riveistä lyhyessä paikallisajan muodossa, loput UTC-ISO:na), ei Timestampina.
- * Siksi aikarajausta EI voi tehdä Firestore-kyselyllä: where("date", ">=", Date)
- * ei kohtaa merkkijonokenttää lainkaan vaan palauttaa aina tyhjän tuloksen.
- * Kokoelma on pieni, joten rajaus tehdään täällä samalla tulkinnalla kuin
- * sovelluksessa.
- */
-const eventDate = (data) => {
-  const raw = data?.date;
-  if (!raw) return null;
+const { eventDate } = require("./eventDate");
 
-  if (raw?.toDate) {
-    return raw.toDate();
-  }
-
-  // Local ISO strings such as "2026-09-18T16:00" have no timezone. Cloud
-  // Functions runs in UTC, but the app stores and displays these as Helsinki
-  // local time, so resolve the timezone before comparing registration limits.
-  if (
-    typeof raw === "string" &&
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?$/.test(raw)
-  ) {
-    const localComponentsAsUtc = new Date(`${raw}Z`);
-    const parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Europe/Helsinki",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hourCycle: "h23",
-    }).formatToParts(localComponentsAsUtc);
-    const value = (type) => parts.find((part) => part.type === type)?.value;
-    const helsinkiOffset =
-      Date.parse(
-        `${value("year")}-${value("month")}-${value("day")}T${value("hour")}:${value("minute")}:${value("second")}Z`,
-      ) - localComponentsAsUtc.getTime();
-    const parsed = new Date(localComponentsAsUtc.getTime() - helsinkiOffset);
-    return isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  const parsed = new Date(raw);
-  return isNaN(parsed.getTime()) ? null : parsed;
-};
 
 const DEFAULT_GUEST_REGISTRATION_HOURS = 24;
 const FIELD_POSITIONS = ["H", "P", "H/P"];
@@ -1215,6 +1176,49 @@ const promoteReservesForEvent = async (eventId) => {
  * Ei jää silmukkaan: oma kirjoitus laukaisee funktion uudelleen, mutta
  * seuraavalla kierroksella tilaa ei enää ole eikä kirjoitusta tapahdu.
  */
+/**
+ * Ylläpitää startsAt-kenttää, jotta tapahtumia voi hakea aikavälillä.
+ *
+ * date on tietokannassa merkkijonona – osa lyhyessä paikallisajan muodossa,
+ * loput UTC-ISO:na – eikä merkkijonokenttään voi kohdistaa aikavertailua.
+ * Ilman indeksiä ajastetut funktiot joutuisivat lukemaan koko kokoelman joka
+ * ajolla, ja lukumäärä kasvaisi historian mukana.
+ *
+ * Kenttä johdetaan palvelimella, joten clientteihin ei tarvita muutoksia: ne
+ * kirjoittavat ja lukevat edelleen date-kenttää.
+ *
+ * Ei jää silmukkaan: oma kirjoitus laukaisee triggerin uudelleen, mutta
+ * silloin arvo on jo oikea eikä kirjoitusta tehdä.
+ */
+exports.maintainEventStartsAt = onDocumentWritten(
+  "events/{eventId}",
+  async (event) => {
+    const after = event.data?.after;
+    if (!after?.exists) {
+      return null;
+    }
+
+    const data = after.data();
+    const when = eventDate(data);
+    if (!when) {
+      console.log(
+        `[StartsAt] Event ${event.params.eventId}: date ei jäsenny, ohitetaan`,
+      );
+      return null;
+    }
+
+    const current = data.startsAt?.toDate ? data.startsAt.toDate() : null;
+    if (current && Math.abs(current.getTime() - when.getTime()) < 1000) {
+      return null;
+    }
+
+    await after.ref.update({
+      startsAt: when,
+    });
+    return { startsAt: when.toISOString() };
+  },
+);
+
 exports.promoteReservesOnEventUpdate = onDocumentUpdated(
   "events/{eventId}",
   async (event) => {
@@ -1262,7 +1266,14 @@ exports.promoteReservesScheduled = onSchedule(
     const now = new Date();
     const horizon = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
 
-    const eventsSnapshot = await admin.firestore().collection("events").get();
+    // Haetaan vain tulevat tapahtumat startsAt-indeksin avulla. Ilman sitä
+    // jokainen ajo lukisi koko kokoelman, joka kasvaa historian mukana.
+    const eventsSnapshot = await admin
+      .firestore()
+      .collection("events")
+      .where("startsAt", ">=", now)
+      .where("startsAt", "<=", horizon)
+      .get();
 
     let totalPromoted = 0;
     let considered = 0;
@@ -1271,10 +1282,6 @@ exports.promoteReservesScheduled = onSchedule(
       const data = eventDoc.data();
       const reserves = data.reservePlayers || [];
       if (reserves.length === 0) {
-        continue;
-      }
-      const when = eventDate(data);
-      if (!when || when < now || when > horizon) {
         continue;
       }
       considered += 1;
@@ -1289,7 +1296,8 @@ exports.promoteReservesScheduled = onSchedule(
     }
 
     console.log(
-      `[Promo] Scheduled run: ${considered} tapahtumaa jonolla, nostettu ${totalPromoted}`,
+      `[Promo] Scheduled run: ${eventsSnapshot.size} tapahtumaa aikavalissa, ` +
+        `${considered} jonolla, nostettu ${totalPromoted}`,
     );
     return { promoted: totalPromoted };
   },
