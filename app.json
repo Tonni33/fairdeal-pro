@@ -15,9 +15,9 @@
     ],
     "githubUrl": "https://github.com/yourusername/FairDealPro",
     "splash": {
-      "image": "./assets/fairdealLogo.png",
+      "image": "./assets/FairDeal_splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1976d2"
+      "backgroundColor": "#0E1A27"
     },
     "ios": {
       "supportsTablet": true,
