@@ -33,5 +33,13 @@ allprojects {
   }
 }
 
+// Google vaatii 1.11.2026 alkaen vähintään API 36:n Play-kaupan päivityksiin.
+// Expo SDK 53:n expo-root-project-lisäosa asettaa oletukseksi 35, mutta vain
+// jos arvoa ei ole jo määritelty, joten tämä lohko on oltava ennen sitä.
+ext {
+  compileSdkVersion = 36
+  targetSdkVersion = 36
+}
+
 apply plugin: "expo-root-project"
 apply plugin: "com.facebook.react.rootproject"
