@@ -15,6 +15,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import * as LocalAuthentication from "expo-local-authentication";
 import { useAuth } from "../contexts/AuthContext";
+import { StartupScreen } from "./StartupScreen";
 
 /**
  * Sormenjälki- ja PIN-lukko kirjautuneen näkymän edessä.
@@ -49,12 +50,15 @@ export const AppLock: React.FC<{ children: React.ReactNode }> = ({
   const promptShown = useRef(false);
 
   const lockEnabled = !!settings && (settings.biometric || settings.pin);
+  const uid = user?.uid ?? null;
 
-  // Asetukset luetaan aina kun käyttäjä vaihtuu (kirjautuminen tai ulos)
+  // Asetukset luetaan aina kun käyttäjä vaihtuu (kirjautuminen tai ulos).
+  // Riippuvuus on uid eikä user-olio: profiili päivittyy käynnistyksessä
+  // taustalla, eikä se saa lukita jo avattua appia uudelleen.
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      if (!user) {
+      if (!uid) {
         if (!cancelled) {
           setSettings(null);
           setUnlocked(false);
@@ -87,7 +91,7 @@ export const AppLock: React.FC<{ children: React.ReactNode }> = ({
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [uid]);
 
   // Uudelleenlukitus kun appi on ollut taustalla riittävän kauan
   useEffect(() => {
@@ -136,12 +140,12 @@ export const AppLock: React.FC<{ children: React.ReactNode }> = ({
       !unlocked &&
       settings?.biometric &&
       !promptShown.current &&
-      user !== null
+      uid !== null
     ) {
       promptShown.current = true;
       authenticateWithBiometrics();
     }
-  }, [unlocked, settings, user, authenticateWithBiometrics]);
+  }, [unlocked, settings, uid, authenticateWithBiometrics]);
 
   const submitPin = useCallback(async () => {
     if (pin.length !== 4) {
@@ -175,15 +179,18 @@ export const AppLock: React.FC<{ children: React.ReactNode }> = ({
   // Asetuksia luetaan vielä: sisältöä ei näytetä ennen kuin tiedetään
   // pitääkö appi lukita, jottei se välähdä lukitusruudun alta
   if (settings === null) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#1976d2" />
-      </View>
-    );
+    return <StartupScreen />;
   }
 
   if (!lockEnabled || unlocked) {
     return <>{children}</>;
+  }
+
+  // Automaattisen Face ID -kyselyn ajan näkyy käynnistysnäkymä eikä
+  // lukitusruutu, joka muuten välähtäisi dialogin alla ennen appia.
+  // Lukitusruutu tulee esiin vasta jos tunnistus perutaan tai epäonnistuu.
+  if (settings.biometric && !pin && (busy || !promptShown.current)) {
+    return <StartupScreen />;
   }
 
   return (

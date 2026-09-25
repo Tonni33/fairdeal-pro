@@ -37,6 +37,40 @@ import ChangePasswordModal from "../components/ChangePasswordModal";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Viimeksi palvelimelta saatu profiili. Firestoren välimuisti on RN:ssä
+// pelkkää muistia, joten ilman tätä jokainen kylmäkäynnistys odotti
+// profiilin ja joukkueiden hakua verkosta tyhjän ruudun edessä.
+const CACHED_USER_KEY = "cached_user_profile";
+
+const loadCachedUser = async (uid: string): Promise<User | null> => {
+  try {
+    const raw = await AsyncStorage.getItem(CACHED_USER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed?.uid !== uid) return null;
+    return { ...parsed, createdAt: new Date(parsed.createdAt) };
+  } catch (error) {
+    console.log("[Auth] Tallennetun profiilin luku epäonnistui:", error);
+    return null;
+  }
+};
+
+const saveCachedUser = (user: User) => {
+  AsyncStorage.setItem(CACHED_USER_KEY, JSON.stringify(user)).catch((error) =>
+    console.log("[Auth] Profiilin tallennus epäonnistui:", error),
+  );
+};
+
+const clearCachedUser = () => {
+  AsyncStorage.removeItem(CACHED_USER_KEY).catch(() => {});
+};
+
+// createdAt ei ole mukana: puuttuva kenttä korvataan joka kerta uudella
+// päivämäärällä, jolloin profiili näyttäisi aina muuttuneelta
+const sameProfile = (a: User, b: User) =>
+  JSON.stringify({ ...a, createdAt: undefined }) ===
+  JSON.stringify({ ...b, createdAt: undefined });
+
 interface AuthProviderProps {
   children: React.ReactNode;
 }
@@ -51,6 +85,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   useEffect(() => {
     let isComponentMounted = true;
+
+    // Tuore profiili korvaa välimuistista näytetyn vain jos jokin muuttui,
+    // muuten kaikki käyttäjästä riippuvat kuuntelijat käynnistyisivät turhaan
+    // uudelleen heti avauksen jälkeen
+    const showUser = (next: User) => {
+      setUser((prev) => (prev && sameProfile(prev, next) ? prev : next));
+      saveCachedUser(next);
+    };
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       console.log(
@@ -84,6 +126,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           reportAppVersion(firebaseUser.uid);
         }
 
+        // Palaava käyttäjä pääsee sisään heti viimeksi tunnetulla profiililla,
+        // ja alla oleva palvelinhaku päivittää sen taustalla
+        const cachedUser = await loadCachedUser(firebaseUser.uid);
+        if (!isComponentMounted) return;
+        if (cachedUser) {
+          setUser(cachedUser);
+          setLoading(false);
+          setInitializing(false);
+        }
+
+        // Joukkueet haetaan rinnakkain profiilin kanssa eikä sen perään
+        const teamsPromise = getDocs(collection(db, "teams")).catch((error) => {
+          console.error("Error checking team admin status:", error);
+          return null;
+        });
+
         try {
           // First, try to get user data by UID.
           //
@@ -101,6 +159,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               readError
             );
             if (isComponentMounted) {
+              // Käyttäjä on kirjautunut, joten kirjautumisruutua ei näytetä.
+              // Ilman tallennettua profiilia käytetään perustietoja, mutta
+              // mitään ei kirjoiteta epävarman luvun perusteella.
+              if (!cachedUser) {
+                setUser({
+                  id: firebaseUser.uid,
+                  uid: firebaseUser.uid,
+                  email: firebaseUser.email!,
+                  name: firebaseUser.displayName || "",
+                  displayName: firebaseUser.displayName || "",
+                  role: "user",
+                  createdAt: new Date(),
+                });
+              }
               setLoading(false);
               setInitializing(false);
             }
@@ -209,29 +281,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
             // Check if user is admin of any team
             let isTeamAdmin = false;
-            try {
-              console.log(
-                "Checking team admin status for user:",
-                firebaseUser.uid,
-                firebaseUser.email
-              );
-              const teamsSnapshot = await getDocs(collection(db, "teams"));
+            const teamsSnapshot = await teamsPromise;
+            if (teamsSnapshot) {
               const teams = teamsSnapshot.docs.map((doc) => ({
                 id: doc.id,
                 ...doc.data(),
               })) as any[];
-
-              console.log(`Found ${teams.length} teams, checking adminIds...`);
-
-              teams.forEach((team) => {
-                console.log(`Team ${team.name}:`, {
-                  adminIds: team.adminIds,
-                  adminId: team.adminId,
-                  containsUid: team.adminIds?.includes(firebaseUser.uid),
-                  adminIdMatchesUid: team.adminId === firebaseUser.uid,
-                  adminIdMatchesEmail: team.adminId === firebaseUser.email,
-                });
-              });
 
               isTeamAdmin = teams.some(
                 (team) =>
@@ -241,9 +296,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               );
 
               console.log("User is admin of at least one team:", isTeamAdmin);
-            } catch (error) {
-              console.error("Error checking team admin status:", error);
             }
+
+            if (!isComponentMounted) return;
 
             // User is admin if they have isAdmin field OR are admin of any team
             const userIsAdmin = userData.isAdmin || isTeamAdmin || false;
@@ -274,7 +329,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               role: finalUser.role,
             });
 
-            setUser(finalUser);
+            showUser(finalUser);
           } else {
             console.log("Creating new user document in Firestore");
             // Create user document if it doesn't exist
@@ -300,13 +355,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 { merge: true }
               );
 
-              setUser(newUser);
+              showUser(newUser);
             }
           }
         } catch (error) {
           console.error("Error handling auth state change:", error);
-          // Set user even if Firestore fails (permissions issue)
-          if (isComponentMounted) {
+          // Set user even if Firestore fails (permissions issue).
+          // Tallennettu profiili pysyy näkyvissä, jos sellainen on.
+          if (isComponentMounted && !cachedUser) {
             const basicUser: User = {
               id: firebaseUser.uid,
               uid: firebaseUser.uid,
@@ -321,6 +377,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       } else {
         console.log("No user, setting user to null");
+        clearCachedUser();
         if (isComponentMounted) {
           setUser(null);
         }
@@ -403,6 +460,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const signOut = async (): Promise<void> => {
     try {
       await firebaseSignOut(auth);
+      clearCachedUser();
 
       // Check if user has biometric or PIN auth enabled
       const biometricEnabled = await AsyncStorage.getItem("biometric_enabled");
@@ -466,6 +524,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await AsyncStorage.removeItem("biometric_enabled");
       await AsyncStorage.removeItem("pin_enabled");
       await AsyncStorage.removeItem("was_logged_in");
+      clearCachedUser();
 
       // Clear local state
       setUser(null);

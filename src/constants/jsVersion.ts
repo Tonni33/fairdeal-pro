@@ -9,4 +9,4 @@
  * scripts/publishUpdate.js kasvattaa tätä ennen julkaisua ja kirjaa saman
  * numeron Firestoreen, joten hallintanäkymä vertaa numeroa numeroon.
  */
-export const JS_VERSION = 6;
+export const JS_VERSION = 7;

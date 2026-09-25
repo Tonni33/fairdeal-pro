@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { RootStackParamList, BottomTabParamList } from "../types";
 import { useAuth } from "../contexts/AuthContext";
+import { StartupScreen } from "../components/StartupScreen";
 
 // Import screens (we'll create these next)
 import LoginScreen from "../screens/LoginScreen";
@@ -98,8 +99,9 @@ const AppNavigator = () => {
   const { user, loading } = useAuth();
 
   if (loading) {
-    // TODO: Add proper loading screen
-    return null;
+    // Tallennetulla profiililla tämä kestää hetken; ensimmäisellä
+    // kirjautumiskerralla odotetaan verkkoa, joten näytetään spinneri
+    return <StartupScreen showSpinner />;
   }
 
   return (
