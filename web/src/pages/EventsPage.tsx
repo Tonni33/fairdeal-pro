@@ -935,9 +935,24 @@ export default function EventsPage() {
           },
         }}
         disableRowSelectionOnClick
+        // Menneet tapahtumat harmaalla, jotta raja tulevien ja historian
+        // välillä erottuu listaa selatessa
+        getRowClassName={(params) =>
+          isPastEvent(params.row.date) ? "event-row--past" : ""
+        }
         // Ei autoHeightia: taulukko vierii omassa korkeudessaan, joten
         // sarakeotsikot pysyvät näkyvissä pitkääkin listaa selatessa
-        sx={{ height: "calc(100vh - 240px)", minHeight: 400 }}
+        sx={{
+          height: "calc(100vh - 240px)",
+          minHeight: 400,
+          "& .event-row--past": {
+            bgcolor: "grey.100",
+            color: "text.secondary",
+          },
+          "& .event-row--past:hover": {
+            bgcolor: "grey.200",
+          },
+        }}
       />
 
       {/* Details Modal */}
