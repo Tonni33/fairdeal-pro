@@ -296,8 +296,18 @@ export default function EventsPage() {
       return true;
     })
     .sort((a, b) => {
-      // Sort by date, newest first
-      return new Date(b.date).getTime() - new Date(a.date).getTime();
+      // Seuraava tapahtuma ylimpänä: tulevat nousevassa järjestyksessä, ja
+      // niiden jälkeen menneet uusimmasta vanhimpaan. Pelkkä laskeva järjestys
+      // nosti kauimmaisen tulevan tapahtuman (kuukausien päähän) ensimmäiseksi.
+      const now = Date.now();
+      const ta = new Date(a.date).getTime();
+      const tb = new Date(b.date).getTime();
+      const aPast = ta < now;
+      const bPast = tb < now;
+      if (aPast !== bPast) {
+        return aPast ? 1 : -1;
+      }
+      return aPast ? tb - ta : ta - tb;
     });
 
   const columns: GridColDef[] = [
@@ -306,6 +316,11 @@ export default function EventsPage() {
       headerName: "Päivä",
       width: 120,
       valueGetter: (_value, row) => formatDate(row.date),
+      // Näytettävä arvo on muotoa "25.9.2026", joka lajiteltuna merkkijonona
+      // laittaisi 1.10. ennen 25.9.:tä – verrataan siksi alkuperäistä ajankohtaa
+      sortComparator: (_v1, _v2, p1, p2) =>
+        new Date(p1.api.getRow(p1.id)?.date).getTime() -
+        new Date(p2.api.getRow(p2.id)?.date).getTime(),
     },
     {
       field: "time",
@@ -911,7 +926,7 @@ export default function EventsPage() {
         loading={loading}
         pageSizeOptions={[25, 50, 100]}
         initialState={{
-          pagination: { paginationModel: { pageSize: 25 } },
+          pagination: { paginationModel: { pageSize: 100 } },
           columns: {
             columnVisibilityModel: visibleColumns.reduce(
               (acc, field) => ({ ...acc, [field]: true }),
@@ -920,8 +935,9 @@ export default function EventsPage() {
           },
         }}
         disableRowSelectionOnClick
-        autoHeight
-        sx={{ height: "calc(100vh - 200px)" }}
+        // Ei autoHeightia: taulukko vierii omassa korkeudessaan, joten
+        // sarakeotsikot pysyvät näkyvissä pitkääkin listaa selatessa
+        sx={{ height: "calc(100vh - 240px)", minHeight: 400 }}
       />
 
       {/* Details Modal */}
