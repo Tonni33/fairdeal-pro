@@ -153,7 +153,7 @@ export default function TeamBalancerTestPage() {
     "Kopioitu leikepöydälle",
   );
   const [eventFilter, setEventFilter] = useState<"all" | "upcoming" | "past">(
-    "all",
+    "upcoming",
   );
   const [pairings, setPairings] = useState<PairInfo[]>([]);
 
@@ -368,6 +368,19 @@ export default function TeamBalancerTestPage() {
       return eventDate < now;
     }
     return true; // "all"
+  }).sort((a, b) => {
+    // Sama järjestys kuin tapahtumasivulla: tulevat nousevasti (seuraava
+    // ylimpänä), sitten menneet uusimmasta vanhimpaan. Firestoren
+    // orderBy("date") lajittelee merkkijonoja, joten järjestys tehdään tässä.
+    const now = Date.now();
+    const ta = a.date.getTime();
+    const tb = b.date.getTime();
+    const aPast = ta < now;
+    const bPast = tb < now;
+    if (aPast !== bPast) {
+      return aPast ? 1 : -1;
+    }
+    return aPast ? tb - ta : ta - tb;
   });
 
   // Capture console.log output
@@ -1051,7 +1064,15 @@ export default function TeamBalancerTestPage() {
                   onChange={(e) => setSelectedEventId(e.target.value)}
                 >
                   {filteredEvents.map((event) => (
-                    <MenuItem key={event.id} value={event.id}>
+                    <MenuItem
+                      key={event.id}
+                      value={event.id}
+                      sx={
+                        event.date.getTime() < Date.now()
+                          ? { bgcolor: "grey.100", color: "text.secondary" }
+                          : undefined
+                      }
+                    >
                       {event.date.toLocaleDateString("fi-FI")} - {event.title} (
                       {event.registeredPlayers.length} pelaajaa)
                     </MenuItem>
