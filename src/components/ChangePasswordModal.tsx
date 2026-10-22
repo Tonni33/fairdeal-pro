@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,9 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import {
@@ -36,6 +39,7 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const confirmInputRef = useRef<TextInput>(null);
 
   const handleChangePassword = async () => {
     if (!newPassword || newPassword.length < 6) {
@@ -51,7 +55,7 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
     if (newPassword === currentPassword) {
       Alert.alert(
         "Virhe",
-        "Uuden salasanan tulee olla erilainen kuin nykyinen salasana"
+        "Uuden salasanan tulee olla erilainen kuin nykyinen salasana",
       );
       return;
     }
@@ -67,7 +71,7 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
       // Re-authenticate user with current password
       const credential = EmailAuthProvider.credential(
         userEmail,
-        currentPassword
+        currentPassword,
       );
       await reauthenticateWithCredential(user, credential);
 
@@ -110,105 +114,135 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
 
   return (
     <Modal visible={visible} transparent={true} animationType="slide">
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.header}>
-            <Ionicons name="lock-closed" size={48} color="#1976d2" />
-            <Text style={styles.title}>Vaihda salasana</Text>
-            <Text style={styles.subtitle}>
-              Järjestelmän admin on luonut sinulle väliaikaisen salasanan.
-              Vaihda se henkilökohtaiseen salasanaasi jatkaaksesi.
+      {/* Näppäimistö ei saa peittää vahvistuskenttää: ikkuna nousee sen
+          tieltä ja sisältöä voi vierittää pienillä näytöillä */}
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoider}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <ScrollView
+          contentContainerStyle={styles.modalOverlay}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.header}>
+              <Ionicons name="lock-closed" size={48} color="#1976d2" />
+              <Text style={styles.title}>Vaihda salasana</Text>
+              <Text style={styles.subtitle}>
+                Järjestelmän admin on luonut sinulle väliaikaisen salasanan.
+                Vaihda se henkilökohtaiseen salasanaasi jatkaaksesi.
+              </Text>
+            </View>
+
+            {/* Käyttäjätunnus kertoo iOS:n avainnipulle ja Androidin
+              automaattitäytölle, mille tilille uusi salasana tallennetaan */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Käyttäjätunnus</Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={[styles.input, styles.inputReadOnly]}
+                  value={userEmail}
+                  editable={false}
+                  textContentType="username"
+                  autoComplete="username"
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Uusi salasana</Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Vähintään 6 merkkiä"
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  secureTextEntry={!showNewPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  // Molemmat kentät merkitään uudeksi salasanaksi, jotta iOS
+                  // täyttää ehdottamansa vahvan salasanan kumpaankin
+                  textContentType="newPassword"
+                  autoComplete="new-password"
+                  returnKeyType="next"
+                  onSubmitEditing={() => confirmInputRef.current?.focus()}
+                  submitBehavior="submit"
+                />
+                <TouchableOpacity
+                  style={styles.eyeIcon}
+                  onPress={() => setShowNewPassword(!showNewPassword)}
+                >
+                  <Ionicons
+                    name={showNewPassword ? "eye-off" : "eye"}
+                    size={24}
+                    color="#666"
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Vahvista uusi salasana</Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.input}
+                  ref={confirmInputRef}
+                  placeholder="Kirjoita salasana uudelleen"
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry={!showConfirmPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  textContentType="newPassword"
+                  autoComplete="new-password"
+                  returnKeyType="done"
+                  onSubmitEditing={handleChangePassword}
+                />
+                <TouchableOpacity
+                  style={styles.eyeIcon}
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                >
+                  <Ionicons
+                    name={showConfirmPassword ? "eye-off" : "eye"}
+                    size={24}
+                    color="#666"
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.button, loading && styles.buttonDisabled]}
+              onPress={handleChangePassword}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                  <Text style={styles.buttonText}>Vaihda salasana</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <Text style={styles.note}>
+              ⚠️ Et voi käyttää sovellusta ennen kuin olet vaihtanut salasanasi.
             </Text>
           </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Nykyinen salasana</Text>
-            <View style={styles.inputWrapper}>
-              <TextInput
-                style={styles.input}
-                value={currentPassword}
-                editable={false}
-                secureTextEntry={true}
-              />
-            </View>
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Uusi salasana</Text>
-            <View style={styles.inputWrapper}>
-              <TextInput
-                style={styles.input}
-                placeholder="Vähintään 6 merkkiä"
-                value={newPassword}
-                onChangeText={setNewPassword}
-                secureTextEntry={!showNewPassword}
-                autoCapitalize="none"
-              />
-              <TouchableOpacity
-                style={styles.eyeIcon}
-                onPress={() => setShowNewPassword(!showNewPassword)}
-              >
-                <Ionicons
-                  name={showNewPassword ? "eye-off" : "eye"}
-                  size={24}
-                  color="#666"
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Vahvista uusi salasana</Text>
-            <View style={styles.inputWrapper}>
-              <TextInput
-                style={styles.input}
-                placeholder="Kirjoita salasana uudelleen"
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry={!showConfirmPassword}
-                autoCapitalize="none"
-              />
-              <TouchableOpacity
-                style={styles.eyeIcon}
-                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-              >
-                <Ionicons
-                  name={showConfirmPassword ? "eye-off" : "eye"}
-                  size={24}
-                  color="#666"
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleChangePassword}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                <Text style={styles.buttonText}>Vaihda salasana</Text>
-              </>
-            )}
-          </TouchableOpacity>
-
-          <Text style={styles.note}>
-            ⚠️ Et voi käyttää sovellusta ennen kuin olet vaihtanut salasanasi.
-          </Text>
-        </View>
-      </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  modalOverlay: {
+  keyboardAvoider: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.8)",
+  },
+  modalOverlay: {
+    flexGrow: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
@@ -256,6 +290,9 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     backgroundColor: "#f9f9f9",
+  },
+  inputReadOnly: {
+    color: "#666",
   },
   eyeIcon: {
     position: "absolute",
