@@ -1574,16 +1574,15 @@ const HomeScreen: React.FC = () => {
                           </View>
                         );
                       };
-                      // Vakiokävijät ovat jonossa ensin, mutta ryhmäotsikoita
-                      // ei näytetä: jono on yksi numeroitu lista, eikä ketään
-                      // leimata listassa ulkopuoliseksi.
-                      return (
-                        <>
-                          {[...members, ...guests].map((p, i) =>
-                            renderItem(p, i),
-                          )}
-                        </>
-                      );
+                      // Ennen thresholdia vakiokävijät ovat jonossa ensin.
+                      // Sen jälkeen jono on puhdas FIFO ja numerointi seuraa
+                      // tallennettua järjestystä, jossa nostofunktio nostaa.
+                      // Ryhmäotsikoita ei näytetä: jono on yksi numeroitu
+                      // lista, eikä ketään leimata listassa ulkopuoliseksi.
+                      const queue = isGuestThresholdMet(nextEvent)
+                        ? reservePlayers
+                        : [...members, ...guests];
+                      return <>{queue.map((p, i) => renderItem(p, i))}</>;
                     })()}
                   </View>
                 </View>
