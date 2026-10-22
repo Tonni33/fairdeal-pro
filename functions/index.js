@@ -1,5 +1,6 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
+const { FieldValue } = require("firebase-admin/firestore");
 
 admin.initializeApp();
 
@@ -388,13 +389,42 @@ exports.createUserAccounts = onCall(async (request) => {
         console.log(`Creating user: ${user.email}`);
 
         // Create Firebase Auth user
-        const userRecord = await admin.auth().createUser({
-          email: user.email,
-          password: commonPassword,
-          displayName: user.displayName,
-        });
+        let userRecord;
+        try {
+          userRecord = await admin.auth().createUser({
+            email: user.email,
+            password: commonPassword,
+            displayName: user.displayName,
+          });
+          console.log(`Auth user created: ${userRecord.uid}`);
+        } catch (createError) {
+          if (createError.code !== "auth/email-already-exists") {
+            throw createError;
+          }
 
-        console.log(`Auth user created: ${userRecord.uid}`);
+          // Tunnus voi jäädä orvoksi, kun käyttäjä on rekisteröitynyt itse
+          // ja admin on poistanut profiilin Firestoresta: Auth-tunnus ei
+          // poistu sen mukana. Ilman profiilia tunnus otetaan käyttöön
+          // yhteisellä salasanalla, profiilillinen tili jätetään rauhaan.
+          const existingAuthUser = await admin.auth().getUserByEmail(user.email);
+          const existingProfile = await admin
+            .firestore()
+            .collection("users")
+            .doc(existingAuthUser.uid)
+            .get();
+
+          if (existingProfile.exists) {
+            throw new Error(
+              "Sähköpostilla on jo käyttäjätili. Käyttäjä voi kirjautua omalla salasanallaan tai pyytää uutta kirjautumisruudun Unohtuiko salasana -toiminnolla.",
+            );
+          }
+
+          userRecord = await admin.auth().updateUser(existingAuthUser.uid, {
+            password: commonPassword,
+            displayName: user.displayName,
+          });
+          console.log(`Reused orphan auth user: ${userRecord.uid}`);
+        }
 
         // Check if Firestore user document exists
         const existingUserDoc = await admin
@@ -416,7 +446,7 @@ exports.createUserAccounts = onCall(async (request) => {
               ...existingData,
               uid: userRecord.uid,
               needsPasswordChange: true,
-              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedAt: FieldValue.serverTimestamp(),
               updatedBy: callerData.email || "unknown",
             });
           console.log(`Created new user document with UID: ${userRecord.uid}`);
@@ -505,7 +535,7 @@ exports.createUserAccounts = onCall(async (request) => {
               phone: "",
               image: "",
               role: "user",
-              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              createdAt: FieldValue.serverTimestamp(),
               needsPasswordChange: true,
               createdBy: callerData.email || "unknown",
             });
