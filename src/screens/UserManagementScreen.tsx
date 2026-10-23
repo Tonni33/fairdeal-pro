@@ -1386,7 +1386,7 @@ const UserManagementScreen: React.FC = () => {
                   style={styles.input}
                   value={editName}
                   onChangeText={setEditName}
-                  placeholder="Pelaajan nimi"
+                  placeholder="Etunimi Sukunimi"
                   placeholderTextColor="#999"
                 />
               </View>

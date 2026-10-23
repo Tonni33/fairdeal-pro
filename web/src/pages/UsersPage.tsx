@@ -29,6 +29,9 @@ import {
   updateDoc,
   deleteDoc,
   addDoc,
+  query,
+  where,
+  arrayUnion,
 } from "firebase/firestore";
 import { db } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
@@ -390,8 +393,54 @@ export default function UsersPage() {
         needsPasswordChange: addForm.email.trim() ? true : false,
       };
 
-      // Create user in Firestore
-      await addDoc(collection(db, "users"), playerData);
+      // Sama henkilö luotiin aiemmin uudeksi profiiliksi jokaiseen
+      // joukkueeseen erikseen. Jos sähköpostilla on jo profiili, hänet
+      // liitetään valittuihin joukkueisiin eikä tuplaa synny.
+      const existingSnap = await getDocs(
+        query(collection(db, "users"), where("email", "==", playerData.email)),
+      );
+      const existingDoc = existingSnap.docs[0];
+
+      if (existingDoc) {
+        const existing = existingDoc.data() as User;
+        const currentTeamIds = existing.teamIds || [];
+        const newTeamIds = addForm.teamIds.filter(
+          (teamId) => !currentTeamIds.includes(teamId),
+        );
+        const teamName = (teamId: string) =>
+          teams.find((t) => t.id === teamId)?.name || teamId;
+
+        if (newTeamIds.length === 0) {
+          setError(
+            `Sähköpostilla ${playerData.email} on jo profiili (${existing.name}), ja hän on jo valituissa joukkueissa.`,
+          );
+          return;
+        }
+
+        const confirmed = window.confirm(
+          `Sähköpostilla ${playerData.email} on jo profiili: ${existing.name}` +
+            ` (${currentTeamIds.map(teamName).join(", ") || "ei joukkueita"}).\n\n` +
+            `Lisätäänkö hänet joukkueisiin ${newTeamIds.map(teamName).join(", ")} ` +
+            `uuden profiilin luomisen sijaan? Nimi, pelipaikat ja muut tiedot säilyvät ennallaan.`,
+        );
+        if (!confirmed) {
+          return;
+        }
+
+        const updates: Record<string, unknown> = {
+          teamIds: arrayUnion(...newTeamIds),
+          teams: arrayUnion(...newTeamIds.map(teamName)),
+          updatedAt: new Date(),
+        };
+        newTeamIds.forEach((teamId) => {
+          updates[`teamMember.${teamId}`] = teamMemberStatus[teamId];
+          updates[`teamSkills.${teamId}`] = teamSkills[teamId];
+        });
+        await updateDoc(existingDoc.ref, updates);
+      } else {
+        // Create user in Firestore
+        await addDoc(collection(db, "users"), playerData);
+      }
 
       // Note: Team adminIds assignment is not done during user creation
       // Admin can update this later through the edit dialog
@@ -415,7 +464,11 @@ export default function UsersPage() {
         teamMember: {},
       });
 
-      alert("Käyttäjä luotu onnistuneesti!");
+      alert(
+        existingDoc
+          ? "Olemassa oleva käyttäjä lisätty valittuihin joukkueisiin."
+          : "Käyttäjä luotu onnistuneesti!",
+      );
     } catch (err) {
       console.error("Error creating user:", err);
       setError("Käyttäjän luominen epäonnistui");
@@ -865,6 +918,8 @@ export default function UsersPage() {
             <TextField
               fullWidth
               label="Nimi *"
+              placeholder="Matti Meikäläinen"
+              helperText="Etunimi Sukunimi – lajittelu tehdään sukunimen mukaan"
               value={addForm.name}
               onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
             />
@@ -1132,6 +1187,8 @@ export default function UsersPage() {
             <TextField
               fullWidth
               label="Nimi"
+              placeholder="Matti Meikäläinen"
+              helperText="Etunimi Sukunimi – lajittelu tehdään sukunimen mukaan"
               value={editForm.name}
               onChange={(e) =>
                 setEditForm({ ...editForm, name: e.target.value })

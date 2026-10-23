@@ -12,7 +12,15 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
-import { collection, addDoc, query, where, getDocs } from "firebase/firestore";
+import {
+  collection,
+  addDoc,
+  query,
+  where,
+  getDocs,
+  updateDoc,
+  arrayUnion,
+} from "firebase/firestore";
 
 import { RootStackParamList, Team } from "../types";
 import { db } from "../services/firebase";
@@ -138,23 +146,6 @@ const CreatePlayerScreen: React.FC = () => {
 
     setLoading(true);
     try {
-      // Tarkista onko sähköpostilla jo käyttäjä olemassa
-      const usersRef = collection(db, "users");
-      const emailQuery = query(
-        usersRef,
-        where("email", "==", email.trim().toLowerCase())
-      );
-      const existingUsers = await getDocs(emailQuery);
-
-      if (!existingUsers.empty) {
-        Alert.alert(
-          "Virhe",
-          "Käyttäjä tällä sähköpostiosoitteella on jo olemassa. Käytä Käyttäjähallintaa lisätäksesi käyttäjän uuteen joukkueeseen."
-        );
-        setLoading(false);
-        return;
-      }
-
       // Build teamMember object for selected teams
       const teamMemberStatus: { [teamId: string]: boolean } = {};
       selectedTeams.forEach((teamId) => {
@@ -220,8 +211,86 @@ const CreatePlayerScreen: React.FC = () => {
         needsPasswordChange: email.trim() ? true : false, // Jos email on annettu, tarvitsee salasanan
       };
 
+      // Sama henkilö luotiin aiemmin uudeksi profiiliksi jokaiseen
+      // joukkueeseen erikseen. Jos sähköpostilla on jo profiili, tarjotaan
+      // hänen liittämistään valittuihin joukkueisiin tuplan sijaan.
+      const existingUsers = await getDocs(
+        query(collection(db, "users"), where("email", "==", playerData.email))
+      );
+      const existingDoc = existingUsers.docs[0];
+
+      if (existingDoc) {
+        const existing = existingDoc.data();
+        const currentTeamIds: string[] = existing.teamIds || [];
+        const newTeamIds = selectedTeams.filter(
+          (teamId) => !currentTeamIds.includes(teamId)
+        );
+        const teamName = (teamId: string) =>
+          userTeams.find((t) => t.id === teamId)?.name || teamId;
+        const currentTeams =
+          (existing.teams || []).join(", ") || "ei joukkueita";
+
+        if (newTeamIds.length === 0) {
+          Alert.alert(
+            "Pelaaja on jo olemassa",
+            `Sähköpostilla ${playerData.email} on jo profiili (${existing.name}), ja hän on jo valituissa joukkueissa.`
+          );
+          return;
+        }
+
+        const addToTeams = async () => {
+          setLoading(true);
+          try {
+            const updates: Record<string, any> = {
+              teamIds: arrayUnion(...newTeamIds),
+              teams: arrayUnion(...newTeamIds.map(teamName)),
+              updatedAt: new Date(),
+            };
+            newTeamIds.forEach((teamId) => {
+              updates[`teamMember.${teamId}`] = teamMemberStatus[teamId];
+              updates[`teamSkills.${teamId}`] = teamSkills[teamId];
+            });
+            await updateDoc(existingDoc.ref, updates);
+            Alert.alert(
+              "Onnistui",
+              `${existing.name} lisätty joukkueisiin ${newTeamIds
+                .map(teamName)
+                .join(", ")}`,
+              [
+                {
+                  text: "OK",
+                  onPress: () => {
+                    refreshData();
+                    navigation.goBack();
+                  },
+                },
+              ]
+            );
+          } catch (error) {
+            console.error("Error adding existing player to teams:", error);
+            Alert.alert("Virhe", "Pelaajan lisääminen joukkueeseen epäonnistui");
+          } finally {
+            setLoading(false);
+          }
+        };
+
+        Alert.alert(
+          "Pelaaja on jo olemassa",
+          `Sähköpostilla ${playerData.email} on jo profiili: ${existing.name} (${currentTeams}).\n\nLisätäänkö hänet joukkueisiin ${newTeamIds
+            .map(teamName)
+            .join(
+              ", "
+            )} uuden profiilin luomisen sijaan? Nimi, pelipaikat ja muut tiedot säilyvät ennallaan.`,
+          [
+            { text: "Peruuta", style: "cancel" },
+            { text: "Lisää joukkueisiin", onPress: addToTeams },
+          ]
+        );
+        return;
+      }
+
       // Luo käyttäjä users kokoelmaan
-      const userDocRef = await addDoc(collection(db, "users"), playerData);
+      await addDoc(collection(db, "users"), playerData);
 
       // Note: No need to update team.members - player.teamIds is the single source of truth
       // Team membership is tracked via player.teamIds field only
@@ -284,7 +353,7 @@ const CreatePlayerScreen: React.FC = () => {
               style={styles.input}
               value={name}
               onChangeText={setName}
-              placeholder="Pelaajan nimi"
+              placeholder="Etunimi Sukunimi"
               placeholderTextColor="#999"
             />
           </View>

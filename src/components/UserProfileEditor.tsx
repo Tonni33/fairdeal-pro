@@ -321,7 +321,7 @@ const UserProfileEditor: React.FC<UserProfileEditorProps> = ({
           style={styles.input}
           value={name}
           onChangeText={setName}
-          placeholder="Nimi"
+          placeholder="Etunimi Sukunimi"
         />
       </View>
       <View style={styles.inputGroup}>
