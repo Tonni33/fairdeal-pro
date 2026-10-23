@@ -216,8 +216,9 @@ const CreatePlayerScreen: React.FC = () => {
         const selected = selectedTeams
           .map((teamId) => userTeams.find((t) => t.id === teamId))
           .filter((t): t is NonNullable<typeof t> => Boolean(t));
-        const codeOf = (team: any): string | undefined =>
-          team.code || team.licenceCode;
+        // Liittymiskoodi on code-kenttä; licenceCode on lisenssinumero
+        const codeOf = (team: { code?: string }): string | undefined =>
+          team.code || undefined;
         const codeLines = selected
           .map(
             (team) =>

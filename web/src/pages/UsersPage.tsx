@@ -438,7 +438,7 @@ export default function UsersPage() {
           teams: addForm.teamIds
             .map((teamId) => teams.find((t) => t.id === teamId))
             .filter((t): t is Team => Boolean(t))
-            .map((t) => ({ name: t.name, code: t.code || t.licenceCode })),
+            .map((t) => ({ name: t.name, code: t.code || undefined })),
         });
         return;
       }

@@ -216,6 +216,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
               color: data.color || "#000000",
               adminId: data.adminId,
               adminIds: data.adminIds || (data.adminId ? [data.adminId] : []), // Support multiple admins with legacy fallback
+              code: data.code || "", // Liittymiskoodi, jolla pelaaja liittyy joukkueeseen
               licenceCode: data.licenceCode || "",
               // WhatsApp group fields
               whatsappGroupName: data.whatsappGroupName,
