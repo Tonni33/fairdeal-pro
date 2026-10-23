@@ -22,11 +22,15 @@ export interface User {
         // Field player skills (H or P) - only present if player has H or P position
         category: number;
         multiplier: number;
+        // true = luotu automaattisesti oletuksena, admin ei ole vielä arvioinut
+        unrated?: boolean;
       };
       goalkeeper?: {
         // Goalkeeper skills (MV) - only present if player has MV position
         category: number;
         multiplier: number;
+        // true = luotu automaattisesti oletuksena, admin ei ole vielä arvioinut
+        unrated?: boolean;
       };
       // Legacy fields for backwards compatibility
       category?: number;

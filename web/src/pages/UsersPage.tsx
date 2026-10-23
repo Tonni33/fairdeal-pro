@@ -31,12 +31,12 @@ import {
   addDoc,
   query,
   where,
-  arrayUnion,
 } from "firebase/firestore";
 import { db } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import type { User, Team } from "../types";
 import ColumnSelector from "../components/ColumnSelector";
+import { skillStatus } from "../utils/skillStatus";
 
 export default function UsersPage() {
   const { userData } = useAuth();
@@ -58,6 +58,7 @@ export default function UsersPage() {
     "positions",
     "teams",
     "teamMember",
+    "skillStatus",
     "isAdmin",
     "createdAt",
     "appVersion",
@@ -72,7 +73,9 @@ export default function UsersPage() {
     const saved = localStorage.getItem("usersPage-visibleColumns");
     // Uudet sarakkeet näytetään myös jos selaimeen on tallennettu vanha valinta
     const parsed: string[] = saved ? JSON.parse(saved) : defaultColumns;
-    return Array.from(new Set([...parsed, "appVersion", "lastSeen"]));
+    return Array.from(
+      new Set([...parsed, "appVersion", "lastSeen", "skillStatus"]),
+    );
   });
 
   const [columnOrder, setColumnOrder] = useState<string[]>(() => {
@@ -226,6 +229,28 @@ export default function UsersPage() {
 
     setError("");
     try {
+      // Tallennus hyväksyy lomakkeella näkyneen joukkueen taitotason:
+      // arvioimaton-merkintä poistetaan
+      const teamSkills = { ...editForm.teamSkills };
+      const shownTeam =
+        selectedTeam &&
+        selectedTeam !== "all" &&
+        editForm.teamIds.includes(selectedTeam)
+          ? selectedTeam
+          : null;
+      if (shownTeam && teamSkills[shownTeam]) {
+        const approved = { ...teamSkills[shownTeam] };
+        if (approved.field) {
+          const { unrated: _unrated, ...field } = approved.field;
+          approved.field = field;
+        }
+        if (approved.goalkeeper) {
+          const { unrated: _unrated, ...goalkeeper } = approved.goalkeeper;
+          approved.goalkeeper = goalkeeper;
+        }
+        teamSkills[shownTeam] = approved;
+      }
+
       // Update user document
       await updateDoc(doc(db, "users", selectedUser.id), {
         name: editForm.name,
@@ -234,7 +259,7 @@ export default function UsersPage() {
         positions: editForm.positions,
         isAdmin: editForm.isAdmin,
         teamIds: editForm.teamIds,
-        teamSkills: editForm.teamSkills,
+        teamSkills,
         teamMember: editForm.teamMember,
       });
 
@@ -301,8 +326,15 @@ export default function UsersPage() {
     }
   };
 
+  // Sähköpostilla on jo tili: näytetään liittymiskoodit uuden profiilin sijaan
+  const [existingAccount, setExistingAccount] = useState<{
+    email: string;
+    teams: { name: string; code?: string }[];
+  } | null>(null);
+
   const handleAddUser = async () => {
     setError("");
+    setExistingAccount(null);
 
     // Validation
     if (!addForm.name.trim()) {
@@ -394,53 +426,25 @@ export default function UsersPage() {
       };
 
       // Sama henkilö luotiin aiemmin uudeksi profiiliksi jokaiseen
-      // joukkueeseen erikseen. Jos sähköpostilla on jo profiili, hänet
-      // liitetään valittuihin joukkueisiin eikä tuplaa synny.
+      // joukkueeseen erikseen. Olemassa olevaa tiliä ei liitetä adminin
+      // toimesta: pelaaja liittyy itse joukkueen liittymiskoodilla. Näin
+      // toisen joukkueen tiedot eivät näy eikä taitotaso kulje mukana.
       const existingSnap = await getDocs(
         query(collection(db, "users"), where("email", "==", playerData.email)),
       );
-      const existingDoc = existingSnap.docs[0];
-
-      if (existingDoc) {
-        const existing = existingDoc.data() as User;
-        const currentTeamIds = existing.teamIds || [];
-        const newTeamIds = addForm.teamIds.filter(
-          (teamId) => !currentTeamIds.includes(teamId),
-        );
-        const teamName = (teamId: string) =>
-          teams.find((t) => t.id === teamId)?.name || teamId;
-
-        if (newTeamIds.length === 0) {
-          setError(
-            `Sähköpostilla ${playerData.email} on jo profiili (${existing.name}), ja hän on jo valituissa joukkueissa.`,
-          );
-          return;
-        }
-
-        const confirmed = window.confirm(
-          `Sähköpostilla ${playerData.email} on jo profiili: ${existing.name}` +
-            ` (${currentTeamIds.map(teamName).join(", ") || "ei joukkueita"}).\n\n` +
-            `Lisätäänkö hänet joukkueisiin ${newTeamIds.map(teamName).join(", ")} ` +
-            `uuden profiilin luomisen sijaan? Nimi, pelipaikat ja muut tiedot säilyvät ennallaan.`,
-        );
-        if (!confirmed) {
-          return;
-        }
-
-        const updates: Record<string, unknown> = {
-          teamIds: arrayUnion(...newTeamIds),
-          teams: arrayUnion(...newTeamIds.map(teamName)),
-          updatedAt: new Date(),
-        };
-        newTeamIds.forEach((teamId) => {
-          updates[`teamMember.${teamId}`] = teamMemberStatus[teamId];
-          updates[`teamSkills.${teamId}`] = teamSkills[teamId];
+      if (!existingSnap.empty) {
+        setExistingAccount({
+          email: playerData.email,
+          teams: addForm.teamIds
+            .map((teamId) => teams.find((t) => t.id === teamId))
+            .filter((t): t is Team => Boolean(t))
+            .map((t) => ({ name: t.name, code: t.code || t.licenceCode })),
         });
-        await updateDoc(existingDoc.ref, updates);
-      } else {
-        // Create user in Firestore
-        await addDoc(collection(db, "users"), playerData);
+        return;
       }
+
+      // Create user in Firestore
+      await addDoc(collection(db, "users"), playerData);
 
       // Note: Team adminIds assignment is not done during user creation
       // Admin can update this later through the edit dialog
@@ -464,11 +468,7 @@ export default function UsersPage() {
         teamMember: {},
       });
 
-      alert(
-        existingDoc
-          ? "Olemassa oleva käyttäjä lisätty valittuihin joukkueisiin."
-          : "Käyttäjä luotu onnistuneesti!",
-      );
+      alert("Käyttäjä luotu onnistuneesti!");
     } catch (err) {
       console.error("Error creating user:", err);
       setError("Käyttäjän luominen epäonnistui");
@@ -597,6 +597,29 @@ export default function UsersPage() {
           return "-";
         const teamSkill = row.teamSkills[selectedTeam];
         return teamSkill?.field?.multiplier || "-";
+      },
+    },
+    {
+      field: "skillStatus",
+      headerName: "Arviointi",
+      width: 130,
+      sortable: false,
+      renderCell: (params) => {
+        if (!selectedTeam || selectedTeam === "all") return "-";
+        const status = skillStatus(params.row, selectedTeam);
+        if (status === "rated") return "";
+        return (
+          <Chip
+            label="Arvioimatta"
+            color="error"
+            size="small"
+            title={
+              status === "missing"
+                ? "Taitotaso puuttuu tältä joukkueelta"
+                : "Oletustaso, jota admin ei ole vielä arvioinut"
+            }
+          />
+        );
       },
     },
     {
@@ -833,9 +856,13 @@ export default function UsersPage() {
           rows={users}
           columns={
             (columnOrder.length > 0
-              ? columnOrder
-                  .map((field) => columns.find((col) => col.field === field))
-                  .filter(Boolean)
+              ? [
+                  ...columnOrder
+                    .map((field) => columns.find((col) => col.field === field))
+                    .filter(Boolean),
+                  // Tallennetusta järjestyksestä puuttuvat uudet sarakkeet
+                  ...columns.filter((col) => !columnOrder.includes(col.field)),
+                ]
               : columns
             ).filter((col) =>
               visibleColumns.includes(col!.field),
@@ -895,7 +922,10 @@ export default function UsersPage() {
       {/* Add User Dialog */}
       <Dialog
         open={addDialogOpen}
-        onClose={() => setAddDialogOpen(false)}
+        onClose={() => {
+          setAddDialogOpen(false);
+          setExistingAccount(null);
+        }}
         maxWidth="md"
         fullWidth
       >
@@ -904,6 +934,49 @@ export default function UsersPage() {
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
               {error}
+            </Alert>
+          )}
+          {existingAccount && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              <Typography variant="body2" fontWeight={600} gutterBottom>
+                Sähköpostilla {existingAccount.email} on jo FairDeal-tili,
+                joten uutta profiilia ei luoda.
+              </Typography>
+              <Typography variant="body2" gutterBottom>
+                Anna pelaajalle joukkueen liittymiskoodi. Hän syöttää sen
+                sovelluksen Profiili-sivulla ja liittyy itse.
+              </Typography>
+              {existingAccount.teams.map((team) => (
+                <Box
+                  key={team.name}
+                  sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1 }}
+                >
+                  <Typography variant="body2">{team.name}:</Typography>
+                  {team.code ? (
+                    <>
+                      <Chip
+                        label={team.code}
+                        size="small"
+                        sx={{ fontFamily: "monospace", fontWeight: 600 }}
+                      />
+                      <Button
+                        size="small"
+                        onClick={() =>
+                          navigator.clipboard?.writeText(
+                            `Liity FairDeal Pro -joukkueeseen ${team.name}: avaa sovelluksen Profiili-sivu ja syötä liittymiskoodi ${team.code}`,
+                          )
+                        }
+                      >
+                        Kopioi viesti
+                      </Button>
+                    </>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      ei koodia – luo se joukkueen asetuksista
+                    </Typography>
+                  )}
+                </Box>
+              ))}
             </Alert>
           )}
 
@@ -1134,7 +1207,14 @@ export default function UsersPage() {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setAddDialogOpen(false)}>Peruuta</Button>
+          <Button
+            onClick={() => {
+              setAddDialogOpen(false);
+              setExistingAccount(null);
+            }}
+          >
+            Peruuta
+          </Button>
           <Button onClick={handleAddUser} variant="contained">
             Luo käyttäjä
           </Button>
@@ -1466,6 +1546,18 @@ export default function UsersPage() {
                 <Typography variant="subtitle2" gutterBottom>
                   Joukkuekohtaiset taidot
                 </Typography>
+                {skillStatus(
+                  {
+                    positions: editForm.positions,
+                    teamSkills: editForm.teamSkills,
+                  },
+                  selectedTeam,
+                ) !== "rated" && (
+                  <Alert severity="warning" sx={{ mb: 1.5 }}>
+                    Taitotasoa ei ole arvioitu tälle joukkueelle. Tarkista
+                    arvot – tallennus hyväksyy ne.
+                  </Alert>
+                )}
                 {(() => {
                   const team = teams.find((t) => t.id === selectedTeam);
                   const skills = editForm.teamSkills?.[selectedTeam];

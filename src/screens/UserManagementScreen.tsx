@@ -26,6 +26,7 @@ import { httpsCallable } from "firebase/functions";
 import { RootStackParamList, Team, Player } from "../types";
 import { db, functions, auth } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
+import { DEFAULT_SKILL, skillStatus } from "../utils/skillStatus";
 import {
   useApp,
   getUserTeams,
@@ -578,19 +579,20 @@ const UserManagementScreen: React.FC = () => {
             updatedAt: new Date(),
           };
 
-          // Tallenna vain field-taidot jos pelaajalla on H tai P positio
+          // Uusi joukkue saa keskitason oletuksena, ei toisen joukkueen
+          // arviota: taso merkitään arvioimattomaksi, jotta uuden joukkueen
+          // admin näkee arvioida sen itse
           if (hasFieldPosition) {
             currentTeamSkillsData[addedTeamId].field = {
-              category: editFieldCategory || 2,
-              multiplier: editFieldMultiplier || 2.0,
+              ...DEFAULT_SKILL,
+              unrated: true,
             };
           }
 
-          // Tallenna vain goalkeeper-taidot jos pelaajalla on MV positio
           if (hasGoalkeeperPosition) {
             currentTeamSkillsData[addedTeamId].goalkeeper = {
-              category: editGoalkeeperCategory || 2,
-              multiplier: editGoalkeeperMultiplier || 2.0,
+              ...DEFAULT_SKILL,
+              unrated: true,
             };
           }
         }
@@ -670,7 +672,16 @@ const UserManagementScreen: React.FC = () => {
           currentTeamSkills?.goalkeeper?.multiplier || 2.0;
         const currentPosition = arrayToPosition(selectedPlayer.positions);
 
+        // Arvioimaton tai puuttuva taso tallennetaan aina: admin on nähnyt
+        // arvot lomakkeella, joten tallennus hyväksyy ne
+        const needsApproval =
+          skillStatus(
+            { positions: editPositions, teamSkills: selectedPlayer.teamSkills },
+            selectedTeam,
+          ) !== "rated";
+
         const skillsChanged =
+          needsApproval ||
           editFieldCategory !== currentFieldCategory ||
           editFieldMultiplier !== currentFieldMultiplier ||
           editGoalkeeperCategory !== currentGoalkeeperCategory ||
@@ -798,6 +809,13 @@ const UserManagementScreen: React.FC = () => {
             teamSkills: updatedTeamSkills,
             teamMember: updatedTeamMember,
           });
+
+          // Joukkueiden lisäys/poisto kirjoittaa teamSkillsin alempana
+          // uudelleen: pidetään siinä juuri tallennettu taso
+          if (updatedTeamSkills[selectedTeam]) {
+            currentTeamSkillsData[selectedTeam] =
+              updatedTeamSkills[selectedTeam];
+          }
 
           console.log("✅ Team skills saved to user document successfully");
         } else {
@@ -1230,6 +1248,9 @@ const UserManagementScreen: React.FC = () => {
                     teamSkills?.field?.multiplier || 2.0;
                   const displayPosition = arrayToPosition(player.positions);
                   const hasTeamSkills = Boolean(teamSkills);
+                  const needsRating =
+                    Boolean(selectedTeam) &&
+                    skillStatus(player, selectedTeam) !== "rated";
 
                   // Määritä rooli joukkuekohtaisesti
                   let playerRole = "Jäsen";
@@ -1290,6 +1311,13 @@ const UserManagementScreen: React.FC = () => {
                             "Tuntematon"}
                           {isGoalkeeper && " 🥅"}
                         </Text>
+                        {needsRating && (
+                          <View style={styles.unratedBadge}>
+                            <Text style={styles.unratedBadgeText}>
+                              Arvioimatta
+                            </Text>
+                          </View>
+                        )}
                       </View>
                       <Ionicons name="chevron-forward" size={20} color="#666" />
                     </TouchableOpacity>
@@ -1538,6 +1566,24 @@ const UserManagementScreen: React.FC = () => {
                   </TouchableOpacity>
                 ))}
               </View>
+
+              {selectedTeam &&
+                selectedPlayer &&
+                skillStatus(
+                  {
+                    positions: editPositions,
+                    teamSkills: selectedPlayer.teamSkills,
+                  },
+                  selectedTeam,
+                ) !== "rated" && (
+                  <View style={styles.unratedNotice}>
+                    <Ionicons name="alert-circle" size={18} color="#d32f2f" />
+                    <Text style={styles.unratedNoticeText}>
+                      Taitotasoa ei ole arvioitu tälle joukkueelle. Tarkista
+                      arvot alla – tallennus hyväksyy ne.
+                    </Text>
+                  </View>
+                )}
 
               {/* Role tabs for players with both field and goalkeeper positions */}
               {editPositions.includes("MV") &&
@@ -1944,6 +1990,33 @@ const styles = StyleSheet.create({
   },
   playerInfo: {
     flex: 1,
+  },
+  unratedNotice: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    backgroundColor: "#ffebee",
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 12,
+  },
+  unratedNoticeText: {
+    flex: 1,
+    color: "#b71c1c",
+    fontSize: 13,
+  },
+  unratedBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "#d32f2f",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginTop: 4,
+  },
+  unratedBadgeText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "600",
   },
   playerName: {
     fontSize: 16,

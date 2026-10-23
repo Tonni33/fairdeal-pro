@@ -27,6 +27,11 @@ import { db } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import { useApp, getUserAdminTeams } from "../contexts/AppContext";
 import { TeamBalancer } from "../utils/teamBalancer";
+import {
+  DEFAULT_SKILL,
+  SkillRole,
+  roleSkillStatus,
+} from "../utils/skillStatus";
 
 type TeamGenerationScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -399,7 +404,17 @@ const TeamGenerationScreen: React.FC = () => {
       });
   }, [selectedEvent, players]);
 
-  // Check for players with missing teamSkills
+  // Pelaajan rooli tässä tapahtumassa: ilmoittautumisen yhteydessä valittu
+  // rooli tai pelipaikkojen perusteella päätelty
+  const eventSkillRole = (event: Event, player: Player): SkillRole => {
+    const role =
+      event.playerRoles?.[player.id] ||
+      (player.positions?.includes("MV") ? "MV" : player.positions?.[0] || "H");
+    return role === "MV" ? "goalkeeper" : "field";
+  };
+
+  // Pelaajat, joiden taitotaso puuttuu tai on arvioimaton oletus. Arvonta
+  // odottaa, kunnes admin on hyväksynyt tai muokannut ne.
   const playersWithMissingSkills = useMemo(() => {
     if (
       !selectedEvent ||
@@ -408,37 +423,77 @@ const TeamGenerationScreen: React.FC = () => {
     ) {
       return [];
     }
+    const teamId = selectedEvent.teamId;
 
     return players
       .filter((player) => selectedEvent.registeredPlayers?.includes(player.id))
-      .filter((player) => {
-        if (!selectedEvent.teamId) return false;
-
-        // Get player's selected role for this event
-        const playerRole = selectedEvent.playerRoles?.[player.id];
-        const roleToCheck =
-          playerRole ||
-          (player.positions?.includes("MV")
-            ? "MV"
-            : player.positions?.[0] || "H");
-        const isGoalkeeper = roleToCheck === "MV";
-
-        // Check if player has team skills for this team
-        const teamSkills = player.teamSkills?.[selectedEvent.teamId];
-        if (!teamSkills) return true;
-
-        // Check if player has skills for their selected role
-        const roleSkills = isGoalkeeper
-          ? teamSkills.goalkeeper
-          : teamSkills.field;
-
-        return (
-          !roleSkills ||
-          typeof roleSkills.category === "undefined" ||
-          typeof roleSkills.multiplier === "undefined"
-        );
-      });
+      .filter(
+        (player) =>
+          roleSkillStatus(
+            player,
+            teamId,
+            eventSkillRole(selectedEvent, player)
+          ) !== "rated"
+      );
   }, [selectedEvent, players]);
+
+  const [approvingSkills, setApprovingSkills] = useState(false);
+
+  // Hyväksyttävä arvo: arvioimaton oletus sellaisenaan, puuttuva keskitasona
+  const approvedSkill = (event: Event, player: Player) => {
+    const current = player.teamSkills?.[event.teamId!]?.[
+      eventSkillRole(event, player)
+    ];
+    return current && current.unrated === true
+      ? { category: current.category, multiplier: current.multiplier }
+      : DEFAULT_SKILL;
+  };
+
+  // Hyväksyy arvioimattomat oletusarvot sellaisenaan ja antaa puuttuville
+  // keskitason (2 / 2.0). Kirjoitetaan vain tämän joukkueen ja roolin taso.
+  const approveDefaultSkills = async () => {
+    if (!selectedEvent?.teamId) return;
+    const teamId = selectedEvent.teamId;
+    setApprovingSkills(true);
+    try {
+      await Promise.all(
+        playersWithMissingSkills.map((player) => {
+          const role = eventSkillRole(selectedEvent, player);
+          return updateDoc(doc(db, "users", player.id), {
+            [`teamSkills.${teamId}.${role}`]: approvedSkill(
+              selectedEvent,
+              player
+            ),
+          });
+        })
+      );
+    } catch (error) {
+      console.error("Error approving default skills:", error);
+      Alert.alert("Virhe", "Taitotasojen hyväksyminen epäonnistui");
+    } finally {
+      setApprovingSkills(false);
+    }
+  };
+
+  const confirmApproveDefaultSkills = () => {
+    if (!selectedEvent?.teamId) return;
+    const lines = playersWithMissingSkills.map((player) => {
+      const value = approvedSkill(selectedEvent, player);
+      return `${player.name}: ${value.category} / ${Number(
+        value.multiplier
+      ).toFixed(1)}`;
+    });
+    Alert.alert(
+      "Hyväksy taitotasot",
+      `Seuraavat taitotasot hyväksytään sellaisenaan:\n\n${lines.join(
+        "\n"
+      )}\n\nVoit muuttaa niitä myöhemmin Käyttäjät-sivulla.`,
+      [
+        { text: "Peruuta", style: "cancel" },
+        { text: "Hyväksy", onPress: approveDefaultSkills },
+      ]
+    );
+  };
 
   const fieldPlayerCount = getFieldPlayers(
     selectedEvent?.registeredPlayers || []
@@ -930,15 +985,29 @@ const TeamGenerationScreen: React.FC = () => {
                 />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.missingSkillsWarningTitle}>
-                    Puuttuvat taitotasot
+                    Arvioimattomat taitotasot
                   </Text>
                   <Text style={styles.missingSkillsWarningText}>
-                    Seuraavilla pelaajilla puuttuu taitotasot tälle joukkueelle:{" "}
+                    Seuraavien pelaajien taitotaso tälle joukkueelle puuttuu
+                    tai on arvioimaton oletus:{" "}
                     {playersWithMissingSkills.map((p) => p.name).join(", ")}
                   </Text>
                   <Text style={styles.missingSkillsWarningAction}>
-                    Määritä taitotasot ensin Käyttäjät-sivulla.
+                    Muokkaa taitotasoja Käyttäjät-sivulla tai hyväksy oletukset.
                   </Text>
+                  <TouchableOpacity
+                    style={styles.approveSkillsButton}
+                    onPress={confirmApproveDefaultSkills}
+                    disabled={approvingSkills}
+                  >
+                    {approvingSkills ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <Text style={styles.approveSkillsButtonText}>
+                        Hyväksy oletukset
+                      </Text>
+                    )}
+                  </TouchableOpacity>
                 </View>
               </View>
             )}
@@ -1054,7 +1123,7 @@ const TeamGenerationScreen: React.FC = () => {
                 {isGenerating
                   ? "Luodaan..."
                   : playersWithMissingSkills.length > 0
-                  ? "Määritä taitotasot ensin"
+                  ? "Arvioi taitotasot ensin"
                   : "Arvo joukkueet"}
               </Text>
             </TouchableOpacity>
@@ -1694,6 +1763,21 @@ const styles = StyleSheet.create({
     color: "#d32f2f",
     fontWeight: "500",
     marginTop: 4,
+  },
+  approveSkillsButton: {
+    alignSelf: "flex-start",
+    backgroundColor: "#d32f2f",
+    borderRadius: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginTop: 10,
+    minWidth: 150,
+    alignItems: "center",
+  },
+  approveSkillsButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });
 

@@ -8,19 +8,12 @@ import {
   Alert,
   TextInput,
   Modal,
+  Share,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
-import {
-  collection,
-  addDoc,
-  query,
-  where,
-  getDocs,
-  updateDoc,
-  arrayUnion,
-} from "firebase/firestore";
+import { collection, addDoc, query, where, getDocs } from "firebase/firestore";
 
 import { RootStackParamList, Team } from "../types";
 import { db } from "../services/firebase";
@@ -212,78 +205,54 @@ const CreatePlayerScreen: React.FC = () => {
       };
 
       // Sama henkilö luotiin aiemmin uudeksi profiiliksi jokaiseen
-      // joukkueeseen erikseen. Jos sähköpostilla on jo profiili, tarjotaan
-      // hänen liittämistään valittuihin joukkueisiin tuplan sijaan.
+      // joukkueeseen erikseen. Olemassa olevaa tiliä ei liitetä adminin
+      // toimesta: pelaaja liittyy itse joukkueen liittymiskoodilla. Näin
+      // toisen joukkueen tiedot eivät näy eikä taitotaso kulje mukana.
       const existingUsers = await getDocs(
         query(collection(db, "users"), where("email", "==", playerData.email))
       );
-      const existingDoc = existingUsers.docs[0];
 
-      if (existingDoc) {
-        const existing = existingDoc.data();
-        const currentTeamIds: string[] = existing.teamIds || [];
-        const newTeamIds = selectedTeams.filter(
-          (teamId) => !currentTeamIds.includes(teamId)
-        );
-        const teamName = (teamId: string) =>
-          userTeams.find((t) => t.id === teamId)?.name || teamId;
-        const currentTeams =
-          (existing.teams || []).join(", ") || "ei joukkueita";
-
-        if (newTeamIds.length === 0) {
-          Alert.alert(
-            "Pelaaja on jo olemassa",
-            `Sähköpostilla ${playerData.email} on jo profiili (${existing.name}), ja hän on jo valituissa joukkueissa.`
-          );
-          return;
-        }
-
-        const addToTeams = async () => {
-          setLoading(true);
-          try {
-            const updates: Record<string, any> = {
-              teamIds: arrayUnion(...newTeamIds),
-              teams: arrayUnion(...newTeamIds.map(teamName)),
-              updatedAt: new Date(),
-            };
-            newTeamIds.forEach((teamId) => {
-              updates[`teamMember.${teamId}`] = teamMemberStatus[teamId];
-              updates[`teamSkills.${teamId}`] = teamSkills[teamId];
-            });
-            await updateDoc(existingDoc.ref, updates);
-            Alert.alert(
-              "Onnistui",
-              `${existing.name} lisätty joukkueisiin ${newTeamIds
-                .map(teamName)
-                .join(", ")}`,
-              [
-                {
-                  text: "OK",
-                  onPress: () => {
-                    refreshData();
-                    navigation.goBack();
-                  },
-                },
-              ]
-            );
-          } catch (error) {
-            console.error("Error adding existing player to teams:", error);
-            Alert.alert("Virhe", "Pelaajan lisääminen joukkueeseen epäonnistui");
-          } finally {
-            setLoading(false);
-          }
-        };
+      if (!existingUsers.empty) {
+        const selected = selectedTeams
+          .map((teamId) => userTeams.find((t) => t.id === teamId))
+          .filter((t): t is NonNullable<typeof t> => Boolean(t));
+        const codeOf = (team: any): string | undefined =>
+          team.code || team.licenceCode;
+        const codeLines = selected
+          .map(
+            (team) =>
+              `${team.name}: ${
+                codeOf(team) || "ei koodia – luo se joukkueen asetuksista"
+              }`
+          )
+          .join("\n");
+        const shareable = selected.filter((team) => codeOf(team));
 
         Alert.alert(
-          "Pelaaja on jo olemassa",
-          `Sähköpostilla ${playerData.email} on jo profiili: ${existing.name} (${currentTeams}).\n\nLisätäänkö hänet joukkueisiin ${newTeamIds
-            .map(teamName)
-            .join(
-              ", "
-            )} uuden profiilin luomisen sijaan? Nimi, pelipaikat ja muut tiedot säilyvät ennallaan.`,
+          "Pelaajalla on jo tili",
+          `Sähköpostilla ${playerData.email} on jo FairDeal-tili, joten uutta profiilia ei luoda.\n\nAnna pelaajalle joukkueen liittymiskoodi. Hän syöttää sen sovelluksen Profiili-sivulla ja liittyy itse.\n\n${codeLines}`,
           [
-            { text: "Peruuta", style: "cancel" },
-            { text: "Lisää joukkueisiin", onPress: addToTeams },
+            ...(shareable.length > 0
+              ? [
+                  {
+                    text: "Jaa koodi",
+                    onPress: () =>
+                      Share.share({
+                        message: shareable
+                          .map(
+                            (team) =>
+                              `Liity FairDeal Pro -joukkueeseen ${
+                                team.name
+                              }: avaa sovelluksen Profiili-sivu ja syötä liittymiskoodi ${codeOf(
+                                team
+                              )}`
+                          )
+                          .join("\n"),
+                      }),
+                  },
+                ]
+              : []),
+            { text: "OK" },
           ]
         );
         return;

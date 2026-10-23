@@ -402,7 +402,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // (needed for re-authentication when changing password)
       setTempPassword(password);
     } catch (error: any) {
-      throw new Error(error.message);
+      throw error;
     }
   };
 
@@ -420,6 +420,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (displayName && result.user) {
         await updateProfile(result.user, { displayName });
+      }
+
+      // Jos admin on jo luonut pelaajalle profiilin tällä sähköpostilla,
+      // tyhjää profiilia ei luoda: kirjautumisen käsittelijä siirtää adminin
+      // luoman profiilin tälle tunnukselle. Muuten syntyisi tupla, tai tyhjä
+      // profiili voisi korvata juuri siirretyn.
+      const existingProfiles = await getDocs(
+        query(
+          collection(db, "users"),
+          where("email", "==", (result.user.email || email).toLowerCase())
+        )
+      );
+      if (!existingProfiles.empty) {
+        return;
       }
 
       // Create user document in Firestore
@@ -453,7 +467,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Continue even if Firestore fails
       }
     } catch (error: any) {
-      throw new Error(error.message);
+      // Alkuperäinen virhe säilyttää koodin (esim. auth/email-already-in-use),
+      // jonka perusteella kirjautumisruutu näyttää selkeän viestin
+      throw error;
     }
   };
 

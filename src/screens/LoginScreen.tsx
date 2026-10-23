@@ -16,6 +16,26 @@ import { useAuth } from "../contexts/AuthContext";
 import { auth } from "../services/firebase";
 import { SecureStorage } from "../utils/secureStorage";
 
+// Firebasen virhekoodit suomeksi; tuntematon virhe näytetään sellaisenaan
+const authErrorMessage = (error: any): string => {
+  switch (error?.code) {
+    case "auth/invalid-credential":
+    case "auth/wrong-password":
+    case "auth/user-not-found":
+      return "Väärä sähköposti tai salasana";
+    case "auth/invalid-email":
+      return "Virheellinen sähköpostiosoite";
+    case "auth/weak-password":
+      return "Salasana on liian heikko (vähintään 6 merkkiä)";
+    case "auth/too-many-requests":
+      return "Liian monta yritystä. Odota hetki ja yritä uudelleen.";
+    case "auth/network-request-failed":
+      return "Verkkoyhteysvirhe. Tarkista internetyhteys ja yritä uudelleen.";
+    default:
+      return error?.message || "Tuntematon virhe";
+  }
+};
+
 const LoginScreen: React.FC = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -107,7 +127,18 @@ const LoginScreen: React.FC = () => {
         // eikä tee uutta sisäänkirjautumista.
       }
     } catch (error: any) {
-      Alert.alert("Virhe", error.message);
+      if (isRegister && error?.code === "auth/email-already-in-use") {
+        Alert.alert(
+          "Tili on jo olemassa",
+          "Sähköpostilla on jo FairDeal-tili. Kirjaudu sisään sillä (tai käytä Unohtuiko salasana -toimintoa).\n\nJos haluat liittyä uuteen joukkueeseen, pyydä joukkueen adminilta liittymiskoodi ja syötä se Profiili-sivulla.",
+          [
+            { text: "Peruuta", style: "cancel" },
+            { text: "Kirjaudu sisään", onPress: () => setIsRegister(false) },
+          ]
+        );
+      } else {
+        Alert.alert("Virhe", authErrorMessage(error));
+      }
     } finally {
       setLoading(false);
     }
