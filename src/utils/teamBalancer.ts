@@ -1311,8 +1311,10 @@ export class TeamBalancer {
         (extraDefender as any).assignedRole = "defender";
       }
       const targetTeam = this.pickTeamForOddPlayer(teams, extraDefender);
+      // Sama muoto kuin muilla yksittäisillä puolustajilla: webin
+      // TeamBalancer-testisivu kokoaa arvontataulukon näistä riveistä
       console.log(
-        `Defender extra: Worst defender (${extraDefender.name}) → ${targetTeam.name} (4th defender side, best balance by simulation)`,
+        `Defender single: Remaining player (${extraDefender.name}${extraDefender.position === "H/P" ? " [H/P]" : ""}) → ${targetTeam.name} (weakest defender to the side with more defenders)`,
       );
       this.addPlayerToTeam(targetTeam, extraDefender);
     }
