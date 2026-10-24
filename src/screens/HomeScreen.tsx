@@ -194,16 +194,6 @@ const HomeScreen: React.FC = () => {
     [user, teams, players],
   );
 
-  // Ilmoitustaulu seuraa etusivun joukkuevalintaa kuten tapahtumatkin:
-  // valittu joukkue tai "Kaikki joukkueet" = kaikki omat joukkueet
-  const boardTeams = useMemo(
-    () =>
-      selectedTeamId
-        ? userTeams.filter((team) => team.id === selectedTeamId)
-        : userTeams,
-    [selectedTeamId, userTeams],
-  );
-
   const getSelectedTeamName = () => {
     if (!selectedTeamId) return "Kaikki joukkueet";
     const team = userTeams.find((t) => t.id === selectedTeamId);
@@ -274,6 +264,17 @@ const HomeScreen: React.FC = () => {
     );
     return result;
   }, [events, selectedTeamId, userTeams]);
+
+  // Ilmoitustaulu kuuluu samalle joukkueelle kuin näkymä: valittu joukkue,
+  // tai "Kaikki joukkueet" -tilassa seuraavana näytettävän tapahtuman
+  // joukkue. Ilman tulevia tapahtumia näytetään kaikki omat joukkueet.
+  const boardTeams = useMemo(() => {
+    const focusTeamId = selectedTeamId || nextEvent?.teamId;
+    const focused = focusTeamId
+      ? userTeams.filter((team) => team.id === focusTeamId)
+      : [];
+    return focused.length > 0 ? focused : userTeams;
+  }, [selectedTeamId, nextEvent?.teamId, userTeams]);
 
   useEffect(() => {
     if (nextEvent && currentPlayer) {
