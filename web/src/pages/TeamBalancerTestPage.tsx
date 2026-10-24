@@ -97,6 +97,9 @@ interface PairInfo {
   // Running average after this pair
   avgA?: number;
   avgB?: number;
+  // Kentällisen vahvuus jäällä tämän rivin jälkeen (sama mittari kuin algoritmilla)
+  onIceA?: number;
+  onIceB?: number;
   // Was this pair randomized (same multiplier)?
   wasRandomized?: boolean;
 }
@@ -678,7 +681,61 @@ export default function TeamBalancerTestPage() {
       const teamBPlayers: number[] = [];
       const teamAName = team.teamAName || "Joukkue A";
 
+      // Kentällinen jäällä: 2 × puolustajien ka + 3 × hyökkääjien ka.
+      // Maalivahdit ja lisäpelaajat eivät ole mukana. Taitotasoarvonnassa
+      // rooleja ei ole, joten kaikki kenttäpelaajat jakavat viisi paikkaa.
+      type Skater = { name: string; multiplier: number; defender: boolean };
+      const skaters: Record<"A" | "B", Skater[]> = { A: [], B: [] };
+      const cleanName = (name: string) => name.replace(" [H/P]", "");
+      const onIce = (list: Skater[]) => {
+        if (list.length === 0) return 0;
+        const avg = (items: Skater[]) =>
+          items.reduce((sum, p) => sum + p.multiplier, 0) / items.length;
+        const defenders = list.filter((p) => p.defender);
+        const attackers = list.filter((p) => !p.defender);
+        return distributionMethod === "position-based" &&
+          defenders.length > 0 &&
+          attackers.length > 0
+          ? 2 * avg(defenders) + 3 * avg(attackers)
+          : 5 * avg(list);
+      };
+
       parsedPairs.forEach((pair) => {
+        const sideOf = (team: string): "A" | "B" =>
+          team === teamAName ? "A" : "B";
+        if (pair.reason === "Vaihto") {
+          // Vaihdossa pelaaja siirtyy roolinsa kanssa toiseen joukkueeseen
+          (
+            [
+              [pair.player1Name, pair.player1Team],
+              [pair.player2Name, pair.player2Team],
+            ] as const
+          ).forEach(([name, team]) => {
+            const to = sideOf(team);
+            const from = to === "A" ? "B" : "A";
+            const at = skaters[from].findIndex(
+              (p) => p.name === cleanName(name),
+            );
+            if (at !== -1) skaters[to].push(...skaters[from].splice(at, 1));
+          });
+        } else if (pair.reason !== "MV" && pair.reason !== "Lisä") {
+          const defender = pair.reason === "P";
+          skaters[sideOf(pair.player1Team)].push({
+            name: cleanName(pair.player1Name),
+            multiplier: pair.player1Multiplier,
+            defender,
+          });
+          if (pair.player2Name) {
+            skaters[sideOf(pair.player2Team)].push({
+              name: cleanName(pair.player2Name),
+              multiplier: pair.player2Multiplier,
+              defender,
+            });
+          }
+        }
+        pair.onIceA = onIce(skaters.A);
+        pair.onIceB = onIce(skaters.B);
+
         // Determine which team each player is on and track running totals
         const isPlayer1TeamA =
           pair.player1Team === teamAName;
@@ -1003,7 +1060,10 @@ export default function TeamBalancerTestPage() {
             niistä, joiden vahvuusero on enintään 1 %. Vaihto-rivit ovat Cat 1
             -tasapainotuksen siirtoja. Lisä-rivit ovat lisäpelaajia, jotka eivät
             ole mukana tasapainotuksessa vaan lisätään lopuksi vajaammalle
-            puolelle.
+            puolelle. Avg on kaikkien pelaajien tavallinen keskiarvo, Jäällä on
+            kentällinen jäällä (2 × puolustajien ka + 3 × hyökkääjien ka, ilman
+            maalivahteja ja lisäpelaajia) – algoritmi käyttää tätä. Pienempi on
+            vahvempi.
             <Box component="span" sx={{ display: "flex", gap: 2, mt: 1 }}>
               <Chip
                 label="+ Parempi"
@@ -1057,7 +1117,7 @@ export default function TeamBalancerTestPage() {
                     Tyyppi
                   </TableCell>
                   <TableCell
-                    colSpan={5}
+                    colSpan={6}
                     sx={{
                       bgcolor: "#1976d2",
                       color: "white",
@@ -1068,7 +1128,7 @@ export default function TeamBalancerTestPage() {
                     {generatedTeams?.teams[0]?.name || "Joukkue A"}
                   </TableCell>
                   <TableCell
-                    colSpan={5}
+                    colSpan={6}
                     sx={{
                       bgcolor: "#d32f2f",
                       color: "white",
@@ -1106,6 +1166,12 @@ export default function TeamBalancerTestPage() {
                   >
                     Avg
                   </TableCell>
+                  <TableCell
+                    sx={{ fontWeight: "bold", textAlign: "center", width: 60 }}
+                    title="Kentällinen jäällä: 2 × puolustajien ka + 3 × hyökkääjien ka. Maalivahdit ja lisäpelaajat eivät mukana. Algoritmi käyttää tätä."
+                  >
+                    Jäällä
+                  </TableCell>
                   <TableCell sx={{ fontWeight: "bold", textAlign: "center" }}>
                     Pelaaja
                   </TableCell>
@@ -1128,6 +1194,12 @@ export default function TeamBalancerTestPage() {
                     sx={{ fontWeight: "bold", textAlign: "center", width: 55 }}
                   >
                     Avg
+                  </TableCell>
+                  <TableCell
+                    sx={{ fontWeight: "bold", textAlign: "center", width: 60 }}
+                    title="Kentällinen jäällä: 2 × puolustajien ka + 3 × hyökkääjien ka. Maalivahdit ja lisäpelaajat eivät mukana. Algoritmi käyttää tätä."
+                  >
+                    Jäällä
                   </TableCell>
                 </TableRow>
               </TableHead>
@@ -1324,6 +1396,18 @@ export default function TeamBalancerTestPage() {
                       >
                         {pair.avgA?.toFixed(3) || "-"}
                       </TableCell>
+                      <TableCell
+                        sx={{
+                          bgcolor: "#e3f2fd",
+                          borderBottom: separatorBorderStyle,
+                          textAlign: "center",
+                          fontFamily: "monospace",
+                          fontSize: "11px",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        {pair.onIceA ? pair.onIceA.toFixed(2) : "-"}
+                      </TableCell>
                       {/* Team B column */}
                       <TableCell
                         sx={{
@@ -1409,6 +1493,18 @@ export default function TeamBalancerTestPage() {
                         }}
                       >
                         {pair.avgB?.toFixed(3) || "-"}
+                      </TableCell>
+                      <TableCell
+                        sx={{
+                          bgcolor: "#ffebee",
+                          borderBottom: separatorBorderStyle,
+                          textAlign: "center",
+                          fontFamily: "monospace",
+                          fontSize: "11px",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        {pair.onIceB ? pair.onIceB.toFixed(2) : "-"}
                       </TableCell>
                     </TableRow>
                   );
