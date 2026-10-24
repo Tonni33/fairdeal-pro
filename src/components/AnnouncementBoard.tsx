@@ -648,16 +648,17 @@ export const AnnouncementBoard: React.FC<Props> = ({
 };
 
 const styles = StyleSheet.create({
+  // Sama leveys ja ulkoasu kuin etusivun tapahtumakortilla: sivureunus tulee
+  // etusivun sisällöltä
   card: {
     backgroundColor: "#fff",
-    marginHorizontal: 16,
-    marginBottom: 16,
+    marginBottom: 20,
     borderRadius: 12,
-    padding: 16,
+    padding: 20,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: 3,
     elevation: 3,
   },
   header: {
