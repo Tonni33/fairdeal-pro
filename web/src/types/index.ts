@@ -215,3 +215,19 @@ export interface TeamBalanceResult {
   unusedPlayers: EnrichedPlayer[];
   warnings: string[];
 }
+
+// Joukkueen ilmoitustaulun ilmoitus (ks. mobiilisovelluksen tyypit)
+export interface Announcement {
+  id: string;
+  teamId: string;
+  title: string;
+  body: string;
+  link?: string;
+  pinned?: boolean;
+  visibleUntil?: Date | null;
+  sendPush?: boolean;
+  createdAt: Date;
+  createdBy: string;
+  createdById?: string;
+  updatedAt?: Date;
+}

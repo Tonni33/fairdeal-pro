@@ -15,6 +15,7 @@ import LicenseRequestsPage from "./pages/LicenseRequestsPage";
 import TeamSettingsPage from "./pages/TeamSettingsPage";
 import SettingsPage from "./pages/SettingsPage";
 import TeamBalancerTestPage from "./pages/TeamBalancerTestPage";
+import AnnouncementsPage from "./pages/AnnouncementsPage";
 
 const theme = createTheme({
   palette: {
@@ -48,6 +49,7 @@ function App() {
               <Route path="teams" element={<TeamsPage />} />
               <Route path="rankings" element={<RankingsPage />} />
               <Route path="events" element={<EventsPage />} />
+              <Route path="announcements" element={<AnnouncementsPage />} />
               <Route path="activity" element={<ActivityPage />} />
               <Route path="licenses" element={<LicensesPage />} />
               <Route

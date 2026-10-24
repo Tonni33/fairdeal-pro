@@ -76,6 +76,7 @@ const ProfileScreen: React.FC = () => {
   const [notificationSettings, setNotificationSettings] = useState({
     eventReminders: true,
     rosterPromotions: true,
+    announcements: true,
   });
   const [notificationSettingsLoading, setNotificationSettingsLoading] =
     useState(false);
@@ -95,6 +96,8 @@ const ProfileScreen: React.FC = () => {
               userData.notificationSettings?.eventReminders ?? true,
             rosterPromotions:
               userData.notificationSettings?.rosterPromotions ?? true,
+            announcements:
+              userData.notificationSettings?.announcements ?? true,
           });
         }
       } catch (err) {
@@ -106,7 +109,7 @@ const ProfileScreen: React.FC = () => {
 
   // Save notification settings to Firestore
   const saveNotificationSettings = async (
-    key: "eventReminders" | "rosterPromotions",
+    key: "eventReminders" | "rosterPromotions" | "announcements",
     value: boolean
   ) => {
     if (!user?.uid) return;
@@ -905,6 +908,26 @@ const ProfileScreen: React.FC = () => {
               trackColor={{ false: "#ccc", true: "#4CAF50" }}
               thumbColor={
                 notificationSettings.rosterPromotions ? "#fff" : "#f4f3f4"
+              }
+            />
+          </View>
+
+          <View style={styles.notificationSettingRow}>
+            <View style={styles.notificationSettingInfo}>
+              <Text style={styles.notificationSettingLabel}>Ilmoitustaulu</Text>
+              <Text style={styles.notificationSettingDescription}>
+                Ilmoitus kun joukkueen admin julkaisee uuden ilmoituksen
+              </Text>
+            </View>
+            <Switch
+              value={notificationSettings.announcements}
+              onValueChange={(value) =>
+                saveNotificationSettings("announcements", value)
+              }
+              disabled={notificationSettingsLoading}
+              trackColor={{ false: "#ccc", true: "#4CAF50" }}
+              thumbColor={
+                notificationSettings.announcements ? "#fff" : "#f4f3f4"
               }
             />
           </View>

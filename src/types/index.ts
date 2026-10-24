@@ -206,6 +206,23 @@ export interface Event {
 }
 
 // Message types
+// Joukkueen ilmoitustaulun ilmoitus (announcements-kokoelma). Joukkueen
+// admin hallinnoi, pelaajat lukevat.
+export interface Announcement {
+  id: string;
+  teamId: string;
+  title: string;
+  body: string;
+  link?: string; // esim. ilmoittautumislomake tai maksuohje
+  pinned?: boolean; // kiinnitetty ylimmäksi
+  visibleUntil?: Date | null; // ei näytetä tämän jälkeen
+  sendPush?: boolean; // lähetetäänkö push-ilmoitus luotaessa
+  createdAt: Date;
+  createdBy: string; // kirjoittajan nimi
+  createdById?: string;
+  updatedAt?: Date;
+}
+
 export interface Message {
   id: string;
   eventId: string; // Reference to the event

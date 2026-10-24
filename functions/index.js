@@ -630,6 +630,7 @@ exports.getHCKeLoEmails = onCall(async (request) => {
 // ============================================
 
 const {
+  onDocumentCreated,
   onDocumentUpdated,
   onDocumentWritten,
 } = require("firebase-functions/v2/firestore");
@@ -1301,6 +1302,75 @@ exports.promoteReservesOnEventUpdate = onDocumentUpdated(
       console.error(`[Promo] Event ${eventId}: promotion failed:`, err);
       throw err;
     }
+  },
+);
+
+/**
+ * Uusi ilmoitustaulun ilmoitus: push-ilmoitus joukkueen pelaajille, jotka
+ * eivät ole kytkeneet ilmoitustaulun ilmoituksia pois profiilistaan.
+ * Kirjoittaja ei saa ilmoitusta omasta ilmoituksestaan.
+ */
+exports.sendAnnouncementPush = onDocumentCreated(
+  "announcements/{announcementId}",
+  async (event) => {
+    const data = event.data?.data();
+    if (!data || data.sendPush === false || !data.teamId) {
+      return null;
+    }
+
+    const db = admin.firestore();
+    const teamSnap = await db.collection("teams").doc(data.teamId).get();
+    const teamName = teamSnap.exists ? teamSnap.data().name : "Joukkue";
+    const members = await db
+      .collection("users")
+      .where("teamIds", "array-contains", data.teamId)
+      .get();
+
+    const text = String(data.body || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const body = text.length > 150 ? `${text.slice(0, 147)}…` : text;
+
+    const tokens = new Set();
+    const messages = [];
+    members.forEach((doc) => {
+      const user = doc.data();
+      if (doc.id === data.createdById) return;
+      if (user.notificationSettings?.announcements === false) return;
+      const token = user.pushToken;
+      if (!token || !Expo.isExpoPushToken(token) || tokens.has(token)) return;
+      tokens.add(token);
+      messages.push({
+        to: token,
+        sound: "default",
+        title: `📌 ${teamName}: ${data.title}`,
+        body,
+        data: {
+          type: "announcement",
+          announcementId: event.params.announcementId,
+          teamId: data.teamId,
+        },
+        // Oletuskanava on olemassa kaikissa sovellusversioissa
+        channelId: "default",
+      });
+    });
+
+    let sent = 0;
+    for (const chunk of expo.chunkPushNotifications(messages)) {
+      try {
+        const tickets = await expo.sendPushNotificationsAsync(chunk);
+        sent += tickets.filter((t) => t.status === "ok").length;
+        tickets
+          .filter((t) => t.status === "error")
+          .forEach((t) => console.error("[Announcement] Push error:", t.message));
+      } catch (err) {
+        console.error("[Announcement] Error sending notifications:", err);
+      }
+    }
+    console.log(
+      `[Announcement] ${event.params.announcementId} (${teamName}): ${members.size} members, ${messages.length} recipients, ${sent} sent`,
+    );
+    return { sent };
   },
 );
 

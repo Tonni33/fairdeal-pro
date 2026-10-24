@@ -13,28 +13,25 @@ import {
   Platform,
 } from "react-native";
 import {
-  collection,
-  query,
-  where,
-  orderBy,
-  limit,
-  onSnapshot,
   doc,
   updateDoc,
   arrayUnion,
   arrayRemove,
   getDoc,
-  addDoc,
-  deleteDoc,
   deleteField,
 } from "firebase/firestore";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { db } from "../services/firebase";
-import { Event, Player, Team, Message, RootStackParamList } from "../types";
+import { Event, Player, Team, RootStackParamList } from "../types";
 import { useAuth } from "../contexts/AuthContext";
-import { useApp, getUserTeams } from "../contexts/AppContext";
+import {
+  useApp,
+  getUserTeams,
+  getUserAdminTeams,
+} from "../contexts/AppContext";
+import { AnnouncementBoard } from "../components/AnnouncementBoard";
 import AdminMenuButton from "../components/AdminMenuButton";
 import { UpdateStatusButton } from "../components/UpdateStatusButton";
 import {
@@ -64,12 +61,6 @@ const HomeScreen: React.FC = () => {
   const [playersModalMode, setPlayersModalMode] = useState<
     "participants" | "absent"
   >("participants");
-  const [isMessageModalVisible, setIsMessageModalVisible] = useState(false);
-  const [isEditingMessage, setIsEditingMessage] = useState(false);
-  const [editMessageText, setEditMessageText] = useState("");
-  const [messageLoading, setMessageLoading] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [messagesLoading, setMessagesLoading] = useState(false);
   const [isRoleSelectionModalVisible, setIsRoleSelectionModalVisible] =
     useState(false);
   const [isAbsentReasonModalVisible, setIsAbsentReasonModalVisible] =
@@ -434,49 +425,6 @@ const HomeScreen: React.FC = () => {
     setLoading(false);
   }, [nextEvent, currentPlayer, players]);
 
-  // Listen to messages for the current event
-  useEffect(() => {
-    if (!nextEvent) {
-      setMessages([]);
-      return;
-    }
-
-    setMessagesLoading(true);
-    const messagesQuery = query(
-      collection(db, "messages"),
-      where("eventId", "==", nextEvent.id),
-    );
-
-    const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
-      const messagesData: Message[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        // Filter out deleted messages on the client side
-        if (!data.isDeleted) {
-          messagesData.push({
-            id: doc.id,
-            eventId: data.eventId,
-            message: data.message,
-            createdAt: data.createdAt?.toDate() || new Date(),
-            createdBy: data.createdBy,
-            updatedAt: data.updatedAt?.toDate(),
-            updatedBy: data.updatedBy,
-            isDeleted: data.isDeleted || false,
-          });
-        }
-      });
-
-      // Sort messages by creation date (newest first) on the client side
-      messagesData.sort(
-        (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-      );
-
-      setMessages(messagesData);
-      setMessagesLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [nextEvent]);
 
   // Varalta-nosto tehdään palvelimella: functions/index.js ->
   // promoteReservesOnEventUpdate (tapahtuman muuttuessa) ja
@@ -1062,24 +1010,6 @@ const HomeScreen: React.FC = () => {
     return `${formatDate(date)} klo ${formatTime(date)}`;
   };
 
-  const formatMessageTime = (date: Date) => {
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / (1000 * 60));
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffMins < 60) {
-      return diffMins <= 1 ? "juuri nyt" : `${diffMins} min sitten`;
-    } else if (diffHours < 24) {
-      return `${diffHours} h sitten`;
-    } else if (diffDays < 7) {
-      return `${diffDays} pv sitten`;
-    } else {
-      return formatDate(date);
-    }
-  };
-
   // Check if current user is admin - check both role and isAdmin fields
   const isAdmin = user?.role === "admin" || user?.isAdmin === true;
 
@@ -1095,70 +1025,7 @@ const HomeScreen: React.FC = () => {
       "User Debug",
       `Role: ${user?.role}\nisAdmin: ${user?.isAdmin}\nCalculated isAdmin: ${isAdmin}`,
     );
-  }; // Message handling functions
-  const handleEditMessage = () => {
-    // Always start with empty text for new messages
-    setEditMessageText("");
-    setIsEditingMessage(true);
   };
-
-  const handleCancelEdit = () => {
-    setIsEditingMessage(false);
-    setEditMessageText("");
-  };
-
-  const handleSaveMessage = async () => {
-    if (!nextEvent) return;
-
-    setMessageLoading(true);
-    try {
-      if (editMessageText.trim()) {
-        // Add new message to messages collection
-        await addDoc(collection(db, "messages"), {
-          eventId: nextEvent.id,
-          message: editMessageText.trim(),
-          createdAt: new Date(),
-          // Ei sähköpostia varasuunnitelmaksi: kirjoittajan nimi näkyy kaikille
-          // tapahtuman jäsenille, eikä osoitetta ole tarkoitus näyttää heille.
-          createdBy:
-            user?.name?.trim() || user?.displayName?.trim() || "Tuntematon",
-          isDeleted: false,
-        });
-
-        Alert.alert("Onnistui", "Viesti lisätty");
-      } else {
-        Alert.alert("Virhe", "Viesti ei voi olla tyhjä");
-      }
-
-      setIsEditingMessage(false);
-      setEditMessageText("");
-    } catch (error) {
-      console.error("Error adding message:", error);
-      Alert.alert("Virhe", "Viestin tallentaminen epäonnistui");
-    } finally {
-      setMessageLoading(false);
-    }
-  };
-
-  const handleDeleteMessage = async (messageId: string) => {
-    Alert.alert("Poista viesti", "Haluatko varmasti poistaa tämän viestin?", [
-      { text: "Peruuta", style: "cancel" },
-      {
-        text: "Poista",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await deleteDoc(doc(db, "messages", messageId));
-            Alert.alert("Onnistui", "Viesti poistettu");
-          } catch (error) {
-            console.error("Error deleting message:", error);
-            Alert.alert("Virhe", "Viestin poistaminen epäonnistui");
-          }
-        },
-      },
-    ]);
-  };
-
   const handleAdminNavigation = (screen: string) => {
     if (screen === "AdminMenu") {
       navigation.navigate("AdminMenu");
@@ -1733,36 +1600,6 @@ const HomeScreen: React.FC = () => {
               </TouchableOpacity>
             )}
 
-            {/* Separate message card */}
-            <View style={styles.eventCard}>
-              <TouchableOpacity
-                style={styles.messageButton}
-                onPress={() => setIsMessageModalVisible(true)}
-              >
-                <Ionicons
-                  name={
-                    messages.length > 0 ? "chatbubble" : "chatbubble-outline"
-                  }
-                  size={20}
-                  color={messages.length > 0 ? "#1976d2" : "#666"}
-                />
-                <Text
-                  style={[
-                    styles.messageButtonText,
-                    messages.length > 0 && styles.messageButtonTextActive,
-                  ]}
-                >
-                  {messages.length > 0
-                    ? `Viestit (${messages.length})`
-                    : "Ei viestejä"}
-                </Text>
-                {messages.length > 0 && (
-                  <Text style={styles.messageUpdateTime}>
-                    {formatMessageTime(messages[0].createdAt)}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
           </View>
         ) : (
           <View style={styles.noEventCard}>
@@ -1773,6 +1610,16 @@ const HomeScreen: React.FC = () => {
             </Text>
           </View>
         )}
+
+        {/* Joukkueen ilmoitustaulu (korvaa tapahtumakohtaiset viestit) */}
+        <AnnouncementBoard
+          teams={userTeams}
+          adminTeams={getUserAdminTeams(user, userTeams)}
+          userId={user?.uid}
+          userName={
+            user?.name?.trim() || user?.displayName?.trim() || "Tuntematon"
+          }
+        />
       </ScrollView>
 
       {/* Poissaolon syy modal */}
@@ -2147,144 +1994,6 @@ const HomeScreen: React.FC = () => {
         </View>
       </Modal>
 
-      {/* Message modal */}
-      <Modal
-        visible={isMessageModalVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setIsMessageModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, styles.messageModalContent]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Tapahtuman viestit</Text>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setIsMessageModalVisible(false)}
-              >
-                <Ionicons name="close" size={24} color="#666" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.messageModalScroll}>
-              {messagesLoading ? (
-                <View style={styles.loadingContainer}>
-                  <Text style={styles.loadingText}>Ladataan viestejä...</Text>
-                </View>
-              ) : isEditingMessage ? (
-                // Edit mode
-                <View style={styles.messageEditContainer}>
-                  <Text style={styles.messageEditLabel}>
-                    Tapahtuman viesti:
-                  </Text>
-                  <TextInput
-                    style={styles.messageEditInput}
-                    value={editMessageText}
-                    onChangeText={setEditMessageText}
-                    placeholder="Kirjoita viesti tapahtuman osallistujille..."
-                    placeholderTextColor="#999"
-                    multiline
-                    numberOfLines={6}
-                    textAlignVertical="top"
-                  />
-                  <View style={styles.messageEditButtons}>
-                    <TouchableOpacity
-                      style={styles.messageEditCancelButton}
-                      onPress={handleCancelEdit}
-                      disabled={messageLoading}
-                    >
-                      <Text style={styles.messageEditCancelText}>Peruuta</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.messageEditSaveButton,
-                        messageLoading && styles.disabledButton,
-                      ]}
-                      onPress={handleSaveMessage}
-                      disabled={messageLoading}
-                    >
-                      <Text style={styles.messageEditSaveText}>
-                        {messageLoading ? "Tallennetaan..." : "Tallenna"}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ) : (
-                // View mode - show messages list
-                <>
-                  {messages.length > 0 ? (
-                    <View style={styles.messagesContainer}>
-                      {messages.map((message) => (
-                        <View key={message.id} style={styles.messageItem}>
-                          <View style={styles.messageHeader}>
-                            {isAdmin && (
-                              <View style={styles.messageHeaderTop}>
-                                <View style={{ flex: 1 }} />
-                                <TouchableOpacity
-                                  style={styles.deleteButton}
-                                  onPress={() =>
-                                    handleDeleteMessage(message.id)
-                                  }
-                                >
-                                  <Ionicons
-                                    name="close"
-                                    size={20}
-                                    color="#f44336"
-                                  />
-                                </TouchableOpacity>
-                              </View>
-                            )}
-                            <Text style={styles.messageText}>
-                              {message.message}
-                            </Text>
-                          </View>
-                          <View style={styles.messageFooter}>
-                            <Text style={styles.messageTimestamp}>
-                              {formatMessageTime(message.createdAt)}
-                            </Text>
-                            <Text style={styles.messageAuthor}>
-                              {message.createdBy}
-                            </Text>
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  ) : (
-                    <View style={styles.noMessageContainer}>
-                      <Ionicons
-                        name="chatbubble-outline"
-                        size={48}
-                        color="#ccc"
-                      />
-                      <Text style={styles.noMessageTitle}>Ei viestejä</Text>
-                      <Text style={styles.noMessageSubtitle}>
-                        Tähän tapahtumaan ei ole lisätty viestejä
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Add message button - available for all users */}
-                  <View style={styles.messageAdminActions}>
-                    <TouchableOpacity
-                      style={styles.messageEditButton}
-                      onPress={handleEditMessage}
-                    >
-                      <Ionicons
-                        name="add-circle-outline"
-                        size={20}
-                        color="#007AFF"
-                      />
-                      <Text style={styles.messageEditButtonText}>
-                        Lisää viesti
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </>
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 };
@@ -2923,186 +2632,6 @@ const styles = StyleSheet.create({
   },
   modalReserveEmail: {
     color: "#f57c00",
-  },
-  messageButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f8f9fa",
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-  },
-  messageButtonText: {
-    fontSize: 14,
-    color: "#666",
-    marginLeft: 8,
-    flex: 1,
-  },
-  messageButtonTextActive: {
-    color: "#1976d2",
-    fontWeight: "500",
-  },
-  messageUpdateTime: {
-    fontSize: 12,
-    color: "#999",
-    fontStyle: "italic",
-  },
-  // Message modal styles
-  messageModalContent: {
-    maxHeight: "80%",
-    width: "92%", // Levitetään hieman
-    height: 500, // Lisätään kiinteä korkeus
-  },
-  messageModalScroll: {
-    flex: 1,
-    minHeight: 200, // Lisätään minimikorkeus
-  },
-  messagesContainer: {
-    padding: 6,
-  },
-  messageItem: {
-    backgroundColor: "#f8f9fa",
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: "#1976d2",
-  },
-  messageHeader: {
-    flexDirection: "column",
-    marginBottom: 4,
-  },
-  messageHeaderTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 4,
-  },
-  deleteButton: {
-    padding: 4,
-    marginLeft: 8,
-    alignSelf: "flex-start",
-  },
-  messageContent: {
-    backgroundColor: "#f8f9fa",
-    padding: 10,
-    borderRadius: 8,
-    margin: 12,
-  },
-  messageText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: "#333",
-  },
-  messageFooter: {
-    marginTop: 6,
-    paddingTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: "#e0e0e0",
-  },
-  messageTimestamp: {
-    fontSize: 12,
-    color: "#666",
-  },
-  messageAuthor: {
-    fontSize: 12,
-    color: "#666",
-    marginTop: 2,
-    fontStyle: "italic",
-  },
-  noMessageContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 32,
-  },
-  noMessageTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#666",
-    marginTop: 16,
-  },
-  noMessageSubtitle: {
-    fontSize: 14,
-    color: "#888",
-    textAlign: "center",
-    marginTop: 8,
-  },
-  // Message edit styles
-  messageEditContainer: {
-    padding: 16,
-  },
-  messageEditLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 8,
-  },
-  messageEditInput: {
-    backgroundColor: "#f8f9fa",
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    padding: 10,
-    paddingTop: 10,
-    paddingBottom: 10,
-    fontSize: 15,
-    color: "#333",
-    minHeight: 100,
-    maxHeight: 180,
-    marginBottom: 16,
-  },
-  messageEditButtons: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  messageEditCancelButton: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-    padding: 14,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  messageEditCancelText: {
-    fontSize: 16,
-    color: "#666",
-    fontWeight: "500",
-  },
-  messageEditSaveButton: {
-    flex: 1,
-    backgroundColor: "#1976d2",
-    padding: 14,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  messageEditSaveText: {
-    fontSize: 16,
-    color: "white",
-    fontWeight: "600",
-  },
-  messageAdminActions: {
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: "#e0e0e0",
-  },
-  messageEditButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#f0f8ff",
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#007AFF",
-  },
-  messageEditButtonText: {
-    fontSize: 16,
-    color: "#007AFF",
-    fontWeight: "500",
-    marginLeft: 8,
   },
   generatedTeamsBanner: {
     backgroundColor: "#f8fdf8",

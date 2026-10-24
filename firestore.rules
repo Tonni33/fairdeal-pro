@@ -120,6 +120,35 @@ service cloud.firestore {
     match /messages/{messageId} {
       allow read, write: if signedIn();
     }
+
+    // Ilmoitustaulu: kaikki kirjautuneet lukevat, vain joukkueen admin (tai
+    // master admin) kirjoittaa. Joukkuetta ei voi vaihtaa sellaiseen, jonka
+    // admin kirjoittaja ei ole.
+    function isMasterAdmin() {
+      let path = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(path)
+        && (get(path).data.get('isMasterAdmin', false) == true
+            || get(path).data.get('masterAdmin', false) == true);
+    }
+
+    function isTeamAdmin(teamId) {
+      let path = /databases/$(database)/documents/teams/$(teamId);
+      return exists(path)
+        && (get(path).data.get('adminIds', []).hasAny([request.auth.uid])
+            || get(path).data.get('adminId', '') == request.auth.uid);
+    }
+
+    match /announcements/{announcementId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && (isTeamAdmin(request.resource.data.teamId) || isMasterAdmin());
+      allow update: if signedIn()
+        && (isMasterAdmin()
+            || (isTeamAdmin(resource.data.teamId)
+                && isTeamAdmin(request.resource.data.teamId)));
+      allow delete: if signedIn()
+        && (isTeamAdmin(resource.data.teamId) || isMasterAdmin());
+    }
     match /settings/{settingId} {
       allow read, write: if signedIn();
     }

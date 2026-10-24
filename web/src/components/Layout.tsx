@@ -30,6 +30,7 @@ import {
   EmojiEvents,
   Timeline,
   Psychology,
+  Campaign,
 } from "@mui/icons-material";
 import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
@@ -119,6 +120,12 @@ export default function Layout() {
       text: "Tapahtumat",
       icon: <Event />,
       path: "/events",
+      masterAdminOnly: false,
+    },
+    {
+      text: "Ilmoitustaulu",
+      icon: <Campaign />,
+      path: "/announcements",
       masterAdminOnly: false,
     },
     {
