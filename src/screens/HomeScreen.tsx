@@ -194,6 +194,16 @@ const HomeScreen: React.FC = () => {
     [user, teams, players],
   );
 
+  // Ilmoitustaulu seuraa etusivun joukkuevalintaa kuten tapahtumatkin:
+  // valittu joukkue tai "Kaikki joukkueet" = kaikki omat joukkueet
+  const boardTeams = useMemo(
+    () =>
+      selectedTeamId
+        ? userTeams.filter((team) => team.id === selectedTeamId)
+        : userTeams,
+    [selectedTeamId, userTeams],
+  );
+
   const getSelectedTeamName = () => {
     if (!selectedTeamId) return "Kaikki joukkueet";
     const team = userTeams.find((t) => t.id === selectedTeamId);
@@ -1613,8 +1623,8 @@ const HomeScreen: React.FC = () => {
 
         {/* Joukkueen ilmoitustaulu (korvaa tapahtumakohtaiset viestit) */}
         <AnnouncementBoard
-          teams={userTeams}
-          adminTeams={getUserAdminTeams(user, userTeams)}
+          teams={boardTeams}
+          adminTeams={getUserAdminTeams(user, boardTeams)}
           userId={user?.uid}
           userName={
             user?.name?.trim() || user?.displayName?.trim() || "Tuntematon"
