@@ -52,7 +52,10 @@ import {
 import type { Team, GeneratedTeamsData } from "../types";
 import { useAuth } from "../contexts/AuthContext";
 // Import types from shared source for TeamBalancer compatibility
-import type { EnrichedPlayer as SharedEnrichedPlayer } from "@shared/types";
+import type {
+  EnrichedPlayer as SharedEnrichedPlayer,
+  BalanceTraceStep,
+} from "@shared/types";
 import { TeamBalancer } from "@shared/utils/teamBalancer";
 
 // Extended event interface for this page
@@ -404,237 +407,84 @@ export default function TeamBalancerTestPage() {
     };
   };
 
-  // Normalize team name from log output
-  const normalizeTeam = (teamStr: string): string => {
-    const trimmed = teamStr.trim();
-    // Remove trailing info like "(weaker)", "(fewer cat1: X vs Y)", etc.
-    const cleaned = trimmed.replace(/\s*\([^)]*\)\s*$/, "").trim();
-    return cleaned;
-  };
+  // Arvonnan kulku taulukon riveiksi. Algoritmi palauttaa sen valmiina
+  // (result.trace), joten lokirivejä ei tarvitse jäsentää.
+  const pairingsFromTrace = (trace: BalanceTraceStep[]): PairInfo[] =>
+    trace.map((step, index) => {
+      // H/P-pelaaja puolustajana merkitään nimen perään
+      const label = (
+        player: { name: string; position: string },
+        role?: string,
+      ) =>
+        player.name +
+        (role === "defender" && player.position === "H/P" ? " [H/P]" : "");
+      const empty = {
+        player2Name: "",
+        player2Team: "",
+        player2Multiplier: 0,
+        player2Position: "",
+        player2Category: 0,
+      };
 
-  // Parse pairings from console output
-  const parsePairingsFromLogs = (
-    logs: string[],
-    teamAName: string,
-    teamBName: string,
-  ): PairInfo[] => {
-    const pairs: PairInfo[] = [];
-    let pairNumber = 0;
-    let lastBalance = "";
-    let wasRandomized = false; // Track if the next pair was randomized
-
-    for (const log of logs) {
-      // Check for randomization indicator 🎲
-      if (
-        log.includes("🎲") &&
-        log.toLowerCase().includes("equal multipliers")
-      ) {
-        wasRandomized = true;
-        continue;
-      }
-
-      // Check for balance info first - store it for the next pair
-      if (log.includes("BALANCE:")) {
-        // Extract balance info: "BALANCE: A: X.XX vs B: Y.YY"
-        const balanceMatch = log.match(/BALANCE:\s*(.+)/);
-        if (balanceMatch) {
-          lastBalance = balanceMatch[1].trim();
-        }
-        continue;
-      }
-
-      // Skip non-relevant logs
-      if (
-        log.includes("Distributing") ||
-        log.includes("calculation") ||
-        log.includes("order") ||
-        log.includes("Balancing") ||
-        log.includes("selected as defenders") ||
-        log.includes("complete")
-      )
-        continue;
-      if (log.includes("Both defenders are Cat")) continue;
-      if (!log.includes("\u2192")) continue;
-
-      // FIRST: Match defender pair (must be before generic Better/Worse player match)
-      // "Defender pair X: Better player (Name [H/P]) \u2192 Team, Worse player (Name) \u2192 Team"
-      const defPairMatch = log.match(
-        /Defender pair \d+: Better player \(([^)]+)\) \u2192 ([^,]+).*Worse player \(([^)]+)\) \u2192 (.+)/,
-      );
-      if (defPairMatch) {
-        pairNumber++;
-        // Check for [H/P] marker in names
-        const player1Name = defPairMatch[1].replace(" [H/P]", "").trim();
-        const player2Name = defPairMatch[3].replace(" [H/P]", "").trim();
-        const isHybrid1 = defPairMatch[1].includes("[H/P]");
-        const isHybrid2 = defPairMatch[3].includes("[H/P]");
-        pairs.push({
-          pairNumber,
-          player1Name: player1Name + (isHybrid1 ? " [H/P]" : ""),
-          player1Team: normalizeTeam(defPairMatch[2]),
-          player1Multiplier: 0,
-          player1Position: "",
-          player1Category: 0,
-          player2Name: player2Name + (isHybrid2 ? " [H/P]" : ""),
-          player2Team: normalizeTeam(defPairMatch[4]),
-          player2Multiplier: 0,
-          player2Position: "",
-          player2Category: 0,
+      if (step.kind === "swap") {
+        return {
+          pairNumber: index + 1,
+          player1Name: step.first.name,
+          player1Team: step.firstTeam,
+          player1Multiplier: step.first.multiplier,
+          player1Position: step.first.position,
+          player1Category: step.first.category,
+          player2Name: step.second.name,
+          player2Team: step.secondTeam,
+          player2Multiplier: step.second.multiplier,
+          player2Position: step.second.position,
+          player2Category: step.second.category,
           category: 0,
-          reason: "P",
-          balance: lastBalance,
-          wasRandomized,
-        });
-        lastBalance = "";
-        wasRandomized = false;
-        continue;
+          reason: "Vaihto",
+        };
       }
 
-      // Match defender single: "Defender single: Remaining player (Name [H/P]) → Team"
-      const defSingleMatch = log.match(
-        /Defender single: Remaining player \(([^)]+)\) → (.+)/,
-      );
-      if (defSingleMatch) {
-        pairNumber++;
-        const playerName = defSingleMatch[1].replace(" [H/P]", "").trim();
-        const isHybrid = defSingleMatch[1].includes("[H/P]");
-        pairs.push({
-          pairNumber,
-          player1Name: playerName + (isHybrid ? " [H/P]" : ""),
-          player1Team: normalizeTeam(defSingleMatch[2]),
-          player1Multiplier: 0,
-          player1Position: "",
-          player1Category: 0,
-          player2Name: "",
-          player2Team: "",
-          player2Multiplier: 0,
-          player2Position: "",
-          player2Category: 0,
-          category: 0,
-          reason: "P",
-          balance: lastBalance,
-        });
-        lastBalance = "";
-        continue;
-      }
+      const reason =
+        step.role === "defender"
+          ? "P"
+          : step.role === "goalkeeper"
+            ? "MV"
+            : step.kind === "single"
+              ? "Yksittainen"
+              : `Kategoria ${step.category}`;
+      const category = step.role === "field" ? step.category || 0 : 0;
 
-      // Match goalkeeper pair: "Goalkeeper pair: Better player (Name) → Team, Worse player (Name) → Team"
-      const gkPairMatch = log.match(
-        /Goalkeeper pair: Better player \(([^)]+)\) → ([^,]+).*Worse player \(([^)]+)\) → (.+)/,
-      );
-      if (gkPairMatch) {
-        pairNumber++;
-        pairs.push({
-          pairNumber,
-          player1Name: gkPairMatch[1].trim(),
-          player1Team: normalizeTeam(gkPairMatch[2]),
-          player1Multiplier: 0,
-          player1Position: "",
-          player1Category: 0,
-          player2Name: gkPairMatch[3].trim(),
-          player2Team: normalizeTeam(gkPairMatch[4]),
-          player2Multiplier: 0,
-          player2Position: "",
-          player2Category: 0,
-          category: 0,
-          reason: "MV",
-          balance: lastBalance,
-          wasRandomized,
-        });
-        lastBalance = "";
-        wasRandomized = false;
-        continue;
-      }
-
-      // Match goalkeeper single: "Goalkeeper single: Remaining player (Name) → Team"
-      const gkSingleMatch = log.match(
-        /Goalkeeper single: Remaining player \(([^)]+)\) → (.+)/,
-      );
-      if (gkSingleMatch) {
-        pairNumber++;
-        pairs.push({
-          pairNumber,
-          player1Name: gkSingleMatch[1].trim(),
-          player1Team: normalizeTeam(gkSingleMatch[2]),
-          player1Multiplier: 0,
-          player1Position: "",
-          player1Category: 0,
-          player2Name: "",
-          player2Team: "",
-          player2Multiplier: 0,
-          player2Position: "",
-          player2Category: 0,
-          category: 0,
-          reason: "MV",
-          balance: lastBalance,
-        });
-        lastBalance = "";
-        continue;
-      }
-
-      // AFTER specific matches: Match category-based format with "Better player (Name) → TeamX, Worse player (Name) → TeamY"
-      const betterPlayerMatch = log.match(
-        /Better player \(([^)]+)\) → (Team [AB]|[^,(]+)/,
-      );
-      const worsePlayerMatch = log.match(
-        /Worse player \(([^)]+)\) → (Team [AB]|[^,(]+)/,
-      );
-      const categoryMatch = log.match(/^Category (\d)/);
-
-      if (betterPlayerMatch && worsePlayerMatch) {
-        pairNumber++;
-        const category = categoryMatch ? parseInt(categoryMatch[1]) : 0;
-        pairs.push({
-          pairNumber,
-          player1Name: betterPlayerMatch[1],
-          player1Team: normalizeTeam(betterPlayerMatch[2]),
-          player1Multiplier: 0,
-          player1Position: "",
-          player1Category: 0,
-          player2Name: worsePlayerMatch[1],
-          player2Team: normalizeTeam(worsePlayerMatch[2]),
-          player2Multiplier: 0,
-          player2Position: "",
-          player2Category: 0,
+      if (step.kind === "single") {
+        return {
+          pairNumber: index + 1,
+          player1Name: label(step.player, step.role),
+          player1Team: step.team,
+          player1Multiplier: step.player.multiplier,
+          player1Position: step.player.position,
+          player1Category: step.player.category,
+          ...empty,
           category,
-          reason: category > 0 ? `Kategoria ${category}` : "Pari",
-          balance: lastBalance,
-          wasRandomized,
-        });
-        lastBalance = "";
-        wasRandomized = false;
-        continue;
+          reason,
+        };
       }
 
-      // Match: "Category X: Remaining player (Name) → Team"
-      const remainingMatch = log.match(
-        /Category (\d): Remaining player \(([^)]+)\) → ([^(]+)/,
-      );
-      if (remainingMatch) {
-        pairNumber++;
-        pairs.push({
-          pairNumber,
-          player1Name: remainingMatch[2],
-          player1Team: normalizeTeam(remainingMatch[3]),
-          player1Multiplier: 0,
-          player1Position: "",
-          player1Category: 0,
-          player2Name: "",
-          player2Team: "",
-          player2Multiplier: 0,
-          player2Position: "",
-          player2Category: 0,
-          category: parseInt(remainingMatch[1]),
-          reason: "Yksittainen",
-          balance: lastBalance,
-        });
-        lastBalance = "";
-        continue;
-      }
-    }
-
-    return pairs;
-  };
+      return {
+        pairNumber: index + 1,
+        player1Name: label(step.better, step.role),
+        player1Team: step.betterTeam,
+        player1Multiplier: step.better.multiplier,
+        player1Position: step.better.position,
+        player1Category: step.better.category,
+        player2Name: label(step.worse, step.role),
+        player2Team: step.worseTeam,
+        player2Multiplier: step.worse.multiplier,
+        player2Position: step.worse.position,
+        player2Category: step.worse.category,
+        category,
+        reason,
+        wasRandomized: step.randomized,
+      };
+    });
 
   const runTeamBalancer = async () => {
     if (!selectedEventId || !selectedTeamId) return;
@@ -814,22 +664,7 @@ export default function TeamBalancerTestPage() {
       restore();
       setConsoleOutput(logs);
 
-      // Parse pairings from logs and add multipliers from enriched players
-      const parsedPairs = parsePairingsFromLogs(
-        logs,
-        team.teamAName || "Joukkue A",
-        team.teamBName || "Joukkue B",
-      );
-
-      // Add multipliers to pairings from enrichedPlayers
-      const playerMultiplierMap = new Map<string, number>();
-      const playerPositionMap = new Map<string, string>();
-      const playerCategoryMap = new Map<string, number>();
-      enrichedPlayers.forEach((p) => {
-        playerMultiplierMap.set(p.name, p.multiplier);
-        playerPositionMap.set(p.name, p.position);
-        playerCategoryMap.set(p.name, p.category);
-      });
+      const parsedPairs = pairingsFromTrace(result.trace || []);
 
       // Calculate running averages for each team
       const teamAPlayers: number[] = [];
@@ -837,27 +672,28 @@ export default function TeamBalancerTestPage() {
       const teamAName = team.teamAName || "Joukkue A";
 
       parsedPairs.forEach((pair) => {
-        const player1CleanName = pair.player1Name.replace(" [H/P]", "");
-        const player2CleanName = pair.player2Name?.replace(" [H/P]", "") || "";
-
-        // Add multiplier, position and category for player 1
-        pair.player1Multiplier = playerMultiplierMap.get(player1CleanName) || 0;
-        pair.player1Position = playerPositionMap.get(player1CleanName) || "H";
-        pair.player1Category = playerCategoryMap.get(player1CleanName) || 2;
-
-        // Add multiplier, position and category for player 2
-        if (pair.player2Name) {
-          pair.player2Multiplier =
-            playerMultiplierMap.get(player2CleanName) || 0;
-          pair.player2Position = playerPositionMap.get(player2CleanName) || "H";
-          pair.player2Category = playerCategoryMap.get(player2CleanName) || 2;
-        }
-
         // Determine which team each player is on and track running totals
         const isPlayer1TeamA =
-          pair.player1Team === teamAName || pair.player1Team.includes("A");
+          pair.player1Team === teamAName;
         const isPlayer2TeamA =
-          pair.player2Team === teamAName || pair.player2Team.includes("A");
+          pair.player2Team === teamAName;
+
+        // Vaihdossa pelaajat siirtyvät joukkueesta toiseen: poistetaan ensin
+        // edellisestä joukkueesta
+        if (pair.reason === "Vaihto") {
+          const removeOne = (list: number[], value: number) => {
+            const at = list.indexOf(value);
+            if (at !== -1) list.splice(at, 1);
+          };
+          removeOne(
+            isPlayer1TeamA ? teamBPlayers : teamAPlayers,
+            pair.player1Multiplier,
+          );
+          removeOne(
+            isPlayer2TeamA ? teamBPlayers : teamAPlayers,
+            pair.player2Multiplier,
+          );
+        }
 
         if (isPlayer1TeamA) {
           teamAPlayers.push(pair.player1Multiplier);
@@ -1154,7 +990,11 @@ export default function TeamBalancerTestPage() {
             Algoritmi jakaa pelaajat pareittain: ensin puolustajat (P), sitten
             hyokkaajat kategorioittain (Cat 1, Cat 2, Cat 3), ja lopuksi
             maalivahdit (MV). Parempi pelaaja (+) jaetaan heikommalle
-            joukkueelle, heikompi pelaaja (-) vahvemmalle.
+            joukkueelle, heikompi pelaaja (-) vahvemmalle. Vahvuus lasketaan
+            jääajalla painotettuna (2 puolustajaa + 3 hyökkääjää jäällä).
+            Arvonta tehdään 100 kertaa, ja näytetty valitaan satunnaisesti
+            niistä, joiden vahvuusero on enintään 1 %. Vaihto-rivit ovat Cat 1
+            -tasapainotuksen siirtoja.
             <Box component="span" sx={{ display: "flex", gap: 2, mt: 1 }}>
               <Chip
                 label="+ Parempi"
@@ -1289,12 +1129,8 @@ export default function TeamBalancerTestPage() {
                     generatedTeams?.teams[0]?.name || "Joukkue A";
 
                   // Check which player goes to Team A
-                  const isPlayer1TeamA =
-                    pair.player1Team === teamAName ||
-                    pair.player1Team.includes("A");
-                  const isPlayer2TeamA =
-                    pair.player2Team === teamAName ||
-                    pair.player2Team.includes("A");
+                  const isPlayer1TeamA = pair.player1Team === teamAName;
+                  const isPlayer2TeamA = pair.player2Team === teamAName;
 
                   // Determine which player goes to which column
                   const teamAPlayer = isPlayer1TeamA

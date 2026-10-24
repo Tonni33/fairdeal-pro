@@ -4,14 +4,42 @@ import type {
   GeneratedTeamData,
   TeamGenerationOptions,
   TeamBalanceResult,
+  BalanceTraceStep,
+  BalanceTracePlayer,
 } from "../types";
+
+// Kuinka monta arvontaa tehdään, ja kuinka paljon valitun arvonnan
+// vahvuusero saa poiketa tasaisimmasta (prosenttia kentällisen vahvuudesta).
+// Valinta tehdään satunnaisesti kaikista riittävän tasaisista eri
+// kokoonpanoista, jotta joukkueet vaihtelevat kerrasta toiseen.
+// Valinta tehdään satunnaisesti parhaiden joukosta, jotta joukkueet
+// vaihtelevat kerrasta toiseen.
+const CANDIDATE_DRAWS = 100;
+const TOLERANCE_PERCENT = 1;
+
+// Jäällä kerrallaan: 2 puolustajaa ja 3 hyökkääjää
+const DEFENDER_SLOTS = 2;
+const ATTACKER_SLOTS = 3;
 
 /**
  * Team balancing algorithm that creates balanced teams based on player skills
  */
 export class TeamBalancer {
+  // Pelipaikkaperusteisessa arvonnassa pelaajilla on rooli (puolustaja /
+  // hyökkääjä), ja vahvuus lasketaan roolien jääajalla. Taitotasoarvonnassa
+  // rooleja ei ole. Asetetaan jokaisen arvonnan alussa; koodi on synkronista.
+  private static positionMode = false;
+
+  // Käynnissä olevan arvonnan kulku (ks. BalanceTraceStep)
+  private static trace: BalanceTraceStep[] = [];
+
   /**
    * Generate balanced teams from a list of players using random category-based distribution
+   *
+   * Arpoo joukkueet nykyisillä säännöillä useaan kertaan ja valitsee
+   * satunnaisesti yhden tasaisimmista. Säännöt (puolustajien jako, huonoin
+   * puolustaja täydelle puolelle, Cat 1 ±1, maalivahdit) pätevät jokaisessa
+   * arvonnassa; vertailu kertoo vain, mikä niistä on jäällä tasaisin.
    */
   static generateBalancedTeams(
     players: EnrichedPlayer[], // Use EnrichedPlayer with computed fields
@@ -19,20 +47,177 @@ export class TeamBalancer {
     teamAName: string = "Joukkue A",
     teamBName: string = "Joukkue B",
   ): TeamBalanceResult {
+    const originalLog = console.log;
+    const candidates: {
+      result: TeamBalanceResult;
+      logs: unknown[][];
+      difference: number;
+    }[] = [];
+
+    for (let i = 0; i < CANDIDATE_DRAWS; i++) {
+      // Jokainen arvonta saa omat kopiot: algoritmi merkitsee pelaajiin
+      // roolin (assignedRole), eikä edellinen arvonta saa vaikuttaa siihen
+      const freshPlayers = players.map((p) => ({ ...p }));
+      const logs: unknown[][] = [];
+      console.log = (...args: unknown[]) => {
+        logs.push(args);
+      };
+      try {
+        const result = this.generateOnce(
+          freshPlayers,
+          options,
+          teamAName,
+          teamBName,
+        );
+        candidates.push({
+          result,
+          logs,
+          difference: this.strengthDifference(result.teams),
+        });
+      } finally {
+        console.log = originalLog;
+      }
+    }
+
+    candidates.sort((a, b) => a.difference - b.difference);
+
+    // Sama kokoonpano syntyy usein monesta arvonnasta, joten valitaan eri
+    // kokoonpanojen joukosta. Hyväksytään kaikki, joiden ero on enintään
+    // TOLERANCE_PERCENT kentällisen vahvuudesta (tai tasaisin, jos sekin on
+    // suurempi).
+    const meanStrength =
+      candidates[0].result.teams.reduce(
+        (sum, team) => sum + this.fieldStrength(team),
+        0,
+      ) / Math.max(candidates[0].result.teams.length, 1);
+    const tolerance = Math.max(
+      candidates[0].difference,
+      (meanStrength * TOLERANCE_PERCENT) / 100,
+    );
+    const compositionKey = (result: TeamBalanceResult) =>
+      result.teams
+        .map((team) =>
+          team.players
+            .map((p) => p.id)
+            .sort()
+            .join(","),
+        )
+        .sort()
+        .join("|");
+    const seen = new Set<string>();
+    const top = candidates.filter((candidate) => {
+      if (candidate.difference > tolerance) return false;
+      const key = compositionKey(candidate.result);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    const chosen = top[Math.floor(Math.random() * top.length)];
+
+    // Valitun arvonnan loki näytetään sellaisenaan
+    chosen.logs.forEach((args) => console.log(...args));
+    console.log(
+      `🏆 Selected draw: on-ice strength difference ${chosen.difference.toFixed(3)}, ` +
+        `chosen at random from ${top.length} distinct line-ups within ${tolerance.toFixed(3)} ` +
+        `(best ${candidates[0].difference.toFixed(3)}, median ${candidates[
+          Math.floor(candidates.length / 2)
+        ].difference.toFixed(3)}, worst ${candidates[
+          candidates.length - 1
+        ].difference.toFixed(3)} of ${candidates.length} draws)`,
+    );
+
+    return chosen.result;
+  }
+
+  /**
+   * Yksi arvonta nykyisillä säännöillä
+   */
+  private static generateOnce(
+    players: EnrichedPlayer[],
+    options: TeamGenerationOptions,
+    teamAName: string,
+    teamBName: string,
+  ): TeamBalanceResult {
     console.log(
       "🎲 TEAMBALANCER: Starting team generation with method:",
       options.distributionMethod || "skill-based (default)",
     );
 
-    // Check distribution method
-    if (options.distributionMethod === "position-based") {
-      console.log("✅ Using POSITION-BASED distribution");
-      return this.generateByPosition(players, options, teamAName, teamBName);
-    }
+    this.trace = [];
+    this.positionMode = options.distributionMethod === "position-based";
 
-    // Default: skill-based distribution
-    console.log("✅ Using SKILL-BASED distribution");
-    return this.generateBySkill(players, options, teamAName, teamBName);
+    // Check distribution method
+    const result = this.positionMode
+      ? this.generateByPosition(players, options, teamAName, teamBName)
+      : this.generateBySkill(players, options, teamAName, teamBName);
+    console.log(
+      this.positionMode
+        ? "✅ Used POSITION-BASED distribution"
+        : "✅ Used SKILL-BASED distribution",
+    );
+    return { ...result, trace: this.trace };
+  }
+
+  private static isDefender(player: EnrichedPlayer): boolean {
+    return (
+      player.position === "P" || (player as any).assignedRole === "defender"
+    );
+  }
+
+  /**
+   * Kenttäpelaajien vahvuus jääajalla painotettuna: keskimääräinen kentällinen
+   * jäällä (pienempi = vahvempi). Jäällä on kerrallaan 2 puolustajaa ja 3
+   * hyökkääjää, joten vajaan puolen pelaajat ovat jäällä useammin ja painavat
+   * enemmän. Maalivahdit eivät ole mukana: ne jaetaan erikseen.
+   *
+   * Taitotasoarvonnassa, tai kun toista roolia ei vielä ole, kaikki
+   * kenttäpelaajat jakavat viisi paikkaa tasan.
+   */
+  private static fieldStrength(
+    team: GeneratedTeamData,
+    extraPlayer?: EnrichedPlayer,
+  ): number {
+    const skaters = [
+      ...team.players.filter((p) => p.position !== "MV"),
+      ...(extraPlayer ? [extraPlayer] : []),
+    ];
+    if (skaters.length === 0) return 0;
+
+    const sum = (list: EnrichedPlayer[]) =>
+      list.reduce((total, p) => total + p.multiplier, 0);
+    const defenders = skaters.filter((p) => this.isDefender(p));
+    const attackers = skaters.filter((p) => !this.isDefender(p));
+
+    if (
+      !this.positionMode ||
+      defenders.length === 0 ||
+      attackers.length === 0
+    ) {
+      return (
+        (sum(skaters) / skaters.length) * (DEFENDER_SLOTS + ATTACKER_SLOTS)
+      );
+    }
+    return (
+      (sum(defenders) / defenders.length) * DEFENDER_SLOTS +
+      (sum(attackers) / attackers.length) * ATTACKER_SLOTS
+    );
+  }
+
+  private static strengthDifference(teams: GeneratedTeamData[]): number {
+    if (teams.length < 2) return 0;
+    return Math.abs(
+      this.fieldStrength(teams[0]) - this.fieldStrength(teams[1]),
+    );
+  }
+
+  private static tracePlayer(player: EnrichedPlayer): BalanceTracePlayer {
+    return {
+      id: player.id,
+      name: player.name,
+      position: player.position,
+      category: player.category,
+      multiplier: player.multiplier,
+    };
   }
 
   /**
@@ -271,8 +456,8 @@ export class TeamBalancer {
           );
         } else {
           // Equal cat1 count, use team average as tiebreaker
-          const teamA_avg = this.getTeamAverage(teams[0]);
-          const teamB_avg = this.getTeamAverage(teams[1]);
+          const teamA_avg = this.fieldStrength(teams[0]);
+          const teamB_avg = this.fieldStrength(teams[1]);
 
           if (teamA_avg >= teamB_avg) {
             targetTeamForBetter = teams[0];
@@ -290,8 +475,8 @@ export class TeamBalancer {
         }
       } else {
         // Categories 2 and 3: Use team average as before
-        const teamA_avg = this.getTeamAverage(teams[0]);
-        const teamB_avg = this.getTeamAverage(teams[1]);
+        const teamA_avg = this.fieldStrength(teams[0]);
+        const teamB_avg = this.fieldStrength(teams[1]);
 
         if (teamA_avg >= teamB_avg) {
           targetTeamForBetter = teams[0];
@@ -310,6 +495,16 @@ export class TeamBalancer {
 
       this.addPlayerToTeam(targetTeamForBetter, betterPlayer);
       this.addPlayerToTeam(targetTeamForWorse, worsePlayer);
+      this.trace.push({
+        kind: "pair",
+        role: "field",
+        category: categoryNum,
+        better: this.tracePlayer(betterPlayer),
+        betterTeam: targetTeamForBetter.name,
+        worse: this.tracePlayer(worsePlayer),
+        worseTeam: targetTeamForWorse.name,
+        randomized: player1.multiplier === player2.multiplier,
+      });
 
       // Log balance after each pair
       const teamA_total = teams[0].players.reduce(
@@ -339,6 +534,13 @@ export class TeamBalancer {
         const weakerTeam =
           teamA_cat1Count > teamB_cat1Count ? teams[1] : teams[0];
         this.addPlayerToTeam(weakerTeam, remainingPlayer);
+        this.trace.push({
+          kind: "single",
+          role: "field",
+          category: categoryNum,
+          player: this.tracePlayer(remainingPlayer),
+          team: weakerTeam.name,
+        });
         console.log(
           `Category ${categoryNum}: Remaining player (${remainingPlayer.name}) → ${weakerTeam.name} (fewer cat1 players)`,
         );
@@ -359,6 +561,13 @@ export class TeamBalancer {
         // that results in the smallest difference between team averages
         const targetTeam = this.pickTeamForOddPlayer(teams, remainingPlayer);
         this.addPlayerToTeam(targetTeam, remainingPlayer);
+        this.trace.push({
+          kind: "single",
+          role: "field",
+          category: categoryNum,
+          player: this.tracePlayer(remainingPlayer),
+          team: targetTeam.name,
+        });
         console.log(
           `Category ${categoryNum}: Remaining player (${remainingPlayer.name}) → ${targetTeam.name} (best balance by simulation)`,
         );
@@ -421,44 +630,22 @@ export class TeamBalancer {
   }
 
   /**
-   * Get team average multiplier (lower = better team)
-   */
-  private static getTeamAverage(team: GeneratedTeamData): number {
-    if (team.players.length === 0) return 0;
-
-    const totalMultiplier = team.players.reduce(
-      (sum, player) => sum + player.multiplier,
-      0,
-    );
-    return totalMultiplier / team.players.length;
-  }
-
-  /**
    * For an odd/remaining player, simulate placing them on each team and
-   * return the team where placement results in the smallest average difference.
+   * return the team where the on-ice strengths end up closest.
    */
   private static pickTeamForOddPlayer(
     teams: GeneratedTeamData[],
     player: EnrichedPlayer,
   ): GeneratedTeamData {
-    const totalA = teams[0].players.reduce((sum, p) => sum + p.multiplier, 0);
-    const totalB = teams[1].players.reduce((sum, p) => sum + p.multiplier, 0);
-    const countA = teams[0].players.length;
-    const countB = teams[1].players.length;
-    const m = player.multiplier;
-
-    // Simulate placing player on team A
-    const avgA_ifA = (totalA + m) / (countA + 1);
-    const avgB_ifA = countB > 0 ? totalB / countB : 0;
-    const diffIfA = Math.abs(avgA_ifA - avgB_ifA);
-
-    // Simulate placing player on team B
-    const avgA_ifB = countA > 0 ? totalA / countA : 0;
-    const avgB_ifB = (totalB + m) / (countB + 1);
-    const diffIfB = Math.abs(avgA_ifB - avgB_ifB);
+    const diffIfA = Math.abs(
+      this.fieldStrength(teams[0], player) - this.fieldStrength(teams[1]),
+    );
+    const diffIfB = Math.abs(
+      this.fieldStrength(teams[0]) - this.fieldStrength(teams[1], player),
+    );
 
     console.log(
-      `🎯 Odd player (${player.name}, mult=${m.toFixed(3)}): diff if→A=${diffIfA.toFixed(4)}, diff if→B=${diffIfB.toFixed(4)} → ${
+      `🎯 Odd player (${player.name}, mult=${player.multiplier.toFixed(3)}): diff if→A=${diffIfA.toFixed(4)}, diff if→B=${diffIfB.toFixed(4)} → ${
         diffIfA <= diffIfB ? teams[0].name : teams[1].name
       }`,
     );
@@ -470,7 +657,9 @@ export class TeamBalancer {
    * Count category 1 players in a team
    */
   private static countCategory1Players(team: GeneratedTeamData): number {
-    return team.players.filter((p) => p.category === 1).length;
+    // Maalivahdit jaetaan erikseen, joten ne eivät kuulu Cat 1 -tasapainoon
+    return team.players.filter((p) => p.category === 1 && p.position !== "MV")
+      .length;
   }
 
   /**
@@ -512,8 +701,8 @@ export class TeamBalancer {
       const goalkeeper2 = sortedGoalkeepers[i + 1]; // might be undefined
 
       // Calculate team averages
-      const teamA_avg = this.getTeamAverage(teams[0]);
-      const teamB_avg = this.getTeamAverage(teams[1]);
+      const teamA_avg = this.fieldStrength(teams[0]);
+      const teamB_avg = this.fieldStrength(teams[1]);
 
       // Weaker team gets the better goalkeeper
       const weakerTeam = teamA_avg >= teamB_avg ? teams[0] : teams[1];
@@ -550,16 +739,36 @@ export class TeamBalancer {
 
         this.addGoalkeeperToTeam(weakerTeam, betterGk);
         this.addGoalkeeperToTeam(strongerTeam, worseGk);
+        this.trace.push({
+          kind: "pair",
+          role: "goalkeeper",
+          better: this.tracePlayer(betterGk),
+          betterTeam: weakerTeam.name,
+          worse: this.tracePlayer(worseGk),
+          worseTeam: strongerTeam.name,
+          randomized: goalkeeper1.multiplier === goalkeeper2.multiplier,
+        });
 
         console.log(
           `Goalkeeper pair: Better player (${betterGk.name}) → ${weakerTeam.name} (weaker), Worse player (${worseGk.name}) → ${strongerTeam.name}`,
         );
       } else {
-        // Odd goalkeeper - simulate both placements and pick best balance
-        const targetTeam = this.pickTeamForOddPlayer(teams, goalkeeper1);
+        // Pariton maalivahti: joukkueelle, jolla maalivahteja on vähemmän,
+        // tasatilanteessa kenttäpelaajiltaan heikommalle. Maalivahteja ei
+        // verrata kenttäpelaajien vahvuuteen.
+        const gkA = teams[0].goalkeepers?.length || 0;
+        const gkB = teams[1].goalkeepers?.length || 0;
+        const targetTeam =
+          gkA !== gkB ? (gkA < gkB ? teams[0] : teams[1]) : weakerTeam;
         this.addGoalkeeperToTeam(targetTeam, goalkeeper1);
+        this.trace.push({
+          kind: "single",
+          role: "goalkeeper",
+          player: this.tracePlayer(goalkeeper1),
+          team: targetTeam.name,
+        });
         console.log(
-          `Goalkeeper single: Remaining player (${goalkeeper1.name}) → ${targetTeam.name} (best balance by simulation)`,
+          `Goalkeeper single: Remaining player (${goalkeeper1.name}) → ${targetTeam.name} (${gkA !== gkB ? "fewer goalkeepers" : "weaker field players"})`,
         );
       }
 
@@ -607,76 +816,24 @@ export class TeamBalancer {
   }
 
   /**
-   * Calculate how balanced the teams are (0-100 score) based on average multiplier
+   * Tasapainopisteet 0–100 kenttäpelaajien jääaikapainotetun vahvuuden
+   * perusteella: 100 = tasan, 1 % ero = 99 pistettä. Maalivahdit eivät ole
+   * mukana, koska ne jaetaan omalla säännöllään.
    */
   private static calculateBalanceScore(teams: GeneratedTeamData[]): number {
-    console.log("🔍 calculateBalanceScore called with teams:", teams.length);
+    if (teams.length < 2) return 100;
 
-    if (teams.length === 0) {
-      console.log("❌ No teams provided");
-      return 0;
-    }
+    const strengths = teams.map((team) => this.fieldStrength(team));
+    const difference = Math.abs(strengths[0] - strengths[1]);
+    const mean = (strengths[0] + strengths[1]) / 2;
 
-    // Calculate average multiplier for each team
-    const teamAvgMultipliers = teams.map((team) => {
-      if (team.players.length === 0) return 0;
-      const totalMultiplier = team.players.reduce(
-        (sum, p) => sum + (p.multiplier || 1.0),
-        0,
-      );
-      const avgMultiplier = totalMultiplier / team.players.length;
-      console.log(
-        `Team ${team.name}: ${team.players.length} players, avg multiplier ${avgMultiplier.toFixed(3)}`,
-      );
-      return avgMultiplier;
-    });
+    if (difference === 0 || mean === 0) return 100;
 
+    const percentageDifference = (difference / mean) * 100;
     console.log(
-      "📊 All team avg multipliers:",
-      teamAvgMultipliers.map((m) => m.toFixed(3)),
+      `🎯 Balance: on-ice strength ${strengths.map((v) => v.toFixed(3)).join(" vs ")}, difference ${percentageDifference.toFixed(2)}%`,
     );
-
-    if (teamAvgMultipliers.length < 2) {
-      console.log("⚠️ Less than 2 teams, returning 100");
-      return 100;
-    }
-
-    // Calculate the difference between highest and lowest average multipliers
-    const maxAvg = Math.max(...teamAvgMultipliers);
-    const minAvg = Math.min(...teamAvgMultipliers);
-    const avgDifference = maxAvg - minAvg;
-    const overallAverage =
-      teamAvgMultipliers.reduce((sum, avg) => sum + avg, 0) / teams.length;
-
-    console.log("🎯 Balance Score Calculation:", {
-      teamAvgMultipliers: teamAvgMultipliers.map((m) => m.toFixed(3)),
-      maxAvg: maxAvg.toFixed(3),
-      minAvg: minAvg.toFixed(3),
-      avgDifference: avgDifference.toFixed(3),
-      overallAverage: overallAverage.toFixed(3),
-    });
-
-    // If there's no difference, perfect balance
-    if (avgDifference === 0) {
-      console.log("✅ Perfect balance - no difference");
-      return 100;
-    }
-
-    // Calculate percentage difference relative to overall average
-    const percentageDifference = (avgDifference / overallAverage) * 100;
-
-    console.log(
-      "📊 Percentage difference:",
-      percentageDifference.toFixed(2) + "%",
-    );
-
-    // Balance score: 100 means perfect balance, decreases as difference increases
-    // 5% difference = 95 points, 10% difference = 90 points, etc.
-    const balanceScore = Math.max(0, 100 - percentageDifference);
-
-    console.log("🎯 Final balance score:", Math.round(balanceScore));
-
-    return Math.round(balanceScore);
+    return Math.round(Math.max(0, 100 - percentageDifference));
   }
 
   /**
@@ -703,8 +860,13 @@ export class TeamBalancer {
       const source = cat1A > cat1B ? teamA : teamB;
       const target = cat1A > cat1B ? teamB : teamA;
 
-      const sourceCat1 = source.players.filter((p) => p.category === 1);
-      const targetNonCat1 = target.players.filter((p) => p.category !== 1);
+      // Maalivahdit jaetaan omalla säännöllään, eivätkä ne ole vaihdossa mukana
+      const sourceCat1 = source.players.filter(
+        (p) => p.category === 1 && p.position !== "MV",
+      );
+      const targetNonCat1 = target.players.filter(
+        (p) => p.category !== 1 && p.position !== "MV",
+      );
 
       if (sourceCat1.length === 0) {
         return;
@@ -713,18 +875,32 @@ export class TeamBalancer {
       // Vaihto tehdään saman roolin pelaajien kesken (puolustaja ↔
       // puolustaja, hyökkääjä ↔ hyökkääjä). Muuten puolustajamäärät ja
       // huonoimman puolustajan paikka voisivat muuttua jaon jälkeen.
-      const isDefender = (p: EnrichedPlayer) =>
-        p.position === "P" || (p as any).assignedRole === "defender";
+      // Mahdollisista vaihdoista valitaan se, joka jättää joukkueet jäällä
+      // tasaisimmiksi.
+      const isDefender = (p: EnrichedPlayer) => this.isDefender(p);
+      const withSwap = (
+        team: GeneratedTeamData,
+        out: EnrichedPlayer,
+        incoming: EnrichedPlayer,
+      ): GeneratedTeamData => ({
+        ...team,
+        players: [...team.players.filter((p) => p.id !== out.id), incoming],
+      });
       let cat1ToMove: EnrichedPlayer | undefined;
       let nonCat1ToMove: EnrichedPlayer | undefined;
+      let bestDifference = Infinity;
       for (const candidate of sourceCat1) {
-        const match = targetNonCat1.find(
-          (p) => isDefender(p) === isDefender(candidate),
-        );
-        if (match) {
-          cat1ToMove = candidate;
-          nonCat1ToMove = match;
-          break;
+        for (const match of targetNonCat1) {
+          if (isDefender(match) !== isDefender(candidate)) continue;
+          const difference = Math.abs(
+            this.fieldStrength(withSwap(source, candidate, match)) -
+              this.fieldStrength(withSwap(target, match, candidate)),
+          );
+          if (difference < bestDifference) {
+            bestDifference = difference;
+            cat1ToMove = candidate;
+            nonCat1ToMove = match;
+          }
         }
       }
       if (!cat1ToMove) {
@@ -762,6 +938,13 @@ export class TeamBalancer {
 
         this.addPlayerToTeam(source, nonCat1ToMove as EnrichedPlayer);
         this.addPlayerToTeam(target, cat1ToMove as EnrichedPlayer);
+        this.trace.push({
+          kind: "swap",
+          first: this.tracePlayer(cat1ToMove),
+          firstTeam: target.name,
+          second: this.tracePlayer(nonCat1ToMove),
+          secondTeam: source.name,
+        });
       } else {
         // Fallback: just move cat1 player to target (sizes may differ by 1)
         console.log(
@@ -770,6 +953,13 @@ export class TeamBalancer {
 
         removeFromTeam(source, cat1ToMove.id);
         this.addPlayerToTeam(target, cat1ToMove as EnrichedPlayer);
+        this.trace.push({
+          kind: "single",
+          role: "field",
+          category: 1,
+          player: this.tracePlayer(cat1ToMove),
+          team: target.name,
+        });
       }
 
       // Refresh references in case arrays were reassigned
@@ -1234,8 +1424,8 @@ export class TeamBalancer {
       }
 
       // Calculate which team is weaker
-      const team0Strength = this.getTeamAverage(teams[0]);
-      const team1Strength = this.getTeamAverage(teams[1]);
+      const team0Strength = this.fieldStrength(teams[0]);
+      const team1Strength = this.fieldStrength(teams[1]);
       const weakerTeam = team0Strength > team1Strength ? teams[0] : teams[1];
       const strongerTeam = team0Strength > team1Strength ? teams[1] : teams[0];
 
@@ -1270,6 +1460,15 @@ export class TeamBalancer {
 
         this.addPlayerToTeam(weakerTeam, betterDefender);
         this.addPlayerToTeam(strongerTeam, worseDefender);
+        this.trace.push({
+          kind: "pair",
+          role: "defender",
+          better: this.tracePlayer(betterDefender),
+          betterTeam: weakerTeam.name,
+          worse: this.tracePlayer(worseDefender),
+          worseTeam: strongerTeam.name,
+          randomized: defender1.multiplier === defender2.multiplier,
+        });
 
         // Get position info for logging (mark H/P as hybrid)
         const betterPos = betterDefender.position === "H/P" ? "H/P" : "P";
@@ -1286,6 +1485,12 @@ export class TeamBalancer {
           `Defender single: Remaining player (${defender1.name}${defPos === "H/P" ? " [H/P]" : ""}) → ${targetTeam.name} (best balance by simulation)`,
         );
         this.addPlayerToTeam(targetTeam, defender1);
+        this.trace.push({
+          kind: "single",
+          role: "defender",
+          player: this.tracePlayer(defender1),
+          team: targetTeam.name,
+        });
       }
 
       // Log balance after each pair/single
@@ -1317,6 +1522,12 @@ export class TeamBalancer {
         `Defender single: Remaining player (${extraDefender.name}${extraDefender.position === "H/P" ? " [H/P]" : ""}) → ${targetTeam.name} (weakest defender to the side with more defenders)`,
       );
       this.addPlayerToTeam(targetTeam, extraDefender);
+      this.trace.push({
+        kind: "single",
+        role: "defender",
+        player: this.tracePlayer(extraDefender),
+        team: targetTeam.name,
+      });
     }
 
     return usedHybrids;

@@ -264,7 +264,45 @@ export interface TeamBalanceResult {
   balanceScore: number; // How balanced the teams are (0-100)
   unusedPlayers: EnrichedPlayer[];
   warnings: string[];
+  // Arvonnan kulku vaihe vaiheelta (webin TeamBalancer-testisivu näyttää sen)
+  trace?: BalanceTraceStep[];
 }
+
+export interface BalanceTracePlayer {
+  id: string;
+  name: string;
+  position: string;
+  category: number;
+  multiplier: number;
+}
+
+// Yksi arvonnan vaihe: pari jaetaan joukkueisiin (parempi heikommalle),
+// yksittäinen pelaaja sijoitetaan, tai tasapainotus vaihtaa kaksi pelaajaa
+export type BalanceTraceStep =
+  | {
+      kind: "pair";
+      role: "defender" | "field" | "goalkeeper";
+      category?: number;
+      better: BalanceTracePlayer;
+      betterTeam: string;
+      worse: BalanceTracePlayer;
+      worseTeam: string;
+      randomized: boolean; // sama kerroin, paremmuus arvottiin
+    }
+  | {
+      kind: "single";
+      role: "defender" | "field" | "goalkeeper";
+      category?: number;
+      player: BalanceTracePlayer;
+      team: string;
+    }
+  | {
+      kind: "swap";
+      first: BalanceTracePlayer;
+      firstTeam: string; // joukkue, johon first siirtyi
+      second: BalanceTracePlayer;
+      secondTeam: string;
+    };
 
 // Navigation types
 export type RootStackParamList = {
