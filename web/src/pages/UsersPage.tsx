@@ -105,6 +105,7 @@ export default function UsersPage() {
     teamAdminIds: [] as string[], // Which teams user is admin in
     teamSkills: {} as User["teamSkills"],
     teamMember: {} as User["teamMember"],
+    extraPlayer: {} as NonNullable<User["extraPlayer"]>,
   });
 
   const [addForm, setAddForm] = useState({
@@ -220,6 +221,7 @@ export default function UsersPage() {
       teamAdminIds: userTeamAdminIds,
       teamSkills: user.teamSkills || {},
       teamMember: user.teamMember || {},
+      extraPlayer: user.extraPlayer || {},
     });
     setEditDialogOpen(true);
   };
@@ -261,6 +263,7 @@ export default function UsersPage() {
         teamIds: editForm.teamIds,
         teamSkills,
         teamMember: editForm.teamMember,
+        extraPlayer: editForm.extraPlayer,
       });
 
       // Update team adminIds based on teamAdminIds array
@@ -606,6 +609,8 @@ export default function UsersPage() {
       sortable: false,
       renderCell: (params) => {
         if (!selectedTeam || selectedTeam === "all") return "-";
+        // Lisäpelaaja ei tarvitse taitotasoa
+        if (params.row.extraPlayer?.[selectedTeam] === true) return "";
         const status = skillStatus(params.row, selectedTeam);
         if (status === "rated") return "";
         return (
@@ -1378,7 +1383,7 @@ export default function UsersPage() {
                   <Box
                     sx={{
                       display: "grid",
-                      gridTemplateColumns: "1fr 1fr 1fr",
+                      gridTemplateColumns: "1fr 1fr 1fr 1fr",
                       gap: 2,
                       mb: 1,
                     }}
@@ -1390,13 +1395,16 @@ export default function UsersPage() {
                       Vakiokävijä
                     </Typography>
                     <Typography variant="body2" fontWeight={600}>
+                      Lisäpelaaja
+                    </Typography>
+                    <Typography variant="body2" fontWeight={600}>
                       Admin
                     </Typography>
                   </Box>
                   <Box
                     sx={{
                       display: "grid",
-                      gridTemplateColumns: "1fr 1fr 1fr",
+                      gridTemplateColumns: "1fr 1fr 1fr 1fr",
                       gap: 2,
                     }}
                   >
@@ -1440,6 +1448,25 @@ export default function UsersPage() {
                               ...editForm,
                               teamMember: {
                                 ...editForm.teamMember,
+                                [selectedTeam]: e.target.checked,
+                              },
+                            });
+                          }}
+                        />
+                      }
+                      label="Kyllä"
+                    />
+                    <FormControlLabel
+                      title="Ilmoittautuu kuten muut, mutta ei vie paikkaa eikä ole mukana joukkueiden tasapainotuksessa. Arvonnassa lisätään lopuksi vajaammalle puolelle."
+                      control={
+                        <Checkbox
+                          checked={editForm.extraPlayer?.[selectedTeam] === true}
+                          disabled={!editForm.teamIds.includes(selectedTeam)}
+                          onChange={(e) => {
+                            setEditForm({
+                              ...editForm,
+                              extraPlayer: {
+                                ...editForm.extraPlayer,
                                 [selectedTeam]: e.target.checked,
                               },
                             });
@@ -1546,13 +1573,14 @@ export default function UsersPage() {
                 <Typography variant="subtitle2" gutterBottom>
                   Joukkuekohtaiset taidot
                 </Typography>
-                {skillStatus(
-                  {
-                    positions: editForm.positions,
-                    teamSkills: editForm.teamSkills,
-                  },
-                  selectedTeam,
-                ) !== "rated" && (
+                {editForm.extraPlayer?.[selectedTeam] !== true &&
+                  skillStatus(
+                    {
+                      positions: editForm.positions,
+                      teamSkills: editForm.teamSkills,
+                    },
+                    selectedTeam,
+                  ) !== "rated" && (
                   <Alert severity="warning" sx={{ mb: 1.5 }}>
                     Taitotasoa ei ole arvioitu tälle joukkueelle. Tarkista
                     arvot – tallennus hyväksyy ne.

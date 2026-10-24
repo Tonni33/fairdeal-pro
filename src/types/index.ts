@@ -59,6 +59,11 @@ export interface Player {
   teamMember?: {
     [teamId: string]: boolean; // true = regular member, false = occasional/guest
   };
+  // Lisäpelaaja joukkueittain: ilmoittautuu kuten muut, mutta ei vie paikkaa
+  // eikä ole mukana joukkueiden tasapainotuksessa (lisätään arvonnan lopuksi)
+  extraPlayer?: {
+    [teamId: string]: boolean;
+  };
   notes?: string; // Additional notes about player
   createdBy?: string; // User ID who created the player
   updatedAt?: Date;
@@ -71,6 +76,7 @@ export interface EnrichedPlayer extends Player {
   position: string; // Primary position for this event (H/P/MV)
   points: number; // Computed: multiplier * 100
   assignedRole?: "defender" | "attacker"; // Role assigned during position-based team generation
+  isExtra?: boolean; // Lisäpelaaja: ei tasapainotukseen, lisätään lopuksi vajaammalle puolelle
 }
 
 // Team types (from teams collection)
@@ -173,6 +179,9 @@ export interface Event {
   maxPlayers: number;
   maxGoalkeepers?: number; // Maximum number of goalkeepers
   registeredPlayers?: string[]; // User/Player IDs from users collection
+  // Ilmoittautuneista ne (enintään 2), jotka ovat lisäpelaajia: kukin kasvattaa
+  // kenttäpelaajien enimmäismäärää yhdellä
+  extraPlayerIds?: string[];
   reservePlayers?: string[]; // User/Player IDs in reserve queue
   absentPlayers?: string[]; // User/Player IDs who have registered as absent
   absentReasons?: Record<string, string>; // Player ID -> reason for absence
@@ -291,7 +300,7 @@ export type BalanceTraceStep =
     }
   | {
       kind: "single";
-      role: "defender" | "field" | "goalkeeper";
+      role: "defender" | "field" | "goalkeeper" | "extra";
       category?: number;
       player: BalanceTracePlayer;
       team: string;

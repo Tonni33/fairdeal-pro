@@ -37,6 +37,12 @@ import { useAuth } from "../contexts/AuthContext";
 import { useApp, getUserTeams } from "../contexts/AppContext";
 import AdminMenuButton from "../components/AdminMenuButton";
 import { UpdateStatusButton } from "../components/UpdateStatusButton";
+import {
+  MAX_EXTRA_PLAYERS,
+  eventExtraPlayerIds,
+  fieldPlayerLimit,
+  isTeamExtraPlayer,
+} from "../utils/extraPlayers";
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -514,12 +520,14 @@ const HomeScreen: React.FC = () => {
       // Check if current player is a team member - fetch from Firestore for accuracy
       const teamId = nextEvent.teamId || "";
       let isTeamMember = false;
+      let isExtra = isTeamExtraPlayer(currentPlayer, teamId);
       if (teamId && playerIdToUse) {
         try {
           const userRef = doc(db, "users", playerIdToUse);
           const userSnap = await getDoc(userRef);
           if (userSnap.exists()) {
             const userData = userSnap.data();
+            isExtra = isTeamExtraPlayer(userData, teamId);
             const teamMemberValue = userData.teamMember?.[teamId];
             isTeamMember = teamMemberValue === true;
             console.log(
@@ -555,6 +563,7 @@ const HomeScreen: React.FC = () => {
         // Unregister from main registration
         await updateDoc(eventRef, {
           registeredPlayers: arrayRemove(playerIdToUse),
+          extraPlayerIds: arrayRemove(playerIdToUse),
         });
 
         // Vapautuneen paikan täyttää palvelin (promoteReservesOnEventUpdate),
@@ -584,6 +593,29 @@ const HomeScreen: React.FC = () => {
         const eventData = eventDoc.data();
         const currentRegistered = eventData?.registeredPlayers || [];
         const currentReserves = eventData?.reservePlayers || [];
+        const currentExtras = eventExtraPlayerIds({
+          registeredPlayers: currentRegistered,
+          extraPlayerIds: eventData?.extraPlayerIds,
+        });
+
+        // Lisäpelaaja ei vie paikkaa: hän pääsee mukaan aina, kunhan
+        // vuorossa ei ole jo enimmäismäärää lisäpelaajia
+        if (isExtra) {
+          if (currentExtras.length >= MAX_EXTRA_PLAYERS) {
+            Alert.alert(
+              "Lisäpelaajat täynnä",
+              `Vuorossa on jo ${MAX_EXTRA_PLAYERS} lisäpelaajaa.`,
+            );
+            return;
+          }
+          await updateDoc(eventRef, {
+            registeredPlayers: arrayUnion(playerIdToUse),
+            extraPlayerIds: arrayUnion(playerIdToUse),
+          });
+          setIsRegistered(true);
+          Alert.alert("Onnistui", "Ilmoittautuminen tallennettu");
+          return;
+        }
 
         // Create event object with playerRoles for role checking
         const eventWithRoles = {
@@ -612,7 +644,8 @@ const HomeScreen: React.FC = () => {
         const isEventFull = isGoalkeeper
           ? nextEvent.maxGoalkeepers &&
             currentGoalkeepers.length >= nextEvent.maxGoalkeepers
-          : currentFieldPlayers.length >= nextEvent.maxPlayers;
+          : currentFieldPlayers.length - currentExtras.length >=
+            nextEvent.maxPlayers;
 
         console.log("🎯 Registration decision factors:", {
           playerName: currentPlayer.name,
@@ -867,7 +900,11 @@ const HomeScreen: React.FC = () => {
             getGoalkeepers(currentRegistered, eventWithRoles).length >=
               eventData.maxGoalkeepers
           : typeof eventData?.maxPlayers === "number" &&
-            getFieldPlayers(currentRegistered, eventWithRoles).length >=
+            getFieldPlayers(currentRegistered, eventWithRoles).length -
+              eventExtraPlayerIds({
+                registeredPlayers: currentRegistered,
+                extraPlayerIds: eventData?.extraPlayerIds,
+              }).length >=
               eventData.maxPlayers;
 
       if (isFull) {
@@ -1390,7 +1427,7 @@ const HomeScreen: React.FC = () => {
                           nextEvent,
                         ).length
                       }{" "}
-                      / {nextEvent.maxPlayers} KP
+                      / {fieldPlayerLimit(nextEvent)} KP
                     </Text>
                     {(nextEvent.maxGoalkeepers ?? 0) > 0 && (
                       <Text style={{ color: "#4caf50", fontWeight: "500" }}>
@@ -1419,7 +1456,7 @@ const HomeScreen: React.FC = () => {
                                 nextEvent.registeredPlayers || [],
                                 nextEvent,
                               ).length) /
-                              (nextEvent.maxPlayers +
+                              ((fieldPlayerLimit(nextEvent) || 0) +
                                 (nextEvent.maxGoalkeepers || 0))) *
                               100,
                             100,
@@ -1433,7 +1470,7 @@ const HomeScreen: React.FC = () => {
                                 nextEvent.registeredPlayers || [],
                                 nextEvent,
                               ).length >=
-                            nextEvent.maxPlayers +
+                            (fieldPlayerLimit(nextEvent) || 0) +
                               (nextEvent.maxGoalkeepers || 0)
                               ? "#f44336"
                               : (getFieldPlayers(
@@ -1444,7 +1481,7 @@ const HomeScreen: React.FC = () => {
                                       nextEvent.registeredPlayers || [],
                                       nextEvent,
                                     ).length) /
-                                    (nextEvent.maxPlayers +
+                                    ((fieldPlayerLimit(nextEvent) || 0) +
                                       (nextEvent.maxGoalkeepers || 0)) >
                                   0.8
                                 ? "#ff9800"
@@ -1644,7 +1681,7 @@ const HomeScreen: React.FC = () => {
                                 nextEvent,
                               ).length
                             }{" "}
-                            / {nextEvent.maxPlayers} KP
+                            / {fieldPlayerLimit(nextEvent)} KP
                           </Text>
                           {(nextEvent.maxGoalkeepers ?? 0) > 0 && (
                             <Text

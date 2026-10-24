@@ -42,6 +42,10 @@ export interface User {
   teamMember?: {
     [teamId: string]: boolean;
   };
+  // Lisäpelaaja joukkueittain (ks. mobiilisovelluksen tyypit)
+  extraPlayer?: {
+    [teamId: string]: boolean;
+  };
   // Laitteen raportoima versiotieto (natiiviappi kirjaa tämän kirjautuessa)
   appInfo?: {
     runtimeVersion?: string | null;
@@ -97,6 +101,7 @@ export interface Event {
   createdBy: string;
   createdAt: string;
   registeredPlayers: string[];
+  extraPlayerIds?: string[];
   reservePlayers?: string[];
   absentPlayers?: string[];
   absentReasons?: Record<string, string>;

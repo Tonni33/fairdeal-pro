@@ -27,6 +27,7 @@ import { RootStackParamList, Team, Player } from "../types";
 import { db, functions, auth } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import { DEFAULT_SKILL, skillStatus } from "../utils/skillStatus";
+import { isTeamExtraPlayer } from "../utils/extraPlayers";
 import {
   useApp,
   getUserTeams,
@@ -174,6 +175,8 @@ const UserManagementScreen: React.FC = () => {
   const [editCategory, setEditCategory] = useState(1);
   const [editMultiplier, setEditMultiplier] = useState(1.0);
   const [editTeamMember, setEditTeamMember] = useState(true); // Vakiokävijä-status
+  // Lisäpelaaja: ei vie paikkaa eikä ole mukana joukkueiden tasapainotuksessa
+  const [editExtraPlayer, setEditExtraPlayer] = useState(false);
   const [originalTeamMember, setOriginalTeamMember] = useState<boolean | null>(
     null,
   ); // Onko arvo ollut Firestoressa (true/false) vai ei asetettu
@@ -341,6 +344,7 @@ const UserManagementScreen: React.FC = () => {
           typeof initialTeamMember === "boolean" ? initialTeamMember : null,
         );
         setEditTeamMember(initialTeamMember === true);
+        setEditExtraPlayer(isTeamExtraPlayer(freshPlayer, selectedTeam));
 
         console.log("Opening modal with fresh teamMember data:", {
           playerId: freshPlayer.id,
@@ -401,6 +405,7 @@ const UserManagementScreen: React.FC = () => {
           typeof initialTeamMember === "boolean" ? initialTeamMember : null,
         );
         setEditTeamMember(initialTeamMember === true);
+        setEditExtraPlayer(isTeamExtraPlayer(player, selectedTeam));
       } else {
         const positions = player.positions;
         setEditPositions(positions);
@@ -661,6 +666,8 @@ const UserManagementScreen: React.FC = () => {
         const teamMemberChanged =
           currentTeamMember === undefined ||
           editTeamMember !== currentTeamMember;
+        const extraPlayerChanged =
+          editExtraPlayer !== isTeamExtraPlayer(selectedPlayer, selectedTeam);
 
         // Tarkista onko taidot muuttuneet nykyisistä taidoista
         const currentFieldCategory = currentTeamSkills?.field?.category || 2;
@@ -721,7 +728,7 @@ const UserManagementScreen: React.FC = () => {
           teamMemberChanged,
         });
 
-        if (skillsChanged || teamMemberChanged) {
+        if (skillsChanged || teamMemberChanged || extraPlayerChanged) {
           console.log("💾 Saving team skills to Firestore...");
 
           // Optimistic update - päivitä local state heti
@@ -785,6 +792,10 @@ const UserManagementScreen: React.FC = () => {
             ...currentTeamMember,
             [selectedTeam]: editTeamMember,
           };
+          const updatedExtraPlayer = {
+            ...(freshPlayerData?.extraPlayer || {}),
+            [selectedTeam]: editExtraPlayer,
+          };
 
           console.log(
             "Saving team skills and member status to user document:",
@@ -801,6 +812,7 @@ const UserManagementScreen: React.FC = () => {
           await updateDoc(playerRef, {
             teamSkills: updatedTeamSkills,
             teamMember: updatedTeamMember,
+            extraPlayer: updatedExtraPlayer,
           });
 
           // Päivitä myös selectedPlayer state jotta modal näyttää oikean datan
@@ -808,6 +820,7 @@ const UserManagementScreen: React.FC = () => {
             ...selectedPlayer,
             teamSkills: updatedTeamSkills,
             teamMember: updatedTeamMember,
+            extraPlayer: updatedExtraPlayer,
           });
 
           // Joukkueiden lisäys/poisto kirjoittaa teamSkillsin alempana
@@ -1250,6 +1263,7 @@ const UserManagementScreen: React.FC = () => {
                   const hasTeamSkills = Boolean(teamSkills);
                   const needsRating =
                     Boolean(selectedTeam) &&
+                    !isTeamExtraPlayer(player, selectedTeam) &&
                     skillStatus(player, selectedTeam) !== "rated";
 
                   // Määritä rooli joukkuekohtaisesti
@@ -1569,6 +1583,7 @@ const UserManagementScreen: React.FC = () => {
 
               {selectedTeam &&
                 selectedPlayer &&
+                !editExtraPlayer &&
                 skillStatus(
                   {
                     positions: editPositions,
@@ -1807,6 +1822,56 @@ const UserManagementScreen: React.FC = () => {
                 </View>
               )}
 
+              {/* Lisäpelaaja - näytetään vain kun joukkue on valittu */}
+              {selectedTeam && (
+                <View style={styles.editInputGroup}>
+                  <Text style={styles.label}>Lisäpelaaja</Text>
+                  <TouchableOpacity
+                    style={styles.selector}
+                    onPress={() =>
+                      setEditDropdown(
+                        editDropdown === "extraPlayer" ? null : "extraPlayer",
+                      )
+                    }
+                  >
+                    <Text style={styles.selectorText}>
+                      {editExtraPlayer ? "Kyllä" : "Ei"}
+                    </Text>
+                    <Ionicons name="chevron-down" size={20} color="#666" />
+                  </TouchableOpacity>
+                  {editDropdown === "extraPlayer" && (
+                    <View style={styles.dropdownList}>
+                      {[true, false].map((value) => (
+                        <TouchableOpacity
+                          key={String(value)}
+                          style={styles.dropdownOption}
+                          onPress={() => {
+                            setEditExtraPlayer(value);
+                            setEditDropdown(null);
+                          }}
+                        >
+                          <Text style={styles.optionText}>
+                            {value ? "Kyllä" : "Ei"}
+                          </Text>
+                          {editExtraPlayer === value && (
+                            <Ionicons
+                              name="checkmark"
+                              size={20}
+                              color="#007AFF"
+                            />
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                  <Text style={styles.extraPlayerHint}>
+                    Ilmoittautuu kuten muut, mutta ei vie paikkaa eikä ole
+                    mukana joukkueiden tasapainotuksessa. Arvonnassa lisätään
+                    lopuksi vajaammalle puolelle.
+                  </Text>
+                </View>
+              )}
+
               {/* Role */}
               <View style={styles.editInputGroup}>
                 <Text style={styles.label}>Rooli</Text>
@@ -1990,6 +2055,11 @@ const styles = StyleSheet.create({
   },
   playerInfo: {
     flex: 1,
+  },
+  extraPlayerHint: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 6,
   },
   unratedNotice: {
     flexDirection: "row",

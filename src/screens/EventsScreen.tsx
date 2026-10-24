@@ -34,6 +34,12 @@ import { db } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import { useApp, getUserTeams } from "../contexts/AppContext";
 import AdminMenuButton from "../components/AdminMenuButton";
+import {
+  MAX_EXTRA_PLAYERS,
+  eventExtraPlayerIds,
+  fieldPlayerLimit,
+  isTeamExtraPlayer,
+} from "../utils/extraPlayers";
 
 type EventsScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -625,6 +631,7 @@ const EventsScreen: React.FC = () => {
       // Check if current player is a team member - fetch from Firestore for accuracy
       const teamId = selectedEvent.teamId || "";
       let isTeamMember = false;
+      let isExtra = isTeamExtraPlayer(currentPlayer, teamId);
       if (teamId && currentPlayer.id) {
         try {
           const userRef = doc(db, "users", currentPlayer.id);
@@ -632,6 +639,7 @@ const EventsScreen: React.FC = () => {
           if (userSnap.exists()) {
             const userData = userSnap.data();
             isTeamMember = userData.teamMember?.[teamId] === true;
+            isExtra = isTeamExtraPlayer(userData, teamId);
             console.log(
               `TeamMember check for ${currentPlayer.id} in team ${teamId}:`,
               isTeamMember,
@@ -648,6 +656,7 @@ const EventsScreen: React.FC = () => {
         // Unregister from main registration
         await updateDoc(eventRef, {
           registeredPlayers: arrayRemove(currentPlayer.id),
+          extraPlayerIds: arrayRemove(currentPlayer.id),
         });
 
         // Vapautuneen paikan täyttää palvelin (promoteReservesOnEventUpdate),
@@ -680,6 +689,29 @@ const EventsScreen: React.FC = () => {
         const eventDoc = await getDoc(eventRef);
         const eventData = eventDoc.data();
         const currentRegistered = eventData?.registeredPlayers || [];
+        const currentExtras = eventExtraPlayerIds({
+          registeredPlayers: currentRegistered,
+          extraPlayerIds: eventData?.extraPlayerIds,
+        });
+
+        // Lisäpelaaja ei vie paikkaa: hän pääsee mukaan aina, kunhan
+        // vuorossa ei ole jo enimmäismäärää lisäpelaajia
+        if (isExtra) {
+          if (currentExtras.length >= MAX_EXTRA_PLAYERS) {
+            Alert.alert(
+              "Lisäpelaajat täynnä",
+              `Vuorossa on jo ${MAX_EXTRA_PLAYERS} lisäpelaajaa.`,
+            );
+            return;
+          }
+          await updateDoc(eventRef, {
+            registeredPlayers: arrayUnion(currentPlayer.id),
+            extraPlayerIds: arrayUnion(currentPlayer.id),
+          });
+          setIsRegistered(true);
+          Alert.alert("Onnistui", "Ilmoittautuminen tallennettu");
+          return;
+        }
 
         // Create event object with playerRoles for role checking
         const eventWithRoles = {
@@ -705,10 +737,12 @@ const EventsScreen: React.FC = () => {
           !currentPlayer.positions.some((pos: string) =>
             ["H", "P", "H/P"].includes(pos),
           );
+        // Lisäpelaajat eivät vie kenttäpelaajien paikkoja
         const isEventFull = isGoalkeeper
           ? selectedEvent.maxGoalkeepers &&
             currentGoalkeepers.length >= selectedEvent.maxGoalkeepers
-          : currentFieldPlayers.length >= selectedEvent.maxPlayers;
+          : currentFieldPlayers.length - currentExtras.length >=
+            selectedEvent.maxPlayers;
 
         // Check if guest is trying to register to main list before threshold
         if (
@@ -1013,7 +1047,11 @@ const EventsScreen: React.FC = () => {
             getGoalkeepers(currentRegistered, eventWithRoles).length >=
               eventData.maxGoalkeepers
           : typeof eventData?.maxPlayers === "number" &&
-            getFieldPlayers(currentRegistered, eventWithRoles).length >=
+            getFieldPlayers(currentRegistered, eventWithRoles).length -
+              eventExtraPlayerIds({
+                registeredPlayers: currentRegistered,
+                extraPlayerIds: eventData?.extraPlayerIds,
+              }).length >=
               eventData.maxPlayers;
 
       if (isFull) {
@@ -1242,7 +1280,7 @@ const EventsScreen: React.FC = () => {
             />
             <Text style={styles.participantCount}>
               <Text style={{ color: "#1976d2", fontWeight: "500" }}>
-                {fieldPlayerCount}/{item.maxPlayers || "∞"} KP
+                {fieldPlayerCount}/{fieldPlayerLimit(item) || "∞"} KP
               </Text>
               {(item.maxGoalkeepers ?? 0) > 0 && (
                 <Text style={{ color: "#4caf50", fontWeight: "500" }}>
@@ -1591,7 +1629,7 @@ const EventsScreen: React.FC = () => {
                             selectedEvent,
                           ).length
                         }
-                        /{selectedEvent.maxPlayers || "∞"} KP
+                        /{fieldPlayerLimit(selectedEvent) || "∞"} KP
                       </Text>
                     </Text>
                     {(selectedEvent.maxGoalkeepers ?? 0) > 0 && (

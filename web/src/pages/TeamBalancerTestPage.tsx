@@ -57,6 +57,7 @@ import type {
   BalanceTraceStep,
 } from "@shared/types";
 import { TeamBalancer } from "@shared/utils/teamBalancer";
+import { eventExtraPlayerIds } from "@shared/utils/extraPlayers";
 
 // Extended event interface for this page
 interface EventData {
@@ -65,6 +66,7 @@ interface EventData {
   date: Date;
   teamId: string;
   registeredPlayers: string[];
+  extraPlayerIds?: string[];
   playerRoles?: Record<string, string>;
   maxPlayers: number;
   maxGoalkeepers?: number;
@@ -344,6 +346,7 @@ export default function TeamBalancerTestPage() {
           date: eventDate,
           teamId,
           registeredPlayers: data.registeredPlayers || [],
+          extraPlayerIds: data.extraPlayerIds || [],
           playerRoles: data.playerRoles || {},
           maxPlayers: data.maxPlayers || 20,
           maxGoalkeepers: data.maxGoalkeepers || 2,
@@ -449,9 +452,11 @@ export default function TeamBalancerTestPage() {
           ? "P"
           : step.role === "goalkeeper"
             ? "MV"
-            : step.kind === "single"
-              ? "Yksittainen"
-              : `Kategoria ${step.category}`;
+            : step.role === "extra"
+              ? "Lisä"
+              : step.kind === "single"
+                ? "Yksittainen"
+                : `Kategoria ${step.category}`;
       const category = step.role === "field" ? step.category || 0 : 0;
 
       if (step.kind === "single") {
@@ -625,6 +630,8 @@ export default function TeamBalancerTestPage() {
           points: category, // Use category as points
           multiplier,
           assignedRole: undefined,
+          // Lisäpelaaja lisätään arvonnan lopuksi vajaammalle puolelle
+          isExtra: eventExtraPlayerIds(event).includes(playerId),
         });
       }
 
@@ -994,7 +1001,9 @@ export default function TeamBalancerTestPage() {
             jääajalla painotettuna (2 puolustajaa + 3 hyökkääjää jäällä).
             Arvonta tehdään 100 kertaa, ja näytetty valitaan satunnaisesti
             niistä, joiden vahvuusero on enintään 1 %. Vaihto-rivit ovat Cat 1
-            -tasapainotuksen siirtoja.
+            -tasapainotuksen siirtoja. Lisä-rivit ovat lisäpelaajia, jotka eivät
+            ole mukana tasapainotuksessa vaan lisätään lopuksi vajaammalle
+            puolelle.
             <Box component="span" sx={{ display: "flex", gap: 2, mt: 1 }}>
               <Chip
                 label="+ Parempi"

@@ -146,15 +146,48 @@ export class TeamBalancer {
     this.trace = [];
     this.positionMode = options.distributionMethod === "position-based";
 
+    // Lisäpelaajat eivät ole mukana varsinaisessa jaossa
+    const extras = players.filter((p) => p.isExtra);
+    const regularPlayers = players.filter((p) => !p.isExtra);
+
     // Check distribution method
     const result = this.positionMode
-      ? this.generateByPosition(players, options, teamAName, teamBName)
-      : this.generateBySkill(players, options, teamAName, teamBName);
+      ? this.generateByPosition(regularPlayers, options, teamAName, teamBName)
+      : this.generateBySkill(regularPlayers, options, teamAName, teamBName);
     console.log(
       this.positionMode
         ? "✅ Used POSITION-BASED distribution"
         : "✅ Used SKILL-BASED distribution",
     );
+
+    // Lopuksi kukin lisäpelaaja joukkueeseen, jossa on vähemmän
+    // kenttäpelaajia; tasatilanteessa arvotaan
+    if (result.teams.length === 2) {
+      const skaterCount = (team: GeneratedTeamData) =>
+        team.players.filter((p) => p.position !== "MV").length;
+      for (const extra of extras) {
+        const [teamA, teamB] = result.teams;
+        const target =
+          skaterCount(teamA) !== skaterCount(teamB)
+            ? skaterCount(teamA) < skaterCount(teamB)
+              ? teamA
+              : teamB
+            : Math.random() < 0.5
+              ? teamA
+              : teamB;
+        this.addPlayerToTeam(target, extra);
+        this.trace.push({
+          kind: "single",
+          role: "extra",
+          player: this.tracePlayer(extra),
+          team: target.name,
+        });
+        console.log(
+          `Extra player: ${extra.name} → ${target.name} (fewer field players or random)`,
+        );
+      }
+    }
+
     return { ...result, trace: this.trace };
   }
 
@@ -177,8 +210,9 @@ export class TeamBalancer {
     team: GeneratedTeamData,
     extraPlayer?: EnrichedPlayer,
   ): number {
+    // Lisäpelaajat eivät kuulu vahvuuteen
     const skaters = [
-      ...team.players.filter((p) => p.position !== "MV"),
+      ...team.players.filter((p) => p.position !== "MV" && !p.isExtra),
       ...(extraPlayer ? [extraPlayer] : []),
     ];
     if (skaters.length === 0) return 0;

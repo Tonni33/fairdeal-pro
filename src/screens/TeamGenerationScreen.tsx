@@ -27,6 +27,7 @@ import { db } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import { useApp, getUserAdminTeams } from "../contexts/AppContext";
 import { TeamBalancer } from "../utils/teamBalancer";
+import { eventExtraPlayerIds } from "../utils/extraPlayers";
 import {
   DEFAULT_SKILL,
   SkillRole,
@@ -49,6 +50,7 @@ interface EnrichedPlayer extends Player {
   position: string; // Primary position for this event
   points: number; // Computed: multiplier * 100
   assignedRole?: "defender" | "attacker"; // Role assigned during team generation
+  isExtra?: boolean; // Lisäpelaaja: ei tasapainotukseen, lisätään lopuksi
 }
 
 interface GeneratedTeam {
@@ -367,9 +369,24 @@ const TeamGenerationScreen: React.FC = () => {
       return [];
     }
 
+    // Lisäpelaajat lisätään arvonnan lopuksi vajaammalle puolelle eivätkä
+    // tarvitse taitotasoa
+    const extraIds = eventExtraPlayerIds(selectedEvent);
+
     return players
       .filter((player) => selectedEvent.registeredPlayers?.includes(player.id))
       .map((player) => {
+        if (extraIds.includes(player.id)) {
+          return {
+            ...player,
+            category: 0,
+            multiplier: 0,
+            position: player.positions?.find((p) => p !== "MV") || "H",
+            points: 0,
+            isExtra: true,
+          } as EnrichedPlayer;
+        }
+
         // Get player's selected role for this event (from playerRoles field)
         const playerRole = selectedEvent.playerRoles?.[player.id];
 
@@ -424,9 +441,11 @@ const TeamGenerationScreen: React.FC = () => {
       return [];
     }
     const teamId = selectedEvent.teamId;
+    const extraIds = eventExtraPlayerIds(selectedEvent);
 
     return players
       .filter((player) => selectedEvent.registeredPlayers?.includes(player.id))
+      .filter((player) => !extraIds.includes(player.id))
       .filter(
         (player) =>
           roleSkillStatus(
@@ -512,7 +531,9 @@ const TeamGenerationScreen: React.FC = () => {
     }
 
     // Check for players with missing skill ratings
-    const unratedPlayers = registeredPlayers.filter((p) => p.points === 0);
+    const unratedPlayers = registeredPlayers.filter(
+      (p) => p.points === 0 && !p.isExtra
+    );
     if (unratedPlayers.length > 0) {
       const playerNames = unratedPlayers.map((p) => p.name).join(", ");
       Alert.alert(
@@ -751,6 +772,10 @@ const TeamGenerationScreen: React.FC = () => {
             // Only include assignedRole if it's defined (to avoid Firebase undefined error)
             if (enrichedPlayer.assignedRole) {
               playerData.assignedRole = enrichedPlayer.assignedRole;
+            }
+            // Lisäpelaaja näytetään joukkueen viimeisenä
+            if (enrichedPlayer.isExtra) {
+              playerData.isExtra = true;
             }
             return playerData;
           }),
@@ -1046,8 +1071,11 @@ const TeamGenerationScreen: React.FC = () => {
                       {isGoalkeeper && " 🥅"}
                     </Text>
                     <Text style={styles.playerPoints}>
-                      {Math.round(player.points || player.multiplier * 100)}{" "}
-                      pistettä
+                      {player.isExtra
+                        ? "–"
+                        : `${Math.round(
+                            player.points || player.multiplier * 100
+                          )} pistettä`}
                     </Text>
                   </View>
                 );

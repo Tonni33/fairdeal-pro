@@ -180,6 +180,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 ? data.createdAt.toDate()
                 : new Date(data.createdAt || Date.now()),
               teamMember: data.teamMember || false,
+              extraPlayer: data.extraPlayer || {},
               notes: data.notes || "",
               createdBy: data.createdBy || "",
               updatedAt: data.updatedAt?.toDate
@@ -286,6 +287,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 data.participants ||
                 data.players ||
                 [],
+              extraPlayerIds: data.extraPlayerIds || [],
               reservePlayers: data.reservePlayers || [],
               absentPlayers: data.absentPlayers || [],
               absentReasons: data.absentReasons || {},

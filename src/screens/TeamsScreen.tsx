@@ -73,6 +73,12 @@ const TeamsScreen: React.FC = () => {
     loadTeamSettings();
   }, [selectedEvent?.teamId]);
 
+  // Lisäpelaaja (arvonnassa merkitty isExtra) näytetään joukkueen viimeisenä
+  const isSavedExtraPlayer = (playerId: string, team: any): boolean =>
+    (team.players || []).some(
+      (p: any) => typeof p === "object" && p?.id === playerId && p.isExtra,
+    );
+
   // Helper: determine display group (attacker / defender / goalkeeper) for a player
   const getPlayerDisplayGroup = (
     playerId: string,
@@ -778,10 +784,19 @@ const TeamsScreen: React.FC = () => {
 
                     <View style={styles.playersList}>
                       {(() => {
-                        const shuffledIds = getShuffledPlayersForDisplay(
+                        const displayIds = getShuffledPlayersForDisplay(
                           team,
                           selectedEvent,
                         );
+                        const extraIds = displayIds.filter((id: string) =>
+                          isSavedExtraPlayer(id, team),
+                        );
+                        const shuffledIds = [
+                          ...displayIds.filter(
+                            (id: string) => !extraIds.includes(id),
+                          ),
+                          ...extraIds,
+                        ];
 
                         if (!showPositionGroups) {
                           // Original flat display
@@ -848,6 +863,7 @@ const TeamsScreen: React.FC = () => {
                         const defenders: string[] = [];
                         const goalkeepers: string[] = [];
                         shuffledIds.forEach((id: string) => {
+                          if (extraIds.includes(id)) return;
                           const group = getPlayerDisplayGroup(id, team);
                           if (group === "goalkeeper") goalkeepers.push(id);
                           else if (group === "defender") defenders.push(id);
@@ -973,6 +989,13 @@ const TeamsScreen: React.FC = () => {
                           ),
                           ...goalkeepers.map((id, i) =>
                             renderGroupItem(id, i, "goalkeeper"),
+                          ),
+                          ...extraIds.map((id: string, i: number) =>
+                            renderGroupItem(
+                              id,
+                              attackers.length + i,
+                              "attacker",
+                            ),
                           ),
                         ];
                       })()}

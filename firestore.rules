@@ -24,19 +24,47 @@ service cloud.firestore {
         : 0;
     }
 
-    // Paikkojen kokonaismäärä (kenttäpelaajat + maalivahdit).
+    // Lisäpelaajat (enintään 2) eivät vie paikkaa: kukin kasvattaa
+    // kapasiteettia yhdellä. Kelpaavat vain ilmoittautuneet, jotka on merkitty
+    // tapahtuman joukkueessa lisäpelaajiksi, ettei rajaa voi kiertää.
+    function extraIds(data) {
+      return data.get('extraPlayerIds', []) is list
+        ? data.get('extraPlayerIds', [])
+        : [];
+    }
+
+    function isTeamExtra(data, userId) {
+      return exists(/databases/$(database)/documents/users/$(userId))
+        && get(/databases/$(database)/documents/users/$(userId)).data
+             .get('extraPlayer', {}).get(data.get('teamId', ''), false) == true;
+    }
+
+    function extraCount(data) {
+      let ids = extraIds(data);
+      return ids.size() <= 2
+          && data.get('registeredPlayers', []).hasAll(ids)
+          && (ids.size() < 1 || isTeamExtra(data, ids[0]))
+          && (ids.size() < 2 || isTeamExtra(data, ids[1]))
+        ? ids.size()
+        : 0;
+    }
+
+    // Paikkojen kokonaismäärä (kenttäpelaajat + maalivahdit + lisäpelaajat).
     // Jos rajoja ei ole asetettu, ei rajoiteta (fail-open, ettei vanha data lukkiudu).
     function rosterCapacity(data) {
-      return numOr(data, 'maxPlayers', 9999) + numOr(data, 'maxGoalkeepers', 0);
+      return numOr(data, 'maxPlayers', 9999) + numOr(data, 'maxGoalkeepers', 0)
+        + extraCount(data);
     }
 
     // Kirjoitus sallitaan jos kokoonpano mahtuu rajoihin TAI jos kokoonpano ei
     // kasva. Jälkimmäinen sallii korjaukset ja poistot tapahtumissa, joissa raja
     // on jo ylittynyt, sekä kaikki muut kentät koskevat päivitykset.
+    // Kasvamattomuus tarkistetaan ensin: silloin lisäpelaajien
+    // käyttäjädokumentteja ei tarvitse lukea.
     function eventRosterOk() {
-      return rosterSize(request.resource.data) <= rosterCapacity(request.resource.data)
-        || (resource != null
-            && rosterSize(request.resource.data) <= rosterSize(resource.data));
+      return (resource != null
+            && rosterSize(request.resource.data) <= rosterSize(resource.data))
+        || rosterSize(request.resource.data) <= rosterCapacity(request.resource.data);
     }
 
     match /events/{eventId} {

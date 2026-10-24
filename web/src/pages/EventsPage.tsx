@@ -49,6 +49,11 @@ import {
 } from "firebase/firestore";
 import type { Event, Team, User } from "../types";
 import ColumnSelector from "../components/ColumnSelector";
+import {
+  MAX_EXTRA_PLAYERS,
+  eventExtraPlayerIds,
+  isTeamExtraPlayer,
+} from "@shared/utils/extraPlayers";
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -352,7 +357,9 @@ export default function EventsPage() {
         const count = params.row.registeredPlayers?.length || 0;
         const maxPlayers = params.row.maxPlayers || 0;
         const maxGoalkeepers = params.row.maxGoalkeepers || 0;
-        const totalMax = maxPlayers + maxGoalkeepers;
+        // Jokainen lisäpelaaja kasvattaa enimmäismäärää yhdellä
+        const totalMax =
+          maxPlayers + maxGoalkeepers + eventExtraPlayerIds(params.row).length;
         return (
           <Chip
             label={`${count}/${totalMax}`}
@@ -561,6 +568,9 @@ export default function EventsPage() {
       const hoursUntilEvent =
         (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60);
 
+      // Lisäpelaajat eivät vie paikkaa; enintään MAX_EXTRA_PLAYERS per vuoro
+      const extrasInEvent = [...eventExtraPlayerIds(selectedEvent)];
+
       // Process each selected player
       for (const playerId of selectedPlayers) {
         // Check if player is already registered
@@ -634,11 +644,26 @@ export default function EventsPage() {
           return p && p.positions.includes("MV");
         }).length;
 
+        if (isTeamExtraPlayer(player, selectedEvent.teamId)) {
+          if (extrasInEvent.length >= MAX_EXTRA_PLAYERS) {
+            alert(
+              `${player.name}: vuorossa on jo ${MAX_EXTRA_PLAYERS} lisäpelaajaa.`,
+            );
+            continue;
+          }
+          await updateDoc(doc(db, "events", selectedEvent.id), {
+            registeredPlayers: arrayUnion(playerId),
+            extraPlayerIds: arrayUnion(playerId),
+          });
+          extrasInEvent.push(playerId);
+          continue;
+        }
+
         // Check if event is full based on player position
         const isEventFull = isGoalkeeper
           ? selectedEvent.maxGoalkeepers &&
             goalkeeperCount >= selectedEvent.maxGoalkeepers
-          : fieldPlayerCount >= selectedEvent.maxPlayers;
+          : fieldPlayerCount - extrasInEvent.length >= selectedEvent.maxPlayers;
 
         // Determine if player should go to reserve list
         const shouldBeReserve =

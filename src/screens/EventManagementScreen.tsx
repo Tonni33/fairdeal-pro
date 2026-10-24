@@ -28,6 +28,12 @@ import { Button, Dialog, Portal } from "react-native-paper";
 import { db } from "../services/firebase";
 import { useApp, getUserAdminTeams } from "../contexts/AppContext";
 import { useAuth } from "../contexts/AuthContext";
+import {
+  MAX_EXTRA_PLAYERS,
+  eventExtraPlayerIds,
+  fieldPlayerLimit,
+  isTeamExtraPlayer,
+} from "../utils/extraPlayers";
 
 // Web-compatible confirm dialog (Alert.alert doesn't support multiple buttons on web)
 const webConfirm = (title: string, message: string): boolean => {
@@ -550,6 +556,7 @@ const EventManagementScreen: React.FC = () => {
       // Check if player is a team member
       const teamId = selectedEvent.teamId || "";
       let isTeamMember = false;
+      let isExtra = isTeamExtraPlayer(player, teamId);
       if (teamId && playerId) {
         try {
           const userRef = doc(db, "users", playerId);
@@ -558,10 +565,40 @@ const EventManagementScreen: React.FC = () => {
             const userData = userSnap.data();
             const teamMemberValue = userData.teamMember?.[teamId];
             isTeamMember = teamMemberValue === true;
+            isExtra = isTeamExtraPlayer(userData, teamId);
           }
         } catch (error) {
           console.error("Error fetching teamMember status:", error);
         }
+      }
+
+      // Lisäpelaaja ei vie paikkaa: lisätään suoraan, jos vuorossa ei ole
+      // jo enimmäismäärää lisäpelaajia
+      const currentExtras = eventExtraPlayerIds(selectedEvent);
+      if (isExtra) {
+        if (currentExtras.length >= MAX_EXTRA_PLAYERS) {
+          const message = `Vuorossa on jo ${MAX_EXTRA_PLAYERS} lisäpelaajaa.`;
+          if (Platform.OS === "web") {
+            alert(message);
+          } else {
+            Alert.alert("Lisäpelaajat täynnä", message);
+          }
+          setAddingPlayerId(null);
+          return;
+        }
+        await updateDoc(eventRef, {
+          registeredPlayers: arrayUnion(playerId),
+          extraPlayerIds: arrayUnion(playerId),
+        });
+        setSelectedEvent({
+          ...selectedEvent,
+          registeredPlayers: [...currentPlayers, playerId],
+          extraPlayerIds: [...currentExtras, playerId],
+        });
+        await fetchEvents();
+        Alert.alert("Onnistui", "Pelaaja lisätty tapahtumaan");
+        setAddingPlayerId(null);
+        return;
       }
 
       // Use selected role or player's primary position
@@ -627,7 +664,8 @@ const EventManagementScreen: React.FC = () => {
         // Check field player limit
         if (
           selectedEvent.maxPlayers &&
-          currentFieldPlayers.length >= selectedEvent.maxPlayers
+          currentFieldPlayers.length - currentExtras.length >=
+            selectedEvent.maxPlayers
         ) {
           // Offer reserve position for field players
           if (Platform.OS === "web") {
@@ -845,6 +883,7 @@ const EventManagementScreen: React.FC = () => {
 
       const teamId = selectedEvent.teamId || "";
       const teamMemberStatus: Record<string, boolean> = {};
+      const extraStatus: Record<string, boolean> = {};
 
       if (teamId) {
         for (const p of playersData) {
@@ -854,6 +893,7 @@ const EventManagementScreen: React.FC = () => {
             if (userSnap.exists()) {
               const userData = userSnap.data();
               teamMemberStatus[p.id] = userData.teamMember?.[teamId] === true;
+              extraStatus[p.id] = isTeamExtraPlayer(userData, teamId);
             } else {
               teamMemberStatus[p.id] = false;
             }
@@ -868,11 +908,23 @@ const EventManagementScreen: React.FC = () => {
       const playersToMainList: string[] = [];
       const playersToReserve: string[] = [];
 
+      // Lisäpelaajat lisätään suoraan, enintään MAX_EXTRA_PLAYERS per vuoro.
+      // Sen yli menevät käsitellään kuten muut pelaajat.
+      const currentExtras = eventExtraPlayerIds(selectedEvent);
+      const extrasToAdd = fieldPlayersToAdd
+        .filter((p) => extraStatus[p.id])
+        .slice(0, MAX_EXTRA_PLAYERS - currentExtras.length)
+        .map((p) => p.id);
+      playersToMainList.push(...extrasToAdd);
+
       // Handle field players
       if (selectedEvent.maxPlayers) {
         const availableFieldSlots =
-          selectedEvent.maxPlayers - currentFieldPlayers.length;
-        const fieldPlayerIds = fieldPlayersToAdd.map((p) => p.id);
+          selectedEvent.maxPlayers -
+          (currentFieldPlayers.length - currentExtras.length);
+        const fieldPlayerIds = fieldPlayersToAdd
+          .map((p) => p.id)
+          .filter((id) => !extrasToAdd.includes(id));
 
         fieldPlayerIds.forEach((id, index) => {
           const isGuest = !teamMemberStatus[id];
@@ -892,17 +944,19 @@ const EventManagementScreen: React.FC = () => {
         });
       } else {
         // No limit, but check guest threshold
-        fieldPlayersToAdd.forEach((p) => {
-          const isGuest = !teamMemberStatus[p.id];
-          const shouldRedirectToReserve =
-            isGuest && hoursUntilEvent > guestRegistrationHours;
+        fieldPlayersToAdd
+          .filter((p) => !extrasToAdd.includes(p.id))
+          .forEach((p) => {
+            const isGuest = !teamMemberStatus[p.id];
+            const shouldRedirectToReserve =
+              isGuest && hoursUntilEvent > guestRegistrationHours;
 
-          if (shouldRedirectToReserve) {
-            playersToReserve.push(p.id);
-          } else {
-            playersToMainList.push(p.id);
-          }
-        });
+            if (shouldRedirectToReserve) {
+              playersToReserve.push(p.id);
+            } else {
+              playersToMainList.push(p.id);
+            }
+          });
       }
 
       // Handle goalkeepers
@@ -977,6 +1031,9 @@ const EventManagementScreen: React.FC = () => {
       const updateData: any = {
         registeredPlayers: [...currentPlayers, ...playersToMainList],
       };
+      if (extrasToAdd.length > 0) {
+        updateData.extraPlayerIds = arrayUnion(...extrasToAdd);
+      }
 
       if (playersToReserve.length > 0) {
         updateData.reservePlayers = [
@@ -1120,6 +1177,7 @@ const EventManagementScreen: React.FC = () => {
       // Remove player from registered players
       await updateDoc(eventRef, {
         registeredPlayers: arrayRemove(playerId),
+        extraPlayerIds: arrayRemove(playerId),
       });
 
       // Vapautuneen paikan täyttää palvelin (promoteReservesOnEventUpdate),
@@ -1344,7 +1402,7 @@ const EventManagementScreen: React.FC = () => {
             <Ionicons name="person-outline" size={16} color="#666" />
             <Text style={styles.eventDetailText}>
               {getFieldPlayers(event.registeredPlayers || [], event).length} /{" "}
-              {event.maxPlayers || "∞"} pelaajaa
+              {fieldPlayerLimit(event) || "∞"} pelaajaa
               {event.maxGoalkeepers && event.maxGoalkeepers > 0 && (
                 <Text style={styles.goalkeeperText}>
                   {" • "}

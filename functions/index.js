@@ -1038,6 +1038,13 @@ const isGoalkeeperInEvent = (userData, role) => {
  * @param {string} eventId
  * @returns {Promise<string[]|null>} nostettujen pelaajien id:t, tai null
  */
+// Lisäpelaaja (users.extraPlayer[teamId]) ilmoittautuu kuten muut, mutta ei
+// vie paikkaa: kukin kasvattaa kenttäpelaajien enimmäismäärää yhdellä.
+// Vuoroon mahtuu enintään kaksi; sen yli menevät ovat tavallisia pelaajia.
+// Tapahtuman extraPlayerIds listaa ilmoittautuneet lisäpelaajat, ja
+// Firestoren säännöt laskevat kapasiteetin sen perusteella.
+const MAX_EXTRA_PLAYERS = 2;
+
 const promoteReservesForEvent = async (eventId) => {
   const db = admin.firestore();
   const eventRef = db.collection("events").doc(eventId);
@@ -1050,9 +1057,6 @@ const promoteReservesForEvent = async (eventId) => {
 
     const eventData = eventSnap.data();
     const reserves = eventData.reservePlayers || [];
-    if (reserves.length === 0) {
-      return null;
-    }
 
     // Mennyt tapahtuma jätetään rauhaan
     const eventAt = eventDate(eventData);
@@ -1105,11 +1109,21 @@ const promoteReservesForEvent = async (eventId) => {
       }
     });
 
+    // Lisäpelaajat eivät vie paikkaa. Lista johdetaan aina käyttäjien
+    // merkinnöistä, joten se korjautuu myös silloin, kun vanha sovellusversio
+    // ilmoittautuu sitä päivittämättä tai admin muuttaa merkintää.
+    const isTeamExtra = (id) =>
+      !!teamId && usersById[id]?.extraPlayer?.[teamId] === true;
+    const extras = registered.filter(isTeamExtra).slice(0, MAX_EXTRA_PLAYERS);
+
     // Nykyinen kokoonpano. Tuntematon id lasketaan kenttäpelaajaksi, jotta
     // puuttuva käyttäjädokumentti ei vahingossa avaa ylimääräistä paikkaa.
     let fieldCount = 0;
     let goalkeeperCount = 0;
     for (const id of registered) {
+      if (extras.includes(id)) {
+        continue;
+      }
       const userData = usersById[id];
       if (userData && isGoalkeeperInEvent(userData, playerRoles[id])) {
         goalkeeperCount += 1;
@@ -1133,6 +1147,13 @@ const promoteReservesForEvent = async (eventId) => {
           `[Promo] Event ${eventId}: no user doc for ${id}, skipping`,
         );
         remainingReserves.push(id);
+        continue;
+      }
+
+      // Lisäpelaaja ei vie paikkaa eikä odota thresholdia
+      if (isTeamExtra(id) && extras.length < MAX_EXTRA_PLAYERS) {
+        promoted.push(id);
+        extras.push(id);
         continue;
       }
 
@@ -1180,13 +1201,16 @@ const promoteReservesForEvent = async (eventId) => {
       : remainingReserves;
 
     const reservesChanged = orderedReserves.join(",") !== reserves.join(",");
-    if (promoted.length === 0 && !reservesChanged) {
+    const extrasChanged =
+      extras.join(",") !== (eventData.extraPlayerIds || []).join(",");
+    if (promoted.length === 0 && !reservesChanged && !extrasChanged) {
       return null;
     }
 
     t.update(eventRef, {
       registeredPlayers: [...registered, ...promoted],
       reservePlayers: orderedReserves,
+      extraPlayerIds: extras,
     });
 
     console.log(
@@ -1268,10 +1292,8 @@ exports.promoteReservesOnEventUpdate = onDocumentUpdated(
       return null; // Muutos ei koskenut kokoonpanoa
     }
 
-    if ((afterData?.reservePlayers || []).length === 0) {
-      return null;
-    }
-
+    // Ajetaan myös ilman jonoa: lisäpelaajien lista (extraPlayerIds) pidetään
+    // ajan tasalla jokaisella kokoonpanon muutoksella
     try {
       const promoted = await promoteReservesForEvent(eventId);
       return promoted ? { promoted: promoted.length } : null;
@@ -1279,6 +1301,60 @@ exports.promoteReservesOnEventUpdate = onDocumentUpdated(
       console.error(`[Promo] Event ${eventId}: promotion failed:`, err);
       throw err;
     }
+  },
+);
+
+/**
+ * Kun admin muuttaa pelaajan lisäpelaajamerkintää, hänen tulevat
+ * tapahtumansa (kokoonpanossa tai varalla) päivitetään heti: extraPlayerIds
+ * korjataan ja varalla oleva lisäpelaaja nostetaan.
+ *
+ * Käyttäjädokumentti päivittyy usein (esim. versiotieto jokaisella
+ * käynnistyksellä), joten muut muutokset ohitetaan heti alussa.
+ */
+exports.syncExtraPlayerEvents = onDocumentUpdated(
+  "users/{userId}",
+  async (event) => {
+    const before = event.data.before.data()?.extraPlayer || {};
+    const after = event.data.after.data()?.extraPlayer || {};
+    const teamIds = new Set([...Object.keys(before), ...Object.keys(after)]);
+    const changedTeams = [...teamIds].filter(
+      (teamId) => (before[teamId] === true) !== (after[teamId] === true),
+    );
+    if (changedTeams.length === 0) {
+      return null;
+    }
+
+    const userId = event.params.userId;
+    const db = admin.firestore();
+    const now = new Date();
+    const events = db.collection("events");
+    const [asRegistered, asReserve] = await Promise.all([
+      events.where("registeredPlayers", "array-contains", userId).get(),
+      events.where("reservePlayers", "array-contains", userId).get(),
+    ]);
+    const eventIds = new Set();
+    for (const doc of [...asRegistered.docs, ...asReserve.docs]) {
+      const data = doc.data();
+      const when = data.startsAt?.toDate
+        ? data.startsAt.toDate()
+        : eventDate(data);
+      if (changedTeams.includes(data.teamId) && when && when >= now) {
+        eventIds.add(doc.id);
+      }
+    }
+
+    for (const eventId of eventIds) {
+      try {
+        await promoteReservesForEvent(eventId);
+      } catch (err) {
+        console.error(`[Extra] Event ${eventId}: sync failed:`, err);
+      }
+    }
+    console.log(
+      `[Extra] User ${userId}: extraPlayer changed for ${changedTeams.join(", ")}, synced ${eventIds.size} events`,
+    );
+    return { events: eventIds.size };
   },
 );
 
