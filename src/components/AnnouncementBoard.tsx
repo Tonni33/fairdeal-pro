@@ -27,8 +27,10 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
+import * as Updates from "expo-updates";
 import { db } from "../services/firebase";
 import { Announcement, Team } from "../types";
+import { JS_VERSION } from "../constants/jsVersion";
 
 /**
  * Joukkueen ilmoitustaulu etusivulla. Joukkueen admin kirjoittaa ilmoituksia
@@ -91,6 +93,10 @@ export const AnnouncementBoard: React.FC<Props> = ({
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
   const [lastSeen, setLastSeen] = useState<number | null>(null);
+  const [latest, setLatest] = useState<{
+    appVersion?: string;
+    jsVersion?: number;
+  } | null>(null);
   const insets = useSafeAreaInsets();
   const topPadding = { paddingTop: insets.top + 12 };
 
@@ -104,6 +110,31 @@ export const AnnouncementBoard: React.FC<Props> = ({
     "";
   const isAdminOf = (teamId: string) =>
     adminTeams.some((team) => team.id === teamId);
+
+  // Uusin julkaistu versio (scripts/publishUpdate.js kirjaa sen), jotta
+  // käyttäjä voi verrata sitä omaansa
+  useEffect(
+    () =>
+      onSnapshot(
+        doc(db, "settings", "app"),
+        (snapshot) => {
+          const data = snapshot.data();
+          setLatest({
+            appVersion:
+              typeof data?.latestRuntimeVersion === "string"
+                ? data.latestRuntimeVersion
+                : undefined,
+            jsVersion:
+              typeof data?.latestJsVersion === "number"
+                ? data.latestJsVersion
+                : undefined,
+          });
+        },
+        (error) =>
+          console.log("[Announcements] Versiotiedon luku epäonnistui:", error),
+      ),
+    [],
+  );
 
   useEffect(() => {
     AsyncStorage.getItem(lastSeenKey)
@@ -274,10 +305,42 @@ export const AnnouncementBoard: React.FC<Props> = ({
   };
 
   const canCreate = adminTeams.length > 0;
-  // Kortti näytetään, jos on luettavaa tai käyttäjä voi kirjoittaa
-  if (!loading && announcements.length === 0 && !canCreate) {
-    return null;
-  }
+
+  // Versiotiedot aina ilmoitustaulun alimpana: uusin julkaistu ja oma
+  const ownAppVersion = Updates.runtimeVersion || "";
+  const appBehind =
+    !!latest?.appVersion &&
+    !!ownAppVersion &&
+    ownAppVersion.localeCompare(latest.appVersion, undefined, {
+      numeric: true,
+    }) < 0;
+  const jsBehind =
+    typeof latest?.jsVersion === "number" &&
+    !appBehind &&
+    JS_VERSION < latest.jsVersion;
+  const versionFooter = latest?.appVersion ? (
+    <View style={styles.versionFooter}>
+      <Text style={styles.versionText}>
+        Uusin: Sovellus {latest.appVersion}
+        {typeof latest.jsVersion === "number"
+          ? ` · JS ${latest.jsVersion}`
+          : ""}
+      </Text>
+      <Text
+        style={[
+          styles.versionText,
+          appBehind || jsBehind ? styles.versionBehind : styles.versionOk,
+        ]}
+      >
+        Sinulla: Sovellus {ownAppVersion || "?"} · JS {JS_VERSION}
+        {appBehind
+          ? " – päivitä sovelluskaupasta"
+          : jsBehind
+            ? " – päivittyy seuraavalla avauksella"
+            : " ✓"}
+      </Text>
+    </View>
+  ) : null;
 
   const renderMeta = (a: Announcement) => (
     <Text style={styles.meta}>
@@ -338,6 +401,7 @@ export const AnnouncementBoard: React.FC<Props> = ({
           <Text style={styles.addButtonText}>Uusi ilmoitus</Text>
         </TouchableOpacity>
       )}
+      {versionFooter}
 
       {/* Kaikki ilmoitukset */}
       <Modal
@@ -406,6 +470,7 @@ export const AnnouncementBoard: React.FC<Props> = ({
                 <Text style={styles.addButtonText}>Uusi ilmoitus</Text>
               </TouchableOpacity>
             )}
+            {versionFooter}
           </ScrollView>
 
           {/* Lomake listan päällä, jotta muokkaus onnistuu listasta */}
@@ -712,6 +777,15 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   switchLabel: { fontSize: 15, color: "#333", flex: 1 },
+  versionFooter: {
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+  },
+  versionText: { fontSize: 12, color: "#888" },
+  versionOk: { color: "#2e7d32" },
+  versionBehind: { color: "#ef6c00", fontWeight: "600" },
   saveButton: {
     backgroundColor: "#1976d2",
     borderRadius: 10,
