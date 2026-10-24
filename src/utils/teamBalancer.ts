@@ -710,9 +710,34 @@ export class TeamBalancer {
         return;
       }
 
-      // Prefer swap: move one cat1 from source and one non-cat1 from target
-      const cat1ToMove = sourceCat1[0];
-      const nonCat1ToMove = targetNonCat1[0];
+      // Vaihto tehdään saman roolin pelaajien kesken (puolustaja ↔
+      // puolustaja, hyökkääjä ↔ hyökkääjä). Muuten puolustajamäärät ja
+      // huonoimman puolustajan paikka voisivat muuttua jaon jälkeen.
+      const isDefender = (p: EnrichedPlayer) =>
+        p.position === "P" || (p as any).assignedRole === "defender";
+      let cat1ToMove: EnrichedPlayer | undefined;
+      let nonCat1ToMove: EnrichedPlayer | undefined;
+      for (const candidate of sourceCat1) {
+        const match = targetNonCat1.find(
+          (p) => isDefender(p) === isDefender(candidate),
+        );
+        if (match) {
+          cat1ToMove = candidate;
+          nonCat1ToMove = match;
+          break;
+        }
+      }
+      if (!cat1ToMove) {
+        if (targetNonCat1.length > 0) {
+          // Vain roolin vaihtava vaihto olisi mahdollinen: jätetään tekemättä
+          return;
+        }
+        // Siirto ilman vaihtoa: vain hyökkääjä, ettei puolustajajako muutu
+        cat1ToMove = sourceCat1.find((p) => !isDefender(p));
+        if (!cat1ToMove) {
+          return;
+        }
+      }
 
       const removeFromTeam = (team: GeneratedTeamData, playerId: string) => {
         team.players = team.players.filter((p) => p.id !== playerId);
@@ -1108,6 +1133,21 @@ export class TeamBalancer {
       );
     }
 
+    // Parittomalla määrällä toinen joukkue saa yhden puolustajan enemmän.
+    // Vajaalla puolella puolustajat ovat jäällä useammin (kolme pelaajaa
+    // kahdella paikalla ≈ 2/3 vuoroista, täydellä puolella 1/2), joten
+    // huonoin puolustaja ei saa jäädä sinne. Hänet jätetään pareista pois ja
+    // sijoitetaan lopuksi ylimääräiseksi: hänen joukkueensa on aina se,
+    // jossa puolustajia on enemmän.
+    let extraDefender: EnrichedPlayer | null = null;
+    if (defendersToDistribute.length % 2 === 1) {
+      extraDefender = defendersToDistribute[0];
+      defendersToDistribute = defendersToDistribute.slice(1);
+      console.log(
+        `🛡️ Odd defender count: worst defender ${extraDefender.name} (${extraDefender.multiplier.toFixed(2)}) goes to the side with more defenders`,
+      );
+    }
+
     console.log("🛡️ Defender order (worst to best):");
     defendersToDistribute.forEach((d, i) => {
       console.log(
@@ -1264,6 +1304,17 @@ export class TeamBalancer {
       console.log(
         `📊 BALANCE: ${teams[0].name}: ${team0Avg.toFixed(2)} avg (${teams[0].players.length} pelaajaa) | ${teams[1].name}: ${team1Avg.toFixed(2)} avg (${teams[1].players.length} pelaajaa)`,
       );
+    }
+
+    if (extraDefender) {
+      if (extraDefender.position === "H/P") {
+        (extraDefender as any).assignedRole = "defender";
+      }
+      const targetTeam = this.pickTeamForOddPlayer(teams, extraDefender);
+      console.log(
+        `Defender extra: Worst defender (${extraDefender.name}) → ${targetTeam.name} (4th defender side, best balance by simulation)`,
+      );
+      this.addPlayerToTeam(targetTeam, extraDefender);
     }
 
     return usedHybrids;
