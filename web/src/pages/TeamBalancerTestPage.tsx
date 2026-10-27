@@ -1058,7 +1058,10 @@ export default function TeamBalancerTestPage() {
             jääajalla painotettuna (2 puolustajaa + 3 hyökkääjää jäällä).
             Arvonta tehdään 100 kertaa, ja näytetty valitaan satunnaisesti
             niistä, joiden vahvuusero on enintään 1 %. Vaihto-rivit ovat Cat 1
-            -tasapainotuksen siirtoja. Lisä-rivit ovat lisäpelaajia, jotka eivät
+            -tasapainotuksen ja hionnan vaihtoja: hionta vaihtaa hyökkääjiä,
+            kunnes kokonaisuus ja ykkösketju (2 parasta puolustajaa + 3 parasta
+            hyökkääjää) ovat tasaisimmillaan, jotta parhaat pelaajat eivät kasaudu
+            samaan joukkueeseen. Lisä-rivit ovat lisäpelaajia, jotka eivät
             ole mukana tasapainotuksessa vaan lisätään lopuksi vajaammalle
             puolelle. Avg on kaikkien pelaajien tavallinen keskiarvo, Jäällä on
             kentällinen jäällä (2 × puolustajien ka + 3 × hyökkääjien ka, ilman

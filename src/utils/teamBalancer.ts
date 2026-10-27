@@ -21,6 +21,11 @@ const TOLERANCE_PERCENT = 1;
 const DEFENDER_SLOTS = 2;
 const ATTACKER_SLOTS = 3;
 
+// Ykkösketjun (kaksi parasta puolustajaa ja kolme parasta hyökkääjää) paino
+// tasapainossa. Pelkkä keskiarvo salli parhaiden pelaajien kasautumisen
+// samaan joukkueeseen, kun vastapainoksi annettiin heikompia.
+const FIRST_LINE_WEIGHT = 0.5;
+
 /**
  * Team balancing algorithm that creates balanced teams based on player skills
  */
@@ -117,7 +122,7 @@ export class TeamBalancer {
     // Valitun arvonnan loki näytetään sellaisenaan
     chosen.logs.forEach((args) => console.log(...args));
     console.log(
-      `🏆 Selected draw: on-ice strength difference ${chosen.difference.toFixed(3)}, ` +
+      `🏆 Selected draw: difference (on-ice + first line) ${chosen.difference.toFixed(3)}, ` +
         `chosen at random from ${top.length} distinct line-ups within ${tolerance.toFixed(3)} ` +
         `(best ${candidates[0].difference.toFixed(3)}, median ${candidates[
           Math.floor(candidates.length / 2)
@@ -159,6 +164,17 @@ export class TeamBalancer {
         ? "✅ Used POSITION-BASED distribution"
         : "✅ Used SKILL-BASED distribution",
     );
+
+    // Hionta ja maalivahtisäännön tarkistus, sitten luvut uudelleen
+    this.refineTeams(result.teams);
+    this.enforceGoalkeeperRule(result.teams);
+    result.teams.forEach((team) => {
+      team.totalPoints = team.players.reduce(
+        (sum, player) => sum + (player.points || 0),
+        0,
+      );
+    });
+    result.balanceScore = this.calculateBalanceScore(result.teams);
 
     // Lopuksi kukin lisäpelaaja joukkueeseen, jossa on vähemmän
     // kenttäpelaajia; tasatilanteessa arvotaan
@@ -237,10 +253,208 @@ export class TeamBalancer {
     );
   }
 
+  /**
+   * Ykkösketjun vahvuus: kaksi parasta puolustajaa ja kolme parasta
+   * hyökkääjää (taitotasoarvonnassa viisi parasta kenttäpelaajaa).
+   */
+  private static firstLineStrength(team: GeneratedTeamData): number {
+    const skaters = team.players.filter(
+      (p) => p.position !== "MV" && !p.isExtra,
+    );
+    if (skaters.length === 0) return 0;
+    const bestAverage = (list: EnrichedPlayer[], count: number) => {
+      const best = list
+        .map((p) => p.multiplier)
+        .sort((a, b) => a - b)
+        .slice(0, count);
+      return best.reduce((total, m) => total + m, 0) / best.length;
+    };
+    const defenders = skaters.filter((p) => this.isDefender(p));
+    const attackers = skaters.filter((p) => !this.isDefender(p));
+    if (
+      !this.positionMode ||
+      defenders.length === 0 ||
+      attackers.length === 0
+    ) {
+      return (
+        bestAverage(skaters, DEFENDER_SLOTS + ATTACKER_SLOTS) *
+        (DEFENDER_SLOTS + ATTACKER_SLOTS)
+      );
+    }
+    return (
+      bestAverage(defenders, DEFENDER_SLOTS) * DEFENDER_SLOTS +
+      bestAverage(attackers, ATTACKER_SLOTS) * ATTACKER_SLOTS
+    );
+  }
+
+  /**
+   * Joukkueiden ero: kokonaisvahvuuden ero + painotettu ykkösketjujen ero.
+   * Pienempi = tasaisempi.
+   */
   private static strengthDifference(teams: GeneratedTeamData[]): number {
     if (teams.length < 2) return 0;
-    return Math.abs(
-      this.fieldStrength(teams[0]) - this.fieldStrength(teams[1]),
+    return (
+      Math.abs(this.fieldStrength(teams[0]) - this.fieldStrength(teams[1])) +
+      FIRST_LINE_WEIGHT *
+        Math.abs(
+          this.firstLineStrength(teams[0]) - this.firstLineStrength(teams[1]),
+        )
+    );
+  }
+
+  private static replacePlayer(
+    team: GeneratedTeamData,
+    out: EnrichedPlayer,
+    incoming: EnrichedPlayer,
+  ): void {
+    team.players = team.players.map((p) => (p.id === out.id ? incoming : p));
+    if (team.fieldPlayers) {
+      team.fieldPlayers = team.fieldPlayers.map((p) =>
+        p.id === out.id ? incoming : p,
+      );
+    }
+    if (team.goalkeepers) {
+      team.goalkeepers = team.goalkeepers.map((p) =>
+        p.id === out.id ? incoming : p,
+      );
+    }
+  }
+
+  /**
+   * Hionta jaon jälkeen: vaihdetaan saman roolin pelaajia joukkueesta
+   * toiseen niin kauan kuin ero (kokonaisuus + ykkösketju) pienenee.
+   * Puolustajia, maalivahteja ja lisäpelaajia ei siirretä (puolustajajako ja
+   * huonoimman puolustajan paikka pysyvät), ja Cat 1 -ero pysyy enintään 1.
+   */
+  private static refineTeams(teams: GeneratedTeamData[]): void {
+    if (teams.length !== 2) return;
+    const [teamA, teamB] = teams;
+    const movable = (p: EnrichedPlayer) =>
+      p.position !== "MV" && !p.isExtra && !this.isDefender(p);
+    const fixedSkaters = (team: GeneratedTeamData) =>
+      team.players.filter(
+        (p) => p.position !== "MV" && !p.isExtra && this.isDefender(p),
+      );
+
+    // Vaihdot koskevat vain siirrettäviä pelaajia, joten muiden osuus
+    // lasketaan kerran ja vaihtoja arvioidaan pelkillä kertoimilla
+    const fixedA = fixedSkaters(teamA).map((p) => p.multiplier);
+    const fixedB = fixedSkaters(teamB).map((p) => p.multiplier);
+    const fixedCat1A = fixedSkaters(teamA).filter(
+      (p) => p.category === 1,
+    ).length;
+    const fixedCat1B = fixedSkaters(teamB).filter(
+      (p) => p.category === 1,
+    ).length;
+    const movA = teamA.players.filter(movable);
+    const movB = teamB.players.filter(movable);
+
+    const average = (values: number[]) =>
+      values.reduce((total, v) => total + v, 0) / values.length;
+    const bestAverage = (values: number[], count: number) =>
+      average([...values].sort((a, b) => a - b).slice(0, count));
+    const scores = (fixed: number[], moving: number[]) => {
+      if (!this.positionMode || fixed.length === 0 || moving.length === 0) {
+        const all = [...fixed, ...moving];
+        const slots = DEFENDER_SLOTS + ATTACKER_SLOTS;
+        return all.length === 0
+          ? { all: 0, line: 0 }
+          : {
+              all: average(all) * slots,
+              line: bestAverage(all, slots) * slots,
+            };
+      }
+      return {
+        all: average(fixed) * DEFENDER_SLOTS + average(moving) * ATTACKER_SLOTS,
+        line:
+          bestAverage(fixed, DEFENDER_SLOTS) * DEFENDER_SLOTS +
+          bestAverage(moving, ATTACKER_SLOTS) * ATTACKER_SLOTS,
+      };
+    };
+    const difference = (movingA: number[], movingB: number[]) => {
+      const a = scores(fixedA, movingA);
+      const b = scores(fixedB, movingB);
+      return (
+        Math.abs(a.all - b.all) + FIRST_LINE_WEIGHT * Math.abs(a.line - b.line)
+      );
+    };
+    const cat1 = (list: EnrichedPlayer[]) =>
+      list.filter((p) => p.category === 1).length;
+
+    let current = difference(
+      movA.map((p) => p.multiplier),
+      movB.map((p) => p.multiplier),
+    );
+    for (let round = 0; round < 50; round++) {
+      let best: { i: number; j: number; difference: number } | null = null;
+      const multA = movA.map((p) => p.multiplier);
+      const multB = movB.map((p) => p.multiplier);
+      const cat1A = fixedCat1A + cat1(movA);
+      const cat1B = fixedCat1B + cat1(movB);
+      for (let i = 0; i < movA.length; i++) {
+        for (let j = 0; j < movB.length; j++) {
+          const a = movA[i];
+          const b = movB[j];
+          if (a.multiplier === b.multiplier) continue;
+          const shift = (a.category === 1 ? 1 : 0) - (b.category === 1 ? 1 : 0);
+          if (Math.abs(cat1A - shift - (cat1B + shift)) > 1) continue;
+          const nextA = [...multA];
+          const nextB = [...multB];
+          nextA[i] = b.multiplier;
+          nextB[j] = a.multiplier;
+          const d = difference(nextA, nextB);
+          if (d < current - 1e-9 && (!best || d < best.difference)) {
+            best = { i, j, difference: d };
+          }
+        }
+      }
+      if (!best) break;
+      const a = movA[best.i];
+      const b = movB[best.j];
+      movA[best.i] = b;
+      movB[best.j] = a;
+      this.replacePlayer(teamA, a, b);
+      this.replacePlayer(teamB, b, a);
+      current = best.difference;
+      this.trace.push({
+        kind: "swap",
+        first: this.tracePlayer(a),
+        firstTeam: teamB.name,
+        second: this.tracePlayer(b),
+        secondTeam: teamA.name,
+      });
+      console.log(
+        `🔁 Refine: swapping ${a.name} (${teamA.name}) ↔ ${b.name} (${teamB.name}), difference ${current.toFixed(3)}`,
+      );
+    }
+  }
+
+  /**
+   * Hionta voi muuttaa sitä, kumpi joukkue on kenttäpelaajiltaan heikompi.
+   * Parempi maalivahti kuuluu heikommalle, joten tarvittaessa vaihdetaan.
+   */
+  private static enforceGoalkeeperRule(teams: GeneratedTeamData[]): void {
+    if (teams.length !== 2) return;
+    const [teamA, teamB] = teams;
+    const gkA = teamA.players.filter((p) => p.position === "MV");
+    const gkB = teamB.players.filter((p) => p.position === "MV");
+    if (gkA.length !== 1 || gkB.length !== 1) return;
+    const aIsWeaker = this.fieldStrength(teamA) >= this.fieldStrength(teamB);
+    const weakerGk = aIsWeaker ? gkA[0] : gkB[0];
+    const strongerGk = aIsWeaker ? gkB[0] : gkA[0];
+    if (weakerGk.multiplier <= strongerGk.multiplier) return;
+
+    this.replacePlayer(teamA, gkA[0], gkB[0]);
+    this.replacePlayer(teamB, gkB[0], gkA[0]);
+    this.trace.push({
+      kind: "swap",
+      first: this.tracePlayer(gkA[0]),
+      firstTeam: teamB.name,
+      second: this.tracePlayer(gkB[0]),
+      secondTeam: teamA.name,
+    });
+    console.log(
+      `🔁 Goalkeepers swapped after refinement: better goalkeeper to the weaker team`,
     );
   }
 
