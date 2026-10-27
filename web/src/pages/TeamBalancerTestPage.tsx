@@ -1057,8 +1057,9 @@ export default function TeamBalancerTestPage() {
             joukkueelle, heikompi pelaaja (-) vahvemmalle. Vahvuus lasketaan
             jääajalla painotettuna (2 puolustajaa + 3 hyökkääjää jäällä).
             Arvonta tehdään 100 kertaa, ja näytetty valitaan satunnaisesti
-            niistä, joiden vahvuusero on enintään 1 %. Vaihto-rivit ovat Cat 1
-            -tasapainotuksen ja hionnan vaihtoja: hionta vaihtaa hyökkääjiä,
+            niistä, joiden vahvuusero on enintään 1 %. Vaihto-rivit (→ = siirtyi
+            tähän joukkueeseen) ovat Cat 1 -tasapainotuksen, hionnan ja
+            maalivahtitarkistuksen vaihtoja: hionta vaihtaa hyökkääjiä,
             kunnes kokonaisuus ja ykkösketju (2 parasta puolustajaa + 3 parasta
             hyökkääjää) ovat tasaisimmillaan, jotta parhaat pelaajat eivät kasaudu
             samaan joukkueeseen. Lisä-rivit ovat lisäpelaajia, jotka eivät
@@ -1253,6 +1254,8 @@ export default function TeamBalancerTestPage() {
                         }
                       : null;
 
+                  const isSwap = pair.reason === "Vaihto";
+
                   // Check if this is the last defender row before categories start
                   const isDefender = pair.reason === "P";
                   const nextPair = pairings[index + 1];
@@ -1334,17 +1337,25 @@ export default function TeamBalancerTestPage() {
                               sx={{
                                 fontWeight: "bold",
                                 fontSize: "14px",
-                                color: teamAPlayer.isBetter
-                                  ? "#4caf50"
-                                  : "#f44336",
+                                // Vaihtorivillä pelaaja siirtyi tähän
+                                // joukkueeseen: ei paremmuusmerkintää
+                                color: isSwap
+                                  ? "#1976d2"
+                                  : teamAPlayer.isBetter
+                                    ? "#4caf50"
+                                    : "#f44336",
                               }}
+                              title={
+                                isSwap ? "Siirtyi tähän joukkueeseen" : undefined
+                              }
                             >
-                              {teamAPlayer.isBetter ? "+" : "-"}
+                              {isSwap ? "→" : teamAPlayer.isBetter ? "+" : "-"}
                             </Typography>
                             <Typography
                               variant="body2"
                               sx={{
-                                fontWeight: teamAPlayer.isBetter ? 600 : 400,
+                                fontWeight:
+                                  !isSwap && teamAPlayer.isBetter ? 600 : 400,
                               }}
                             >
                               {teamAPlayer.name}
@@ -1432,17 +1443,25 @@ export default function TeamBalancerTestPage() {
                               sx={{
                                 fontWeight: "bold",
                                 fontSize: "14px",
-                                color: teamBPlayer.isBetter
-                                  ? "#4caf50"
-                                  : "#f44336",
+                                // Vaihtorivillä pelaaja siirtyi tähän
+                                // joukkueeseen: ei paremmuusmerkintää
+                                color: isSwap
+                                  ? "#1976d2"
+                                  : teamBPlayer.isBetter
+                                    ? "#4caf50"
+                                    : "#f44336",
                               }}
+                              title={
+                                isSwap ? "Siirtyi tähän joukkueeseen" : undefined
+                              }
                             >
-                              {teamBPlayer.isBetter ? "+" : "-"}
+                              {isSwap ? "→" : teamBPlayer.isBetter ? "+" : "-"}
                             </Typography>
                             <Typography
                               variant="body2"
                               sx={{
-                                fontWeight: teamBPlayer.isBetter ? 600 : 400,
+                                fontWeight:
+                                  !isSwap && teamBPlayer.isBetter ? 600 : 400,
                               }}
                             >
                               {teamBPlayer.name}
